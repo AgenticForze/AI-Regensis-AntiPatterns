@@ -1,7 +1,7 @@
 title: Applied AI Anti-Patterns
 eyebrow: Field guide · Production AI architecture
 headline: Anti-patterns in production AI, from RAG to advanced agentic systems
-tagline: A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.
+tagline: A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.
 footer: Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.
 intro: |
   Most enterprise AI programs don't fail because the model is weak. They fail because the system
@@ -9,6 +9,9 @@ intro: |
   orchestration, guardrails, evaluation, identity and cost controls.
   This guide catalogs the recurring design mistakes across the full stack and pairs each one with
   a production-grade alternative.
+
+  Generic entries describe the pattern in any enterprise. Scenarios tagged **Telco** or **FinTech** show the same failures
+  in BSS, care, payments, lending and compliance settings, with a cross-industry variant for each.
 
   Each entry is written to be defensible in an architecture review. It names a concrete enterprise
   scenario, the mechanism of failure, the replacement design, and the reason that design holds up
@@ -33,17 +36,17 @@ parts:
     blurb: Single agents, multi-agent systems, memory, and the protocols that connect them.
     sections: [07-agents.yaml, 08-multi-agent.yaml, 09-memory.yaml, 10-protocols.yaml]
   - label: "Part D · Production & Trust"
-    blurb: Evaluation, observability, security and governance at enterprise scale.
-    sections: [11-evals-ops.yaml, 12-security-gov.yaml]
+    blurb: Evaluation, security, observability, delivery and governance at enterprise scale.
+    sections: [11-evals-ops.yaml, 12-security-gov.yaml, 13-observability.yaml, 14-llmops-cicd.yaml, 15-governance.yaml]
   - label: "Part E · Platforms & Economics"
     blurb: AWS, Google Cloud and Microsoft compared, and the real cost of running models yourself.
-    sections: [13-hyperscalers.yaml, 14-local-vs-cloud.yaml]
+    sections: [16-hyperscalers.yaml, 17-local-vs-cloud.yaml]
   - label: "Part F · Harness Engineering"
     blurb: The engineering around the model at every lifecycle stage.
-    sections: [15-harness.yaml]
+    sections: [18-harness.yaml]
   - label: "Part G · Claude & AI Tools"
     blurb: Model APIs, agent frameworks, coding agents and workplace assistants.
-    sections: [16-ai-tools.yaml]
+    sections: [19-ai-tools.yaml]
   - label: "Part H · Leadership & Reference Architecture"
     blurb: Organizational anti-patterns and the target-state platform that ties every fix together.
-    sections: [17-leadership.yaml, 18-capstone.yaml]
+    sections: [20-leadership.yaml, 21-capstone.yaml]

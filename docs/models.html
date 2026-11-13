@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Model Selection &amp; Routing · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<title>Model Selection, Cost, Latency &amp; Routing · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,41 +20,44 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="active" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="active" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part B · Model &amp; Prompt Layer</div>
-  <h1><span class="sn">6</span>Model Selection &amp; Routing</h1>
+  <h1><span class="sn">6</span>Model Selection, Cost, Latency &amp; Routing</h1>
   <p class="lede">Models are a portfolio, not a single dependency. These anti-patterns overpay, underperform or fail completely when a provider has a bad day.</p>
-  <span class="pill">4 anti-patterns</span>
+  <span class="pill">24 anti-patterns</span>
 </div>
 
-<div class="toc"><div class="toc-h">In this section</div><a href="#one-model-for-all"><span>6.1</span>One frontier model for every task</a><a href="#single-provider-no-fallback"><span>6.2</span>No fallback or multi-provider strategy</a><a href="#premature-finetuning"><span>6.3</span>Fine-tuning too early</a><a href="#ignoring-latency-budget"><span>6.4</span>Ignoring latency budgets and serving modes</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#one-model-for-all"><span>6.1</span>One frontier model for every task</a><a href="#single-provider-no-fallback"><span>6.2</span>No fallback or multi-provider strategy</a><a href="#premature-finetuning"><span>6.3</span>Fine-tuning too early</a><a href="#ignoring-latency-budget"><span>6.4</span>Ignoring latency budgets and serving modes</a><a href="#cost-01"><span>6.5</span>No one knows what a resolved card dispute costs</a><a href="#cost-02"><span>6.6</span>Router sends hard complaints to the small model</a><a href="#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a><a href="#cost-04"><span>6.8</span>Fifteen-thousand-token system prompt for a balance question</a><a href="#cost-05"><span>6.9</span>Prompt caching enabled, but the cache expires between turns</a><a href="#cost-06"><span>6.10</span>Semantic cache confuses cancel my card with cancel my card payment</a><a href="#cost-07"><span>6.11</span>One conversation costs $40</a><a href="#cost-08"><span>6.12</span>Replies three times longer than customers need</a><a href="#cost-09"><span>6.13</span>Nightly ticket summaries run on the real-time API</a><a href="#cost-10"><span>6.14</span>Extended reasoning turned on for every request</a><a href="#cost-11"><span>6.15</span>Customers stare at a spinner for 8 seconds</a><a href="#cost-12"><span>6.16</span>Independent lookups run one after another</a><a href="#cost-13"><span>6.17</span>Speculative prefetching that&#x27;s mostly wasted</a><a href="#cost-14"><span>6.18</span>Large model classifying 100 million transactions a month</a><a href="#cost-15"><span>6.19</span>Retry storm doubles cost during a provider incident</a><a href="#cost-16"><span>6.20</span>Embeddings recomputed for unchanged documents every night</a><a href="#cost-17"><span>6.21</span>AI costs land in one central budget</a><a href="#cost-18"><span>6.22</span>Self-hosted GPUs sit idle 80% of the day</a><a href="#cost-19"><span>6.23</span>Latency SLO with no plan for when it&#x27;s missed</a><a href="#cost-20"><span>6.24</span>Prompt compression saves tokens and drops the disclosures</a></div>
 
 <article class="ap" id="one-model-for-all">
   <header class="ap-h">
@@ -141,7 +144,9 @@ config change validated by evals rather than a re-architecture.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Treat models like a portfolio. Route each task to the cheapest model that passes its eval, and escalate only when needed.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you build the business case for a model router to a CFO?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="single-provider-no-fallback">
@@ -232,7 +237,9 @@ cost tracking, quotas and logging.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Models are external dependencies with SLAs. Engineer them like payment gateways, with failover, circuit breakers and a degraded mode.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you guarantee quality equivalence when failing over to a different model family?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="premature-finetuning">
@@ -321,7 +328,9 @@ upgrades into routine retraining rather than a rebuild.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Fine-tuning is the last rung of the ladder, not the first. Exhaust prompting, examples and retrieval against a baseline before you buy a model lifecycle.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What data volume and quality would you want before fine-tuning?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="ignoring-latency-budget">
@@ -409,10 +418,1695 @@ Per-step traces show exactly where the budget is spent.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Latency is a design constraint, not a tuning afterthought. Budget it per step, stream, parallelize, cache, and batch whatever isn&#x27;t interactive.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you hit a sub-second target on a pipeline that needs retrieval and generation?</p></div>
+    
   </section>
+  
 </article>
 
-<div class="pn"><a class="prev" href="prompts.html">← 5. Prompt Engineering</a><a class="next" href="agents.html">7. Agent Design &amp; Tool Use →</a></div>
+<article class="ap" id="cost-01">
+  <header class="ap-h">
+    <div class="ap-num">6.5</div>
+    <div>
+      <h2><a href="#cost-01">No one knows what a resolved card dispute costs</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A card issuer's AI assistant costs $140k a month. Finance asks whether it pays for itself. The team can report total tokens but not cost per intent, cost per resolved dispute, or how it compares with an agent-handled contact.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Only total spend is known.</strong></p>
+<p><em>Think of it this way:</em> A restaurant that knows its total food bill but not what each dish costs to make.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Cost isn't attributed to intents or outcomes.</li>
+<li>No comparison with the human baseline.</li>
+<li>Optimisation targets are guesses.</li>
+</ul>
+<p><strong>Root cause:</strong> No unit economics.</p>
+<p><strong>Where it breaks:</strong> Metering and analytics.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-01" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">$140k/month · Total</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Per intent? · Unknown</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Vs agents? · Unknown</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Guessing · Priorities</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-01)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-01)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-01)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Only total spend is known</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Tag cost · Intent,</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">outcome</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Cost/success · Per intent</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Human baseline · Compare</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Prioritise · High volume</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-01)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-01)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-01)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Cost per successful outcome by intent</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Tag cost per request with intent, outcome and version, and compute cost per successful outcome by intent.</li>
+<li>Compare with fully loaded human cost per contact for the same intent.</li>
+<li>Prioritise optimisation on high-volume, low-margin intents.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Outcome attribution needs joins to downstream systems.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Cost per outcome dashboard reviewed monthly.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier can't tell whether its bot is cheaper than care agents for plan changes versus bill explanations.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cost_per_resolved</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="n">month</span><span class="p">):</span>
+    <span class="n">ai</span> <span class="o">=</span> <span class="n">ledger</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">)</span>                              <span class="c1"># tagged per request</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="n">outcomes</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="p">,</span> <span class="n">outcome</span><span class="o">=</span><span class="s2">"resolved"</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">)</span>
+    <span class="n">human_baseline</span> <span class="o">=</span> <span class="n">contact_center</span><span class="o">.</span><span class="n">loaded_cost_per_contact</span><span class="p">(</span><span class="n">intent</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"ai_cost_per_resolved"</span><span class="p">:</span> <span class="n">ai</span> <span class="o">/</span> <span class="n">resolved</span><span class="p">,</span> <span class="s2">"human_cost_per_contact"</span><span class="p">:</span> <span class="n">human_baseline</span><span class="p">,</span>
+            <span class="s2">"volume"</span><span class="p">:</span> <span class="n">outcomes</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="p">,</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">)}</span>
+
+<span class="n">priorities</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">INTENTS</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">i</span><span class="p">:</span> <span class="o">-</span><span class="p">(</span><span class="n">volume</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">margin</span><span class="p">(</span><span class="n">i</span><span class="p">))))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Know the cost of a success, per intent.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-09"><span>14.9</span>Cost per call falls while cost per resolved dispute triples</a><a href="observability.html#obs-05"><span>13.5</span>One MVNO tenant burns the monthly LLM budget in a week</a></div>
+</article>
+
+<article class="ap" id="cost-02">
+  <header class="ap-h">
+    <div class="ap-num">6.6</div>
+    <div>
+      <h2><a href="#cost-02">Router sends hard complaints to the small model</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank introduces a router that sends "simple" questions to a small model and "complex" ones to a large model, based on message length. Short but serious complaints ("You closed my account and my salary bounced") go to the small model, which handles them poorly. Complaint escalations rise.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Route by message length.</strong></p>
+<p><em>Think of it this way:</em> A hospital triaging patients by how long they talk rather than by symptoms.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Routing criteria don't reflect difficulty or risk.</li>
+<li>The router wasn't evaluated.</li>
+<li>High-risk intents can hit the cheap path.</li>
+</ul>
+<p><strong>Root cause:</strong> Unvalidated routing heuristics.</p>
+<p><strong>Where it breaks:</strong> Router design.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-02" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Short message · Serious</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Router · By length</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Small model · Handles it</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Escalations · Rise</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-02)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-02)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-02)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Route by message length</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Intent + risk · Router</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">High risk · Strong path</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Router eval · Misroutes</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Escalate · If unsure</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-02)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-02)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-02)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Route by intent and risk, evaluated, with escalation</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Route by intent and risk tier (complaints, vulnerability and disputes always to the stronger path).</li>
+<li>Evaluate the router (misroute rate) and each path per intent.</li>
+<li>Allow the small model to escalate when uncertain.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Lower savings from routing; safer outcomes.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Quality by route and intent; escalations after small-model answers.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a router sends short outage complaints from business customers to a small model that can't check incident data.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">ALWAYS_STRONG</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"complaint"</span><span class="p">,</span> <span class="s2">"vulnerability"</span><span class="p">,</span> <span class="s2">"dispute"</span><span class="p">,</span> <span class="s2">"bereavement"</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">route</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+    <span class="n">intent</span> <span class="o">=</span> <span class="n">router</span><span class="o">.</span><span class="n">classify</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">intent</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">ALWAYS_STRONG</span> <span class="ow">or</span> <span class="n">intent</span><span class="o">.</span><span class="n">risk_tier</span> <span class="o">==</span> <span class="s2">"high"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">STRONG_MODEL</span>
+    <span class="k">return</span> <span class="n">SMALL_MODEL</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">small_with_escalation</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">SMALL_MODEL</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">WithConfidence</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span> <span class="k">if</span> <span class="n">out</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&gt;=</span> <span class="mf">0.75</span> <span class="k">else</span> <span class="n">STRONG_MODEL</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+<span class="c1"># eval: router misroute rate + quality per path per intent</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Route by risk and intent, not by message length.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="agents.html#agf-20"><span>7.25</span>Frontier model used for every care-flow step</a><a href="evals-ops.html#eval-09"><span>11.15</span>92% overall hides 55% on business billing disputes</a></div>
+</article>
+
+<article class="ap" id="cost-03">
+  <header class="ap-h">
+    <div class="ap-num">6.7</div>
+    <div>
+      <h2><a href="#cost-03">Voice agent pauses for 3 seconds before every reply</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's AI voice agent chains speech recognition, an LLM call, a tool call and text-to-speech, each run to completion before the next starts. Callers hear 3 seconds of silence after every sentence and assume the line dropped.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Sequential voice pipeline.</strong></p>
+<p><em>Think of it this way:</em> A conversation where the other person waits until they've written their whole reply before saying a word.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No end-to-end latency budget.</li>
+<li>Stages run sequentially without streaming.</li>
+<li>Tool calls happen on the critical path.</li>
+</ul>
+<p><strong>Root cause:</strong> Voice pipeline designed without a latency budget.</p>
+<p><strong>Where it breaks:</strong> Voice architecture.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-03" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">ASR · Full</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">LLM + tool · Sequential</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">TTS · After all</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">3 s silence · Hang-ups</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-03)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-03)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-03)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Sequential voice pipeline</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Budget · 800 ms first</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Stream · ASR, LLM, TTS</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Prefetch · Account data</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Filler · While tools run</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-03)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-03)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-03)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Latency budget, streaming, prefetch</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Set an end-to-end budget (for example under 800 ms to first audio) and per-stage targets.</li>
+<li>Stream ASR partials, stream LLM tokens into TTS by sentence, and use a fast model for the first response.</li>
+<li>Prefetch likely tool data (account summary) at call start; use filler acknowledgements while slow tools run.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Streaming complicates guardrails; check per sentence.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Time to first audio per turn; caller hang-ups during silence.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's voice bot waits for the full balance lookup and answer before speaking.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">BUDGET_MS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"asr_final"</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span> <span class="s2">"llm_first_token"</span><span class="p">:</span> <span class="mi">350</span><span class="p">,</span> <span class="s2">"tts_first_audio"</span><span class="p">:</span> <span class="mi">200</span><span class="p">}</span>   <span class="c1"># &lt; 800 ms to first audio</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_call_start</span><span class="p">(</span><span class="n">call</span><span class="p">):</span>
+    <span class="n">call</span><span class="o">.</span><span class="n">prefetch</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">accounts</span><span class="o">.</span><span class="n">summary</span><span class="p">(</span><span class="n">call</span><span class="o">.</span><span class="n">customer_id</span><span class="p">))</span>      <span class="c1"># prefetch</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_utterance</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="n">partial_text</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">sentence</span> <span class="ow">in</span> <span class="n">sentences</span><span class="p">(</span><span class="n">fast_model</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">partial_text</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="k">await</span> <span class="n">call</span><span class="o">.</span><span class="n">prefetch</span><span class="p">)):</span>
+        <span class="k">await</span> <span class="n">tts</span><span class="o">.</span><span class="n">speak</span><span class="p">(</span><span class="n">sentence</span><span class="p">)</span>                                                 <span class="c1"># stream by sentence</span>
+    <span class="k">if</span> <span class="n">needs_slow_tool</span><span class="p">(</span><span class="n">partial_text</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">tts</span><span class="o">.</span><span class="n">speak</span><span class="p">(</span><span class="s2">"One moment while I check that."</span><span class="p">)</span>                         <span class="c1"># filler while tools run</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>In voice, latency is the user experience.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#tel-08"><span>13.28</span>Voice bot feels slow, but total latency looks fine</a><a href="rag-core.html#rag-18"><span>3.28</span>Fraud-call agent assist too slow to use</a></div>
+</article>
+
+<article class="ap" id="cost-04">
+  <header class="ap-h">
+    <div class="ap-num">6.8</div>
+    <div>
+      <h2><a href="#cost-04">Fifteen-thousand-token system prompt for a balance question</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's assistant system prompt has grown to 15k tokens covering every product. Ninety percent of conversations are about cards and balances. Each turn pays for the full prompt, and time to first token is 1.8 seconds.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>One 15k-token prompt for everything.</strong></p>
+<p><em>Think of it this way:</em> Reading the whole employee handbook before answering "what time do you close?"</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>One giant prompt for all intents.</li>
+<li>Unused instructions cost money and latency.</li>
+<li>Attention is diluted.</li>
+</ul>
+<p><strong>Root cause:</strong> Prompt bloat.</p>
+<p><strong>Where it breaks:</strong> Prompt and context design.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-04" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">15k prompt · All products</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">90% cards · Conversations</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Pay full · Every turn</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">1.8 s TTFT · Slow</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-04)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-04)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-04)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">One 15k-token prompt for everything</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Core prompt · Compact</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">By intent · Load extras</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Cache core · Prefix</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Measure · Per intent</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-04)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-04)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-04)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Compact core plus intent-loaded instructions</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Keep a compact core prompt and load product-specific instructions by intent.</li>
+<li>Use prompt caching for the stable core.</li>
+<li>Measure tokens and latency per intent.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Intent detection must be reliable.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Prompt tokens per turn by intent.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a care bot includes instructions for every device brand in every prompt.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">CORE</span> <span class="o">=</span> <span class="n">load_prompt</span><span class="p">(</span><span class="s2">"care.core@9"</span><span class="p">)</span>                       <span class="c1"># ~1.5k tokens, cached</span>
+<span class="n">MODULES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"balance"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"roaming"</span><span class="p">:</span> <span class="n">load_prompt</span><span class="p">(</span><span class="s2">"care.roaming@4"</span><span class="p">),</span> <span class="s2">"device"</span><span class="p">:</span> <span class="n">load_prompt</span><span class="p">(</span><span class="s2">"care.device@6"</span><span class="p">)}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"system"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="n">CORE</span><span class="p">,</span> <span class="s2">"cache_control"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"ephemeral"</span><span class="p">}},</span>
+                       <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="n">MODULES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="s2">""</span><span class="p">)}],</span>
+            <span class="s2">"messages"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">msg</span><span class="p">}]}</span>
+<span class="n">metrics</span><span class="o">.</span><span class="n">observe</span><span class="p">(</span><span class="s2">"input_tokens"</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span><span class="o">.</span><span class="n">input_tokens</span><span class="p">,</span> <span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Load instructions for the job at hand.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="memory.html#ctx-05"><span>9.9</span>Intent classifier receives 20k tokens it doesn&#x27;t need</a><a href="memory.html#ctx-06"><span>9.10</span>Timestamp at the top kills prompt caching</a></div>
+</article>
+
+<article class="ap" id="cost-05">
+  <header class="ap-h">
+    <div class="ap-num">6.9</div>
+    <div>
+      <h2><a href="#cost-05">Prompt caching enabled, but the cache expires between turns</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier enables prompt caching for its care bot. Hit rates are low because the provider's default cache lifetime is a few minutes, and customers often take longer to reply. The team assumed caching would work for whole conversations.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Assume the cache lasts the conversation.</strong></p>
+<p><em>Think of it this way:</em> A coffee machine that switches off between cups.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Cache lifetime wasn't understood.</li>
+<li>Traffic patterns weren't analysed.</li>
+<li>Hit rate wasn't monitored.</li>
+</ul>
+<p><strong>Root cause:</strong> Caching enabled without understanding its mechanics.</p>
+<p><strong>Where it breaks:</strong> Caching configuration.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-05" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Caching on · Default</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Short TTL · Minutes</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Slow replies · Customers</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Low hits · Savings lost</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-05)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-05)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-05)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Assume the cache lasts the conversation</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">TTL options · Checked</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Shared prefix · Stays</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">warm</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Hit rate · Monitored</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Right TTL · By pattern</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-05)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-05)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-05)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Choose lifetime by traffic, shared warm prefix</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Check the provider's cache lifetime options and choose them by traffic pattern (longer lifetimes where offered and cost-effective).</li>
+<li>Keep the shared prefix identical across all customers so it stays warm from overall traffic.</li>
+<li>Monitor cached-token share.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Longer cache lifetimes may cost more to write.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Cache hit rate by time of day and conversation gap.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's batch jobs run hours apart and never benefit from prompt caching.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">SHARED_PREFIX</span> <span class="o">=</span> <span class="n">CORE_PROMPT</span> <span class="o">+</span> <span class="n">TOOL_DEFINITIONS</span>          <span class="c1"># byte-identical for every customer</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">request</span><span class="p">(</span><span class="n">customer_ctx</span><span class="p">,</span> <span class="n">history</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"system"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="n">SHARED_PREFIX</span><span class="p">,</span>
+                        <span class="s2">"cache_control"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"ephemeral"</span><span class="p">,</span> <span class="s2">"ttl"</span><span class="p">:</span> <span class="n">CACHE_TTL_BY_TRAFFIC</span><span class="p">}}],</span>   <span class="c1"># lifetime chosen by traffic</span>
+            <span class="s2">"messages"</span><span class="p">:</span> <span class="n">history</span> <span class="o">+</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">customer_ctx</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">"</span><span class="p">}]}</span>
+
+<span class="n">metrics</span><span class="o">.</span><span class="n">gauge</span><span class="p">(</span><span class="s2">"cached_token_share"</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">cache_read_input_tokens</span> <span class="o">/</span> <span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">input_tokens</span> <span class="o">+</span> <span class="n">u</span><span class="o">.</span><span class="n">cache_read_input_tokens</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Know how your cache expires before you count the savings.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="memory.html#ctx-06"><span>9.10</span>Timestamp at the top kills prompt caching</a><a href="llmops-cicd.html#ops-10"><span>14.10</span>Thirty percent of questions are the same and all pay full price</a></div>
+</article>
+
+<article class="ap" id="cost-06">
+  <header class="ap-h">
+    <div class="ap-num">6.10</div>
+    <div>
+      <h2><a href="#cost-06">Semantic cache confuses cancel my card with cancel my card payment</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's semantic cache uses a similarity threshold of 0.88. "How do I cancel my card?" and "How do I cancel a card payment?" exceed it, so customers who want to stop a payment receive instructions for closing their card.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Similarity-only cache hits.</strong></p>
+<p><em>Think of it this way:</em> A receptionist who answers the question they think you asked because it sounded similar.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Similar wording, different intents.</li>
+<li>Threshold chosen without evaluation.</li>
+<li>Cached answers aren't checked against the intent.</li>
+</ul>
+<p><strong>Root cause:</strong> Over-aggressive semantic caching.</p>
+<p><strong>Where it breaks:</strong> Cache design.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-06" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">&#x27;Cancel card?&#x27; · Cached</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">&#x27;Stop payment?&#x27; · Asked</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">0.88 similar · Hit</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Wrong steps · Card</text>
+<text class="dg-t dg-t-bad" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">closed?</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-06)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-06)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-06)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Similarity-only cache hits</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Intent key · Plus text</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Tuned · Near-miss set</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">FAQ only · Stable intents</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Feedback · On hits</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-06)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-06)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-06)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Intent in the key, tuned threshold, FAQ-only</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Tune thresholds on a labelled set of near-miss pairs, and add intent classification to the cache key.</li>
+<li>Cache only for high-volume, stable FAQ intents.</li>
+<li>Monitor negative feedback on cache hits.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Lower hit rates.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Feedback and rephrase rate on cached answers.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: "How do I block a number?" gets the cached answer for "How do I unblock my number?"</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">CACHEABLE_INTENTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"store_hours"</span><span class="p">,</span> <span class="s2">"how_to_activate_card"</span><span class="p">,</span> <span class="s2">"fee_schedule_general"</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">cache_get</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+    <span class="n">intent</span> <span class="o">=</span> <span class="n">classify</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">intent</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">CACHEABLE_INTENTS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">semantic_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="n">intent</span><span class="p">,</span> <span class="n">min_sim</span><span class="o">=</span><span class="n">THRESHOLD</span><span class="p">[</span><span class="n">intent</span><span class="p">])</span>   <span class="c1"># intent in the key</span>
+
+<span class="c1"># thresholds tuned on near-miss pairs: ("cancel my card", "cancel my card payment") must NOT match</span>
+<span class="c1"># monitor: thumbs-down rate on cache hits vs misses</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Similar isn&#x27;t the same. Key the cache by intent.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="memory.html#ctx-17"><span>9.21</span>Semantic cache serves one customer&#x27;s balance to another</a><a href="llmops-cicd.html#ops-10"><span>14.10</span>Thirty percent of questions are the same and all pay full price</a></div>
+</article>
+
+<article class="ap" id="cost-07">
+  <header class="ap-h">
+    <div class="ap-num">6.11</div>
+    <div>
+      <h2><a href="#cost-07">One conversation costs $40</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's agent costs about $0.08 per conversation on average. A few conversations with long troubleshooting loops and repeated tool calls cost over $40. With no per-conversation cap, outliers make up 20% of spend.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>No per-conversation cost cap.</strong></p>
+<p><em>Think of it this way:</em> An all-you-can-eat buffet with no time limit.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No per-conversation budget.</li>
+<li>Outliers aren't monitored.</li>
+<li>Long sessions grow context cost quadratically.</li>
+</ul>
+<p><strong>Root cause:</strong> No cost caps per unit of work.</p>
+<p><strong>Where it breaks:</strong> Runtime limits.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-07" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Avg $0.08 · Per chat</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Outliers · $40+</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">20% spend · From few</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Unseen · No cap</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-07)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-07)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-07)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No per-conversation cost cap</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Budget · Per chat</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Handoff · When exceeded</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Compact · Long sessions</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">p99 alert · Weekly review</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-07)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-07)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-07)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Budgets, compaction, outlier alerts</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Set per-conversation and per-task budgets (tokens and dollars), with graceful handoff to a human when exceeded.</li>
+<li>Compact context in long sessions.</li>
+<li>Alert on cost outliers and review them weekly.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Some long, legitimate sessions get handed off.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Cost distribution per conversation (p99).</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a few research-agent runs on complex companies cost hundreds of dollars each.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ConversationBudget</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">usd</span><span class="o">=</span><span class="mf">0.50</span><span class="p">,</span> <span class="n">tokens</span><span class="o">=</span><span class="mi">150_000</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">usd</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">=</span> <span class="n">usd</span><span class="p">,</span> <span class="n">tokens</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">charge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resp</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usd</span> <span class="o">-=</span> <span class="n">price</span><span class="p">(</span><span class="n">resp</span><span class="p">);</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">-=</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span><span class="o">.</span><span class="n">total_tokens</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">usd</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokens</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">budget</span><span class="o">.</span><span class="n">charge</span><span class="p">(</span><span class="n">resp</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">handoff_to_human</span><span class="p">(</span><span class="n">summary</span><span class="o">=</span><span class="n">compact</span><span class="p">(</span><span class="n">conversation</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">conversation</span><span class="o">.</span><span class="n">tokens</span> <span class="o">&gt;</span> <span class="mi">40_000</span><span class="p">:</span>
+    <span class="n">conversation</span> <span class="o">=</span> <span class="n">compact</span><span class="p">(</span><span class="n">conversation</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Budget each conversation, not just the month.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="agents.html#agf-02"><span>7.7</span>Reconciliation agent loops all night on one break</a><a href="observability.html#obs-15"><span>13.15</span>Diagnosis agent repeats the same check 200 times overnight</a><a href="multi-agent.html#mas-09"><span>8.15</span>Each agent has a budget, the system has none</a></div>
+</article>
+
+<article class="ap" id="cost-08">
+  <header class="ap-h">
+    <div class="ap-num">6.12</div>
+    <div>
+      <h2><a href="#cost-08">Replies three times longer than customers need</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's assistant averages 450 output tokens per reply, with long introductions and repeated disclaimers. Customers on mobile scroll past most of it. Output tokens cost several times more than input tokens.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>No length guidance.</strong></p>
+<p><em>Think of it this way:</em> Answering "what's the time?" with a history of clocks.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No length guidance or limits.</li>
+<li>Disclaimers repeated every turn.</li>
+<li>Output cost isn't monitored.</li>
+</ul>
+<p><strong>Root cause:</strong> Unmanaged verbosity.</p>
+<p><strong>Where it breaks:</strong> Prompt and UX.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-08" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">450 tokens · Avg reply</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Intros · Repeated</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Disclaimers · Every turn</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Cost + scroll · Wasted</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-08)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-08)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-08)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No length guidance</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Length guide · Per intent</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Max tokens · Per channel</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Disclaimer · Once in UI</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Measure · Readability</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-08)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-08)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-08)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Length by intent and channel, disclaimers in UI</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Set length guidance per intent and channel, and appropriate max output tokens.</li>
+<li>Show required disclaimers once in the UI, not in every reply.</li>
+<li>Measure output tokens and readability.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Too short can drop needed information; evaluate.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Output tokens per intent; scroll and engagement data.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: an SMS channel bot sends multi-part messages that cost per segment.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">LENGTH</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">"balance"</span><span class="p">,</span> <span class="s2">"chat"</span><span class="p">):</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="s2">"plan_compare"</span><span class="p">,</span> <span class="s2">"chat"</span><span class="p">):</span> <span class="mi">150</span><span class="p">,</span> <span class="p">(</span><span class="s2">"balance"</span><span class="p">,</span> <span class="s2">"voice"</span><span class="p">):</span> <span class="mi">25</span><span class="p">}</span>   <span class="c1"># words</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+    <span class="n">words</span> <span class="o">=</span> <span class="n">LENGTH</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="n">intent</span><span class="p">,</span> <span class="n">channel</span><span class="p">),</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">words</span> <span class="o">*</span> <span class="mf">1.6</span><span class="p">),</span>
+                        <span class="n">system</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Answer in at most </span><span class="si">{</span><span class="n">words</span><span class="si">}</span><span class="s2"> words. Disclaimers are shown in the UI; don't repeat them."</span><span class="p">)</span>
+<span class="n">metrics</span><span class="o">.</span><span class="n">observe</span><span class="p">(</span><span class="s2">"output_tokens"</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span><span class="o">.</span><span class="n">output_tokens</span><span class="p">,</span> <span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Shorter answers are cheaper and usually better.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-04"><span>6.8</span>Fifteen-thousand-token system prompt for a balance question</a></div>
+</article>
+
+<article class="ap" id="cost-09">
+  <header class="ap-h">
+    <div class="ap-num">6.13</div>
+    <div>
+      <h2><a href="#cost-09">Nightly ticket summaries run on the real-time API</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier summarises 400,000 closed tickets each night for analytics, using the same real-time API as its chatbot, at full price. The job also competes with chatbot traffic for rate limits during early-morning peaks.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Offline jobs on the real-time API.</strong></p>
+<p><em>Think of it this way:</em> Sending bulk mail by courier.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Non-urgent work uses the real-time path.</li>
+<li>Batch discounts aren't used.</li>
+<li>Shared rate limits create contention.</li>
+</ul>
+<p><strong>Root cause:</strong> No distinction between real-time and batch workloads.</p>
+<p><strong>Where it breaks:</strong> Workload architecture.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-09" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">400k tickets · Nightly</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">Real-time API · Full</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">price</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Rate limits · Contention</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Chatbot · Slowed</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-09)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-09)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-09)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Offline jobs on the real-time API</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Batch API · Discounted</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Separate quota · Batch</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">keys</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Off-peak · Scheduled</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Cheaper · Same output</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-09)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-09)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-09)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Batch API, separate quotas, off-peak scheduling</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Use the provider's batch API for offline jobs (typically discounted, with higher throughput).</li>
+<li>Separate quotas or keys for batch and interactive traffic.</li>
+<li>Schedule jobs away from interactive peaks.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Batch results arrive later (hours), which is fine for analytics.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Share of offline tokens on real-time endpoints.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank classifies a month of transactions through the interactive API.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">nightly_summaries</span><span class="p">():</span>
+    <span class="n">reqs</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"custom_id"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="n">MODEL</span><span class="p">,</span> <span class="s2">"max_tokens"</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+             <span class="s2">"messages"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">SUMMARY_PROMPT</span> <span class="o">+</span> <span class="n">t</span><span class="o">.</span><span class="n">text</span><span class="p">}]}}</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tickets</span><span class="o">.</span><span class="n">closed_since</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">24</span><span class="p">)]</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">batch_client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">requests</span><span class="o">=</span><span class="n">reqs</span><span class="p">)</span>           <span class="c1"># discounted offline API, separate key/quota</span>
+    <span class="n">scheduler</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">on_done</span><span class="o">=</span><span class="n">store_summaries</span><span class="p">)</span>
+
+<span class="c1"># cron: 0 2 * * *   (away from interactive peaks)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If it can wait, batch it.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-17"><span>14.17</span>Tax-day traffic hits provider quotas</a></div>
+</article>
+
+<article class="ap" id="cost-10">
+  <header class="ap-h">
+    <div class="ap-num">6.14</div>
+    <div>
+      <h2><a href="#cost-10">Extended reasoning turned on for every request</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank switches its whole assistant to a reasoning model with a large thinking budget after it performed well on complex mortgage questions. Simple questions ("What's my sort code?") now take 9 seconds and cost 10 times more, with no quality gain.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Maximum reasoning for every request.</strong></p>
+<p><em>Think of it this way:</em> Calling a committee meeting to decide what to have for lunch.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Reasoning effort applied uniformly.</li>
+<li>Thinking tokens are billed and add latency.</li>
+<li>Simple tasks gain nothing.</li>
+</ul>
+<p><strong>Root cause:</strong> No effort routing.</p>
+<p><strong>Where it breaks:</strong> Model and parameter selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Reasoning · All requests</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">&#x27;Sort code?&#x27; · 9 seconds</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">10x cost · Thinking</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">No gain · Simple asks</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-10)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-10)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-10)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Maximum reasoning for every request</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Route · By complexity</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Budget · Per intent</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Evals · Prove gain</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Escalate · If unsure</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-10)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-10)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-10)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Reasoning budgets by intent, validated by evals</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Route by complexity; enable extended reasoning (or a higher effort setting) only for intents that benefit in evals.</li>
+<li>Set thinking budgets per intent.</li>
+<li>Measure quality, latency and cost per intent.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Routing errors may under-think hard questions; allow escalation.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Thinking tokens per intent.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a care bot uses deep reasoning to answer "what's my balance?"</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">REASONING</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"complaint_resolution"</span><span class="p">:</span> <span class="s2">"high"</span><span class="p">,</span> <span class="s2">"plan_comparison"</span><span class="p">:</span> <span class="s2">"medium"</span><span class="p">}</span>   <span class="c1"># chosen from evals</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+    <span class="n">effort</span> <span class="o">=</span> <span class="n">REASONING</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">intent</span><span class="p">)</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"thinking_budget"</span><span class="p">:</span> <span class="n">BUDGET</span><span class="p">[</span><span class="n">effort</span><span class="p">]}</span> <span class="k">if</span> <span class="n">effort</span> <span class="k">else</span> <span class="p">{}</span>         <span class="c1"># off by default</span>
+    <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="n">per_intent</span><span class="p">(</span><span class="n">metrics</span><span class="o">=</span><span class="p">[</span><span class="s2">"quality"</span><span class="p">,</span> <span class="s2">"p95_latency"</span><span class="p">,</span> <span class="s2">"cost"</span><span class="p">],</span> <span class="n">compare</span><span class="o">=</span><span class="p">[</span><span class="s2">"reasoning_on"</span><span class="p">,</span> <span class="s2">"reasoning_off"</span><span class="p">])</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Pay for thinking where thinking pays.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="agents.html#agf-20"><span>7.25</span>Frontier model used for every care-flow step</a><a href="models.html#cost-02"><span>6.6</span>Router sends hard complaints to the small model</a></div>
+</article>
+
+<article class="ap" id="cost-11">
+  <header class="ap-h">
+    <div class="ap-num">6.15</div>
+    <div>
+      <h2><a href="#cost-11">Customers stare at a spinner for 8 seconds</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's web chat waits for the full reply before showing anything. Complex bill explanations take 8 seconds. Many customers send a second message or leave before the answer appears.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Wait for the whole reply.</strong></p>
+<p><em>Think of it this way:</em> A waiter who brings nothing until the whole meal is ready, not even water.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No streaming.</li>
+<li>No progress indicators for tool calls.</li>
+<li>Perceived latency equals total latency.</li>
+</ul>
+<p><strong>Root cause:</strong> Non-streaming UX.</p>
+<p><strong>Where it breaks:</strong> Front end and API.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Full reply · Then show</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">8 seconds · Spinner</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Second msg · Or leave</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Abandon · Rate up</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-11)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-11)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-11)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Wait for the whole reply</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Stream · Tokens</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Tool status · &#x27;Checking</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">bill&#x27;</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Chunk checks · Guardrails</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Engaged · Users</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-11)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-11)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-11)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Stream tokens and tool progress</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Stream tokens to the UI.</li>
+<li>Show step status for tool calls ("Checking your latest bill...").</li>
+<li>Run fast output guardrails per chunk or hold back only high-risk segments.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Streaming makes full-response guardrails harder.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Abandonment and duplicate messages during waits.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's assistant doesn't stream statements summaries, and users refresh the page.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">chat_stream</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ws</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">agent</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"tool_start"</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="s2">"status"</span><span class="p">:</span> <span class="n">STATUS_TEXT</span><span class="p">[</span><span class="n">event</span><span class="o">.</span><span class="n">tool</span><span class="p">]})</span>       <span class="c1"># "Checking your latest bill..."</span>
+        <span class="k">elif</span> <span class="n">event</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"token"</span><span class="p">:</span>
+            <span class="n">buf</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">sentence_complete</span><span class="p">(</span><span class="n">buf</span><span class="p">):</span>
+                <span class="n">chunk</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span> <span class="n">buf</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">chunk</span> <span class="k">if</span> <span class="n">fast_guard</span><span class="o">.</span><span class="n">ok</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"[removed]"</span><span class="p">})</span>   <span class="c1"># per-chunk guard</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Show progress. Silence feels slower than it is.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#tel-08"><span>13.28</span>Voice bot feels slow, but total latency looks fine</a><a href="models.html#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a></div>
+</article>
+
+<article class="ap" id="cost-12">
+  <header class="ap-h">
+    <div class="ap-num">6.16</div>
+    <div>
+      <h2><a href="#cost-12">Independent lookups run one after another</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's onboarding agent calls ID verification, sanctions screening, address validation and device-risk scoring one by one, though none depends on the others. Each takes about 1.5 seconds, so the step takes 6 seconds.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Independent calls in sequence.</strong></p>
+<p><em>Think of it this way:</em> Cooking four dishes one at a time on a four-burner stove.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Independent calls are serialised.</li>
+<li>The agent loop makes one tool call per turn.</li>
+<li>No dependency analysis.</li>
+</ul>
+<p><strong>Root cause:</strong> Missed parallelism.</p>
+<p><strong>Where it breaks:</strong> Orchestration.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">ID check · 1.5 s</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Sanctions · Then 1.5 s</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Address, device · Then 3</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">s</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">6 seconds · Total</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-12)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-12)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-12)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Independent calls in sequence</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Fan-out · All 4</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Parallel · 1.5 s total</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Timeouts · Per call</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Partial · Handled</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-12)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-12)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-12)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Parallel fan-out with timeouts</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Run independent tool calls in parallel (parallel tool calling or workflow fan-out).</li>
+<li>Model dependencies explicitly in the workflow.</li>
+<li>Set a timeout per call and handle partial results.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> More concurrent load on downstream systems.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Critical-path latency vs sum of tool latencies.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: an order agent checks credit, serviceability and stock sequentially.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">context_for</span><span class="p">(</span><span class="n">account_id</span><span class="p">):</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+        <span class="n">with_timeout</span><span class="p">(</span><span class="n">billing</span><span class="o">.</span><span class="n">latest</span><span class="p">(</span><span class="n">account_id</span><span class="p">),</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="n">with_timeout</span><span class="p">(</span><span class="n">network</span><span class="o">.</span><span class="n">outages_near</span><span class="p">(</span><span class="n">account_id</span><span class="p">),</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="n">with_timeout</span><span class="p">(</span><span class="n">orders</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">account_id</span><span class="p">),</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>                                  <span class="c1"># independent → parallel</span>
+    <span class="n">bill</span><span class="p">,</span> <span class="n">outages</span><span class="p">,</span> <span class="n">orders_</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"bill"</span><span class="p">:</span> <span class="n">bill</span><span class="p">,</span> <span class="s2">"outages"</span><span class="p">:</span> <span class="n">outages</span><span class="p">,</span> <span class="s2">"orders"</span><span class="p">:</span> <span class="n">orders_</span><span class="p">,</span> <span class="s2">"partial"</span><span class="p">:</span> <span class="kc">None</span> <span class="ow">in</span> <span class="p">(</span><span class="n">bill</span><span class="p">,</span> <span class="n">outages</span><span class="p">,</span> <span class="n">orders_</span><span class="p">)}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Parallelise what doesn&#x27;t depend on each other.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-18"><span>3.28</span>Fraud-call agent assist too slow to use</a></div>
+</article>
+
+<article class="ap" id="cost-13">
+  <header class="ap-h">
+    <div class="ap-num">6.17</div>
+    <div>
+      <h2><a href="#cost-13">Speculative prefetching that&#x27;s mostly wasted</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>To cut latency, a carrier's agent prefetches bill, usage, device, roaming and ticket data at the start of every chat, with an LLM summary of each. Most chats need one of them. Prefetching triples BSS load and LLM cost.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Prefetch and summarise everything.</strong></p>
+<p><em>Think of it this way:</em> Cooking every dish on the menu in case someone orders it.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Prefetch isn't targeted.</li>
+<li>LLM summaries of unused data cost money.</li>
+<li>Backend load rises.</li>
+</ul>
+<p><strong>Root cause:</strong> Untargeted speculation.</p>
+<p><strong>Where it breaks:</strong> Context assembly strategy.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Chat starts · Prefetch</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">all</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">5 sources · Summarised</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">1 used · Typically</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">3x load · And cost</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-13)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-13)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-13)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Prefetch and summarise everything</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Cheap data · Account</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">summary</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Intent · First message</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Summarise · Only if used</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Hit rate · Measured</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-13)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-13)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-13)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Targeted prefetch by likely intent</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Prefetch only cheap, high-probability data (account summary), using intent from the first message.</li>
+<li>Skip LLM summarisation until data is needed.</li>
+<li>Measure prefetch hit rate.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Slightly slower for less common intents.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Prefetched data used vs fetched.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank assistant pulls a year of transactions at login just in case.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_first_message</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+    <span class="n">intent</span> <span class="o">=</span> <span class="n">fast_intent</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">intent</span><span class="o">.</span><span class="n">prob</span> <span class="o">&gt;</span> <span class="mf">0.7</span> <span class="ow">and</span> <span class="n">intent</span><span class="o">.</span><span class="n">name</span> <span class="ow">in</span> <span class="n">CHEAP_PREFETCH</span><span class="p">:</span>
+        <span class="n">session</span><span class="o">.</span><span class="n">prefetched</span> <span class="o">=</span> <span class="k">await</span> <span class="n">accounts</span><span class="o">.</span><span class="n">summary</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">customer_id</span><span class="p">)</span>    <span class="c1"># cheap data only</span>
+        <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"prefetch"</span><span class="p">,</span> <span class="n">intent</span><span class="o">=</span><span class="n">intent</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">use_prefetched</span><span class="p">(</span><span class="n">session</span><span class="p">):</span>
+    <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"prefetch_used"</span> <span class="k">if</span> <span class="n">session</span><span class="o">.</span><span class="n">prefetched</span> <span class="k">else</span> <span class="s2">"prefetch_miss"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">prefetched</span>                                  <span class="c1"># summarise only when needed</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Prefetch what you&#x27;ll probably use, not everything you might.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a></div>
+</article>
+
+<article class="ap" id="cost-14">
+  <header class="ap-h">
+    <div class="ap-num">6.18</div>
+    <div>
+      <h2><a href="#cost-14">Large model classifying 100 million transactions a month</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A neobank uses a large general model with a long prompt to categorise every card transaction (100 million a month). It works, but costs $180k a month. A small model fine-tuned on two years of labelled categories would match the accuracy at a fraction of the cost.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Large model for a narrow, huge task.</strong></p>
+<p><em>Think of it this way:</em> Hiring a senior consultant to sort the post.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>A general model used for a narrow, high-volume task.</li>
+<li>Labelled data exists but isn't used.</li>
+<li>Cost scales linearly with volume.</li>
+</ul>
+<p><strong>Root cause:</strong> No consideration of specialised small models.</p>
+<p><strong>Where it breaks:</strong> Model strategy.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">100M txns · Monthly</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Large model · Long prompt</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">$180k/month · Cost</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Labels unused · 2 years</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-14)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-14)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-14)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Large model for a narrow, huge task</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Fine-tune · Small model</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Confidence · Low to large</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Same evals · Held-out</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Fraction · Of cost</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-14)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-14)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-14)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Small fine-tuned model, large model for hard cases</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Fine-tune or distil a small model (or train a classical classifier) for high-volume narrow tasks.</li>
+<li>Use the large model for hard or low-confidence cases only.</li>
+<li>Evaluate both on the same held-out set.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Fine-tuned models need retraining and MLOps upkeep.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Cost per thousand items; accuracy by confidence band.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier uses a frontier model to classify millions of network alarms.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">small</span> <span class="o">=</span> <span class="n">train_classifier</span><span class="p">(</span><span class="n">labelled_txns</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">"distilled-small"</span><span class="p">)</span>       <span class="c1"># or logistic regression on embeddings</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">categorise</span><span class="p">(</span><span class="n">txn</span><span class="p">):</span>
+    <span class="n">pred</span> <span class="o">=</span> <span class="n">small</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">txn</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pred</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&gt;=</span> <span class="mf">0.9</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pred</span><span class="o">.</span><span class="n">label</span>                                              <span class="c1"># ~95% of volume</span>
+    <span class="k">return</span> <span class="n">large_llm</span><span class="o">.</span><span class="n">classify</span><span class="p">(</span><span class="n">txn</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">CATEGORIES</span><span class="p">)</span>                 <span class="c1"># hard / low-confidence cases</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">evaluate</span><span class="p">(</span><span class="n">small</span><span class="p">,</span> <span class="n">heldout</span><span class="p">),</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">large_llm</span><span class="p">,</span> <span class="n">heldout</span><span class="p">))</span>         <span class="c1"># same held-out set</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>High volume and narrow scope means small model.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="advanced-rag.html#ft-03"><span>4.8</span>Prompt with 400 ticket categories for routing</a><a href="agents.html#agf-20"><span>7.25</span>Frontier model used for every care-flow step</a></div>
+</article>
+
+<article class="ap" id="cost-15">
+  <header class="ap-h">
+    <div class="ap-num">6.19</div>
+    <div>
+      <h2><a href="#cost-15">Retry storm doubles cost during a provider incident</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>During a provider slowdown, a carrier's services retry failed calls immediately up to five times, at several layers (SDK, gateway, application). Each customer message generates up to 125 attempts. The provider throttles harder, and successful calls are billed multiple times when timeouts occurred after processing.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Immediate retries at every layer.</strong></p>
+<p><em>Think of it this way:</em> Everyone in a traffic jam honking harder.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Retries at multiple layers multiply.</li>
+<li>No backoff or jitter.</li>
+<li>No circuit breaker.</li>
+</ul>
+<p><strong>Root cause:</strong> Uncoordinated retry policy.</p>
+<p><strong>Where it breaks:</strong> Resilience configuration.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Provider slow · Incident</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">SDK x5 · Gateway x5</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">App x5 · 125 attempts</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Throttled · Billed twice</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-15)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-15)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-15)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Immediate retries at every layer</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">One layer · Gateway</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Backoff · + jitter</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Breaker · Degraded mode</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Retry budget · Max 10%</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-15)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-15)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-15)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">One retry layer, backoff, breaker, budget</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Retry in one layer only (usually the gateway) with exponential backoff and jitter.</li>
+<li>Add circuit breakers and fall back to degraded mode.</li>
+<li>Set retry budgets (for example at most 10% extra traffic).</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Fewer retries means some failures surface to users; use the degraded mode.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Attempts per request; retry ratio during incidents.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's batch job retries every failed document instantly and exhausts its quota.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># retries live ONLY in the gateway; SDK clients set max_retries=0</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">Provider</span><span class="p">(</span><span class="n">max_retries</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">gateway</span> <span class="o">=</span> <span class="n">Gateway</span><span class="p">(</span>
+    <span class="n">retry</span><span class="o">=</span><span class="n">Retry</span><span class="p">(</span><span class="n">max_attempts</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">backoff</span><span class="o">=</span><span class="s2">"exponential_jitter"</span><span class="p">,</span> <span class="n">budget_ratio</span><span class="o">=</span><span class="mf">0.10</span><span class="p">),</span>   <span class="c1"># ≤10% extra traffic</span>
+    <span class="n">circuit_breaker</span><span class="o">=</span><span class="n">CircuitBreaker</span><span class="p">(</span><span class="n">error_rate</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">window_s</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">cooldown_s</span><span class="o">=</span><span class="mi">60</span><span class="p">),</span>
+    <span class="n">on_open</span><span class="o">=</span><span class="n">degraded_mode</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Retry in one place, with backoff and a budget.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#obs-12"><span>13.12</span>Payday 429s blamed on application bugs</a><a href="agents.html#agf-16"><span>7.21</span>Provider outage takes the care bot down at bill-run time</a></div>
+</article>
+
+<article class="ap" id="cost-16">
+  <header class="ap-h">
+    <div class="ap-num">6.20</div>
+    <div>
+      <h2><a href="#cost-16">Embeddings recomputed for unchanged documents every night</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's nightly job re-embeds all 3 million policy and product chunks, though fewer than 1% change each day. The job takes 5 hours and costs thousands a month.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Re-embed everything nightly.</strong></p>
+<p><em>Think of it this way:</em> Repainting the whole house because one window frame chipped.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Full re-embedding regardless of change.</li>
+<li>No content hashing.</li>
+<li>Waste of time and money.</li>
+</ul>
+<p><strong>Root cause:</strong> Non-incremental indexing.</p>
+<p><strong>Where it breaks:</strong> Ingestion pipeline.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-16" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">3M chunks · Nightly</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">&lt;1% changed · Daily</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">5 hours · Job</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wasted $ · Monthly</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-16)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-16)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-16)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Re-embed everything nightly</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Hash chunks · Content</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Changed only · Embed</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Deletions · Explicit</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Full rebuild · Model</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">change</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-16)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-16)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-16)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Content hashing, embed only changes</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Hash chunk content and only embed new or changed chunks.</li>
+<li>Process deletions explicitly.</li>
+<li>Do full rebuilds only on embedding-model changes.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Hash and change tracking logic.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Embedding calls per day vs changed chunks.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier re-embeds its entire device-manual library weekly.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">nightly_index</span><span class="p">(</span><span class="n">docs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">(</span><span class="n">doc</span><span class="p">):</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">sha256</span><span class="p">(</span><span class="n">normalize</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">text</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">registry</span><span class="o">.</span><span class="n">hash</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="o">==</span> <span class="n">h</span><span class="p">:</span>
+                <span class="k">continue</span>                                   <span class="c1"># unchanged → no embedding call</span>
+            <span class="n">vdb</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">embed</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">text</span><span class="p">),</span> <span class="n">meta</span><span class="o">=</span><span class="p">{</span><span class="s2">"hash"</span><span class="p">:</span> <span class="n">h</span><span class="p">});</span> <span class="n">registry</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">h</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">gone</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">ids</span><span class="p">()</span> <span class="o">-</span> <span class="n">current_chunk_ids</span><span class="p">(</span><span class="n">docs</span><span class="p">):</span>
+        <span class="n">vdb</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">gone</span><span class="p">);</span> <span class="n">registry</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">gone</span><span class="p">)</span>           <span class="c1"># deletions explicit</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Embed what changed.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-05"><span>3.15</span>Stale index quotes the old savings APY</a><a href="llmops-cicd.html#ops-18"><span>14.18</span>Re-embedding 50 million chunks by hand</a></div>
+</article>
+
+<article class="ap" id="cost-17">
+  <header class="ap-h">
+    <div class="ap-num">6.21</div>
+    <div>
+      <h2><a href="#cost-17">AI costs land in one central budget</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's AI platform team pays for all model usage. Business units launch features without considering cost, because they don't see it. The platform budget is exhausted in Q3.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>One central budget, no attribution.</strong></p>
+<p><em>Think of it this way:</em> A shared office kitchen where nobody pays for the coffee they drink.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No cost attribution to the teams that drive it.</li>
+<li>No incentives to optimise.</li>
+<li>Budget surprises.</li>
+</ul>
+<p><strong>Root cause:</strong> No chargeback or showback.</p>
+<p><strong>Where it breaks:</strong> Financial operations.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-17" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Central budget · Platform</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">BUs launch · No cost view</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Usage grows · Unchecked</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Q3 · Budget gone</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-17)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-17)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-17)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">One central budget, no attribution</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Attribution · Team keys</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Showback · Monthly</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Chargeback · When trusted</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Estimates · In launch</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">review</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-17)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-17)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-17)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Attribute, show back, charge back</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Attribute cost per team and feature via gateway keys and tags.</li>
+<li>Show back monthly, and charge back once data is trusted.</li>
+<li>Require cost estimates in launch reviews.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Chargeback can discourage experimentation; give teams a small sandbox budget.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Share of spend attributed to an owner.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's central AI budget is consumed by one line of business's experiments.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">for</span> <span class="n">team</span> <span class="ow">in</span> <span class="n">TEAMS</span><span class="p">:</span>
+    <span class="n">gateway</span><span class="o">.</span><span class="n">keys</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">{</span><span class="s2">"cost_center"</span><span class="p">:</span> <span class="n">team</span><span class="o">.</span><span class="n">cc</span><span class="p">},</span> <span class="n">max_budget</span><span class="o">=</span><span class="n">team</span><span class="o">.</span><span class="n">monthly_budget</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">monthly_showback</span><span class="p">(</span><span class="n">month</span><span class="p">):</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">ledger</span><span class="o">.</span><span class="n">group_by</span><span class="p">([</span><span class="s2">"team"</span><span class="p">,</span> <span class="s2">"feature"</span><span class="p">],</span> <span class="n">month</span><span class="o">=</span><span class="n">month</span><span class="p">)</span>
+    <span class="n">email</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">to</span><span class="o">=</span><span class="n">finance_partners</span><span class="p">,</span> <span class="n">subject</span><span class="o">=</span><span class="sa">f</span><span class="s2">"AI showback </span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="n">rows</span><span class="p">)</span>
+
+<span class="n">LAUNCH_REVIEW_REQUIRED</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"cost_estimate_per_task"</span><span class="p">,</span> <span class="s2">"monthly_volume_forecast"</span><span class="p">]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Whoever drives the cost should see the cost.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#tel-04"><span>13.24</span>Three teams report token usage three different ways</a><a href="observability.html#obs-05"><span>13.5</span>One MVNO tenant burns the monthly LLM budget in a week</a></div>
+</article>
+
+<article class="ap" id="cost-18">
+  <header class="ap-h">
+    <div class="ap-num">6.22</div>
+    <div>
+      <h2><a href="#cost-18">Self-hosted GPUs sit idle 80% of the day</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank self-hosts a model for internal document review on dedicated GPUs sized for month-end peaks. Average utilisation is 20%, and the cluster costs more than the equivalent hosted API usage would.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Static GPUs sized for peak.</strong></p>
+<p><em>Think of it this way:</em> Buying a bus for the one day a month you carry the whole team.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Capacity sized for peak, running constantly.</li>
+<li>No autoscaling or workload scheduling.</li>
+<li>Build-vs-buy cost not revisited.</li>
+</ul>
+<p><strong>Root cause:</strong> Static provisioning without utilisation management.</p>
+<p><strong>Where it breaks:</strong> Infrastructure.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-18" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Sized · Month-end peak</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">20% util · Average</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Always on · Cluster</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Costly · Vs hosted</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-18)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-18)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-18)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Static GPUs sized for peak</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Autoscale · Queue depth</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Scheduled · Known peaks</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Batch fill · Idle time</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Compare · Build vs buy</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-18)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-18)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-18)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Autoscale, fill with batch, burst to API</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Autoscale on queue depth and use scheduled scaling for known peaks.</li>
+<li>Fill idle capacity with batch work, or burst to hosted APIs at peak.</li>
+<li>Compare total cost against hosted options regularly.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Scaling up takes time (model load); keep a warm minimum.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>GPU utilisation and cost per thousand tokens.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier's on-prem inference cluster for sovereignty runs mostly idle at night.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># KEDA ScaledObject: scale vLLM deployment on queue depth; scheduled scaling for known peaks</span>
+<span class="c1"># triggers:</span>
+<span class="c1">#   - type: prometheus  {query: sum(vllm_num_requests_waiting), threshold: "10"}</span>
+<span class="c1">#   - type: cron        {timezone: America/Chicago, start: "0 8 * * 1-5", end: "0 20 * * 1-5", desiredReplicas: "6"}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">fill_idle_capacity</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">gpu_utilisation</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.4</span><span class="p">:</span>
+        <span class="n">batch_queue</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">next_jobs</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">200</span><span class="p">))</span>         <span class="c1"># batch work in idle hours</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Idle GPUs are the most expensive tokens.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-08"><span>14.8</span>Self-hosted model runs out of GPU memory at 50 users</a></div>
+</article>
+
+<article class="ap" id="cost-19">
+  <header class="ap-h">
+    <div class="ap-num">6.23</div>
+    <div>
+      <h2><a href="#cost-19">Latency SLO with no plan for when it&#x27;s missed</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's agent-assist has a 2-second SLO. When the model is slow, requests just wait and eventually time out at 30 seconds. The agent on the call gets nothing.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>SLO on paper, requests just wait.</strong></p>
+<p><em>Think of it this way:</em> A train timetable with no plan for delays except waiting.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>SLO defined but not enforced.</li>
+<li>No fallback when the budget is exceeded.</li>
+<li>Timeout far beyond usefulness.</li>
+</ul>
+<p><strong>Root cause:</strong> No degradation strategy tied to the latency budget.</p>
+<p><strong>Where it breaks:</strong> Serving logic.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-19" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">2 s SLO · Stated</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Slow model · Waits</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">30 s timeout · Useless</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Nothing shown · Agent</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-19)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-19)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-19)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">SLO on paper, requests just wait</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Timeout · When useless</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Fallback · Small model</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Cached · Top article</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Degraded · Flagged</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-19)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-19)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-19)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Useful timeout, fast fallback, degraded flag</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Set timeouts at the point where the answer stops being useful.</li>
+<li>Fall back to a faster path (smaller model, cached top article, search results) when the budget is exceeded.</li>
+<li>Mark degraded responses and measure their rate.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Degraded answers are less complete.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>SLO compliance and degraded-response rate.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a fraud-call assistant waits 20 seconds for a slow model instead of showing the standard script.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">answer</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">full_pipeline</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">USEFUL_LIMIT_S</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+        <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"degraded_response"</span><span class="p">)</span>
+        <span class="n">fast</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">top_article</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="ow">or</span> <span class="k">await</span> <span class="n">small_model</span><span class="o">.</span><span class="n">answer</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">fast</span><span class="p">,</span> <span class="s2">"degraded"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>           <span class="c1"># marked, rate measured</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>When you miss the budget, degrade. Don&#x27;t wait.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="agents.html#agf-16"><span>7.21</span>Provider outage takes the care bot down at bill-run time</a><a href="observability.html#obs-14"><span>13.14</span>Silent fallback to a weaker model for three days</a></div>
+</article>
+
+<article class="ap" id="cost-20">
+  <header class="ap-h">
+    <div class="ap-num">6.24</div>
+    <div>
+      <h2><a href="#cost-20">Prompt compression saves tokens and drops the disclosures</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-comp">Compliance</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>To cut costs, a bank applies aggressive automatic prompt compression to its loan assistant's retrieved documents. Token use drops 45%, but compressed context sometimes removes the required APR range and fee disclosures, and answers omit them.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Compress context to cut tokens.</strong></p>
+<p><em>Think of it this way:</em> Shrinking a contract to save paper and losing the small print.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Compression drops low-frequency but critical text.</li>
+<li>Optimisation was measured on cost only.</li>
+<li>Disclosure completeness wasn't evaluated.</li>
+</ul>
+<p><strong>Root cause:</strong> Cost optimisation without quality gates.</p>
+<p><strong>Where it breaks:</strong> Optimisation process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-cost-20" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Compression · Aggressive</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">-45% tokens · Saved</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">APR dropped · Disclosures</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Non-compliant · Answers</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-models-cost-20)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-models-cost-20)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-models-cost-20)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Compress context to cut tokens</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Exempt · Disclosures</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Evals · Compliance</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Canary · Rollout</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Savings · Safe ones</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-models-cost-20)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-models-cost-20)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-models-cost-20)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Exempt critical text, quality-gated rollout</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Evaluate every cost optimisation on quality, including compliance checks.</li>
+<li>Exempt critical sections (disclosures, rates) from compression.</li>
+<li>Roll out optimisations behind canaries.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Smaller savings.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Disclosure-presence checks on answers.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: compression drops contract cancellation terms from retrieved context.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PROTECTED</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"&lt;disclosure&gt;"</span><span class="p">,</span> <span class="s2">"&lt;rate_table&gt;"</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">compress</span><span class="p">(</span><span class="n">prompt</span><span class="p">):</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">split_protected</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">PROTECTED</span><span class="p">)</span>              <span class="c1"># protected sections pass through untouched</span>
+    <span class="k">return</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">p</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">protected</span> <span class="k">else</span> <span class="n">compressor</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">ratio</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">)</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="n">eval_suite</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">pipeline_with</span><span class="p">(</span><span class="n">compress</span><span class="p">),</span> <span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">"compliance_disclosures"</span><span class="p">])</span>
+<span class="k">assert</span> <span class="n">results</span><span class="p">[</span><span class="s2">"compliance_disclosures"</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span>
+<span class="n">flags</span><span class="o">.</span><span class="n">canary</span><span class="p">(</span><span class="s2">"prompt_compression"</span><span class="p">,</span> <span class="n">pct</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A saving that breaks compliance isn&#x27;t a saving.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#cicd-19"><span>14.39</span>Cost regression merged without anyone noticing</a><a href="evals-ops.html#eval-14"><span>11.20</span>Best fraud-summary prompt is too slow and too costly</a></div>
+</article>
+
+<div class="pn"><a class="prev" href="prompts.html">← 5. Prompt Engineering</a><a class="next" href="agents.html">7. Agent Design &amp; Frameworks →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

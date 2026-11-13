@@ -1,0 +1,1180 @@
+source: regensis
+section: governance
+patterns:
+- id: gov-01
+  title: LLM credit-memo tool deployed outside model risk management
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A US bank's commercial-lending team deploys an LLM that drafts credit memos and suggests risk ratings. Because it was bought as a "productivity tool", it never went through model risk management. Examiners find it influences credit decisions and treat it as an unvalidated model.
+  antipattern: |-
+    **AI tool bypasses model risk.**
+
+    *Think of it this way:* Using a new set of scales in a pharmacy without having them calibrated.
+  fails: |-
+    - The tool influences decisions but isn't classified as a model.
+    - No validation, monitoring or documentation.
+    - Ownership is unclear.
+
+    **Root cause:** AI uses not routed through the model-risk framework.
+
+    **Where it breaks:** Governance process.
+  diagram:
+    bad:
+    - Productivity · Tool label
+    - '!Drafts ratings · Credit memos'
+    - No validation · No inventory
+    - '!Exam finding · Unvalidated'
+    bad_note: AI tool bypasses model risk
+    good:
+    - Classify · By impact
+    - +MRM · Validate, monitor
+    - +Model card · Limits, evals
+    - Accountable · Human owner
+    good_note: Impact-based classification into MRM
+  solution: |-
+    1. Classify AI uses by impact; anything influencing credit, pricing or compliance decisions enters model risk management (inventory, validation, ongoing monitoring).
+    2. Document intended use, limitations, evals and controls in a model card.
+    3. Define human accountability for decisions the tool informs.
+  works: |-
+    **Trade-off to manage:** Validation slows deployment; scale effort by risk tier.
+
+    **How you prove it worked:**
+
+    - Inventory coverage audits against gateway usage.
+
+    **Same pattern elsewhere:** Telco: an AI that sets device-financing credit limits is deployed without review by the credit risk function.
+  takeaway: If it influences a decision, it's a model. Govern it like one.
+  related:
+  - ops-05
+  - ops-15
+  - eval-20
+  code: |
+    def classify_ai_use(uc) -> str:
+        if uc.influences & {"credit", "pricing", "compliance"}:
+            return "model_risk_managed"                       # enters MRM: validation, monitoring, review
+        return "standard"
+
+    model_card = {
+        "intended_use": "draft credit memos for analyst review", "out_of_scope": ["final credit decision"],
+        "limitations": ["no access to bureau data"], "evals": "evals/credit_memo_v4.html",
+        "controls": ["analyst sign-off", "numeric recompute check"], "accountable_owner": "Head of Credit Risk"}
+  lang: python
+- id: gov-02
+  title: Disconnect and port-out executed with no human gate
+  tags:
+  - Compliance
+  - Telco
+  - Critical
+  scenario: |-
+    A carrier's agent can disconnect lines and approve port-out requests autonomously. A misread request ("cancel my roaming pass") leads to a full line disconnect, and the customer's number is lost to recycling rules before anyone notices.
+  antipattern: |-
+    **Irreversible actions are autonomous.**
+
+    *Think of it this way:* A demolition crew that starts work from a phone message without checking the address.
+  fails: |-
+    - Irreversible actions run without confirmation or approval.
+    - No risk tiers for actions.
+    - No cooling-off or undo window.
+
+    **Root cause:** Human-in-the-loop not designed around reversibility and impact.
+
+    **Where it breaks:** Action policy.
+  diagram:
+    bad:
+    - '''Cancel pass'' · Misread'
+    - '!Disconnect · Autonomous'
+    - Number lost · Recycled
+    - '!No undo · Customer harm'
+    bad_note: Irreversible actions are autonomous
+    good:
+    - Tier actions · Reversibility
+    - +Confirm · Reversible
+    - +Approve · Irreversible
+    - Cooling-off · Quarantine
+    good_note: Action tiers by reversibility with approvals
+  solution: |-
+    1. Classify actions by reversibility and impact (read, reversible write, irreversible).
+    2. Require explicit customer confirmation for reversible writes and human or out-of-band approval for irreversible ones.
+    3. Add soft-delete or cooling-off windows (number quarantine) wherever possible.
+  works: |-
+    **Trade-off to manage:** Slower completion for rare high-impact actions.
+
+    **How you prove it worked:**
+
+    - Irreversible actions without approval records.
+
+    **Same pattern elsewhere:** FinTech: an agent closes accounts and sends balances by cheque without approval.
+  takeaway: The less reversible the action, the more human the decision.
+  related:
+  - agf-05
+  - sec-05
+  - tool-05
+  code: |
+    ACTION_CLASS = {"get_usage": "read", "change_plan": "reversible_write",
+                    "disconnect_line": "irreversible", "port_out": "irreversible"}
+
+    def execute(action, args, ctx):
+        cls = ACTION_CLASS[action]
+        if cls == "reversible_write" and not ctx.customer_confirmed(action):
+            return ask_confirmation(action, args)
+        if cls == "irreversible":
+            approval = out_of_band.approve(ctx.customer_id, action) or human_queue.approve(action, args)
+            if not approval: return {"status": "PENDING_APPROVAL"}
+            return quarantine_then_execute(action, args, days=30)     # number quarantine / cooling-off
+        return TOOLS[action](**args)
+  lang: python
+- id: gov-03
+  title: Customers aren't told they're talking to an AI
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A European bank's chat presents its assistant with a human name and photo. Customers believe they're talking to staff and share sensitive information accordingly. A complaint argues the bank misled them, and transparency obligations for AI interacting with people apply.
+  antipattern: |-
+    **AI presented as a human.**
+
+    *Think of it this way:* A shop dummy dressed as a sales assistant.
+  fails: |-
+    - No disclosure of AI interaction.
+    - Persona design implies a human.
+    - Customer expectations are wrong.
+
+    **Root cause:** Transparency not designed in.
+
+    **Where it breaks:** Product and compliance.
+  diagram:
+    bad:
+    - Human name · And photo
+    - '!Customers · Think staff'
+    - Share more · Sensitive
+    - '!Complaint · Misled'
+    bad_note: AI presented as a human
+    good:
+    - Disclose AI · At start
+    - +No fake human · Persona
+    - +Ask = answer · Honestly
+    - Human route · Easy
+    good_note: Clear disclosure and a route to a human
+  solution: |-
+    1. Disclose clearly that the customer is talking to an AI, at the start and when asked.
+    2. Avoid human-like personas that imply a person.
+    3. Offer an easy route to a human.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Disclosure presence checks; complaints about deception.
+
+    **Same pattern elsewhere:** Telco: a voice agent introduces itself with a human name and never says it's automated.
+  takeaway: Tell people when they're talking to a machine.
+  related:
+  - gov-04
+  code: |
+    OPENING = "Hi, I'm the T-Care virtual assistant (an AI). I can help with most account questions."
+
+    def respond(msg, session):
+        if is_identity_question(msg):                 # "am I talking to a bot?"
+            return "Yes, I'm an AI assistant. Would you like me to connect you with a person?"
+        reply = assistant(msg)
+        return add_human_option(reply) if session.turns % 5 == 0 else reply
+  lang: python
+- id: gov-04
+  title: Customers trapped in a chatbot doom loop
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's assistant handles disputes but has no clear way to reach a person. Customers with unusual problems loop through the same answers. Regulators have specifically raised concerns about banking chatbots that block access to human help, and complaint volumes rise.
+  antipattern: |-
+    **No way out of the bot.**
+
+    *Think of it this way:* A phone menu with no option to speak to anyone.
+  fails: |-
+    - No escalation path or triggers.
+    - Bot keeps trying when it's failing.
+    - Containment is the main KPI.
+
+    **Root cause:** Automation optimised for containment over resolution.
+
+    **Where it breaks:** Product design and KPIs.
+  diagram:
+    bad:
+    - Unusual issue · Dispute
+    - '!Same answers · Loop'
+    - No human · Option
+    - '!Complaints · Regulator'
+    bad_note: No way out of the bot
+    good:
+    - Human path · Always
+    - +Triggers · Fail, frustration
+    - +Context · Passed on
+    - KPIs · Resolution
+    good_note: Escalation triggers and a visible human path
+  solution: |-
+    1. Always offer a path to a human, and escalate automatically on triggers (repeated failure, frustration, disputes, vulnerability, legal threats).
+    2. Pass full context to the human agent.
+    3. Balance containment with resolution and complaint metrics.
+  works: |-
+    **Trade-off to manage:** More human contacts; fewer complaints and better outcomes.
+
+    **How you prove it worked:**
+
+    - Loop detection; requests for a human not honoured.
+
+    **Same pattern elsewhere:** Telco: customers can't reach an agent to dispute a bill because the bot keeps re-explaining it.
+  takeaway: Never trap a customer with a bot.
+  related:
+  - obs-13
+  - aev-20
+  code: |
+    TRIGGERS = {"failed_turns": 2, "frustration": 0.7, "intents": {"complaint", "bereavement", "vulnerability"}}
+
+    def should_escalate(session):
+        return (session.consecutive_failures >= TRIGGERS["failed_turns"]
+                or sentiment(session.last_user_msg) <= -TRIGGERS["frustration"]
+                or session.intent in TRIGGERS["intents"]
+                or wants_human(session.last_user_msg))
+
+    if should_escalate(session):
+        handoff(session, context=summary(session))           # full context to the human agent
+  lang: python
+- id: gov-05
+  title: LLM-assisted credit decline can't give specific reasons
+  tags:
+  - Compliance
+  - FinTech
+  - Critical
+  scenario: |-
+    A lender lets an LLM review applications and recommend approve or decline, which underwriters mostly follow. When declining, the lender must give applicants the specific principal reasons. The LLM's narrative reasons are vague, inconsistent and can't be tied to the actual factors behind the recommendation.
+  antipattern: |-
+    **LLM recommends credit decisions.**
+
+    *Think of it this way:* A referee who can't say which rule was broken.
+  fails: |-
+    - An opaque model drives credit decisions.
+    - Reasons are generated text, not the factors used.
+    - Legal requirements for specific reasons can't be met.
+
+    **Root cause:** LLM used as a decision-maker where explainable decisions are required.
+
+    **Where it breaks:** Decision architecture.
+  diagram:
+    bad:
+    - LLM reviews · Application
+    - '!Recommends · Decline'
+    - Vague reasons · Generated
+    - '!Can''t comply · Adverse action'
+    bad_note: LLM recommends credit decisions
+    good:
+    - Decision model · Validated
+    - +Factors · Principal reasons
+    - +LLM drafts · From factors
+    - Test · Consistency
+    good_note: Explainable decision model, LLM drafts from its factors
+  solution: |-
+    1. Keep credit decisions in validated, explainable models and rules; use the LLM to gather and summarise information, not to decide.
+    2. Generate adverse-action reasons from the decision model's factors, with the LLM only drafting the letter from them.
+    3. Test reasons for accuracy and consistency.
+  works: |-
+    **Trade-off to manage:** Less use of LLM judgement in decisions.
+
+    **How you prove it worked:**
+
+    - Mismatch between stated reasons and decision factors.
+
+    **Same pattern elsewhere:** Telco: a postpaid credit check declines applicants with AI-written reasons that don't match the actual credit policy.
+  takeaway: The LLM can write the letter. It can't be the decision.
+  related:
+  - gov-01
+  - prm-10
+  code: |
+    decision = credit_model.decide(application)              # validated, explainable model + rules
+    reasons = [REASON_TEXT[f] for f in decision.top_adverse_factors(n=4)]   # from the model's factors
+
+    letter = llm.draft(template="adverse_action_letter", reasons=reasons,
+                       instructions="Use the reasons exactly as given. Do not add or infer reasons.")
+    assert all(r in letter for r in reasons), "letter must contain the decision model's reasons"
+  lang: python
+- id: gov-06
+  title: Retention offers differ by customer name and dialect
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's retention agent uses conversation tone and wording to decide offer generosity. An internal audit finds customers writing in certain dialects or with certain names receive smaller offers on average, even with the same tenure and value.
+  antipattern: |-
+    **Model discretion over offers.**
+
+    *Think of it this way:* A shop assistant who gives discounts based on accent.
+  fails: |-
+    - Model judgement affects outcomes for customers.
+    - Inputs carry proxies for protected characteristics.
+    - No fairness testing.
+
+    **Root cause:** Unconstrained model discretion over customer outcomes.
+
+    **Where it breaks:** Decision design and testing.
+  diagram:
+    bad:
+    - Tone, wording · Inputs
+    - '!Model decides · Offer size'
+    - Dialect, name · Proxies
+    - '!Disparity · Audit'
+    bad_note: Model discretion over offers
+    good:
+    - Offer engine · Business data
+    - +Counterfactual · Name swaps
+    - +Monitor · By segment
+    - Same facts · Same offer
+    good_note: Offer engine, counterfactual tests, monitoring
+  solution: |-
+    1. Determine offers from an offer engine using business attributes (tenure, value, churn risk), not conversational style.
+    2. Test for disparities with counterfactual evals (same case, different name or dialect).
+    3. Monitor outcome distributions across segments.
+  works: |-
+    **Trade-off to manage:** Less personalisation from conversation.
+
+    **How you prove it worked:**
+
+    - Counterfactual eval gaps; outcome disparity reports.
+
+    **Same pattern elsewhere:** FinTech: a collections agent offers better repayment plans to customers who write in formal English.
+  takeaway: Same facts, same outcome, whatever the name or accent.
+  related:
+  - sec-03
+  - gov-05
+  code: |
+    def offer_for(account):
+        return offer_engine.best(tenure=account.tenure, value=account.arpu, churn=churn_model.score(account.id))
+
+    def counterfactual_test(cases):
+        gaps = []
+        for c in cases:
+            base = run_retention_flow(c)
+            for variant in name_and_dialect_variants(c):           # same case, different name/dialect
+                if run_retention_flow(variant).offer_id != base.offer_id:
+                    gaps.append((c.id, variant.variant))
+        return gaps
+  lang: python
+- id: gov-07
+  title: Broker's AI client chats aren't archived
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A broker-dealer launches an AI assistant that discusses accounts and products with clients. Its conversations are kept in the AI vendor's logs for 30 days. Regulations require business communications with clients to be retained in compliant archives for years. An exam finds the gap.
+  antipattern: |-
+    **Vendor logs as the only record.**
+
+    *Think of it this way:* Recording client meetings on a tape that wipes itself every month.
+  fails: |-
+    - AI conversations aren't treated as business communications.
+    - Retention depends on vendor defaults.
+    - No supervision or review.
+
+    **Root cause:** Record-keeping obligations not applied to AI channels.
+
+    **Where it breaks:** Compliance architecture.
+  diagram:
+    bad:
+    - AI client chat · Accounts
+    - '!Vendor logs · 30 days'
+    - Not archived · Compliant
+    - '!Exam gap · Finding'
+    bad_note: Vendor logs as the only record
+    good:
+    - Archive · Immutable
+    - +Retention · Years
+    - +Supervision · Reviews
+    - Contracts · Data terms
+    good_note: Compliant archive, supervision, retention
+  solution: |-
+    1. Capture AI conversations (and tool actions) into the compliant archive with required retention and immutability.
+    2. Include them in supervision and surveillance reviews.
+    3. Confirm vendor contracts on data handling.
+  works: |-
+    **Trade-off to manage:** Storage and review costs.
+
+    **How you prove it worked:**
+
+    - Archive completeness reconciliation.
+
+    **Same pattern elsewhere:** Telco: AI conversations about contract terms aren't retained, so disputes can't be resolved.
+  takeaway: An AI conversation with a client is a client communication.
+  related:
+  - obs-07
+  - rag-15
+  code: |
+    def archive_turn(session, turn):
+        worm_archive.write(                                     # immutable, required retention
+            record={"client_id": session.client_id, "rep": session.rep_id, "channel": "ai_assistant",
+                    "role": turn.role, "text": turn.text, "tool_actions": turn.tool_calls, "ts": turn.ts},
+            retention_years=6)
+        surveillance.feed(turn)                                 # included in supervision reviews
+  lang: python
+- id: gov-08
+  title: AI incident with no clear owner
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's bot gives wrong porting advice for a week. The AI platform team, the care product owner, the knowledge team and the vendor each think another group owns the fix. Nobody leads the incident, and the issue continues.
+  antipattern: |-
+    **Shared, undefined ownership.**
+
+    *Think of it this way:* Four people watching a pot boil over, each assuming someone else will turn off the heat.
+  fails: |-
+    - No RACI for AI behaviour and content.
+    - Incident process doesn't name AI owners.
+    - Vendors' responsibilities unclear.
+
+    **Root cause:** Undefined ownership.
+
+    **Where it breaks:** Operating model.
+  diagram:
+    bad:
+    - Wrong advice · A week
+    - '!4 teams · Each waits'
+    - No lead · Incident
+    - '!Continues · Harm'
+    bad_note: Shared, undefined ownership
+    good:
+    - RACI · Per use case
+    - +Accountable · Product owner
+    - +On-call · Named
+    - Vendor · Defined role
+    good_note: RACI per use case and named on-call
+  solution: |-
+    1. Define a RACI per AI use case (product owner accountable; platform, content and vendor responsibilities).
+    2. Include AI in incident management with named on-call owners.
+    3. Review ownership when teams or vendors change.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Time to assign ownership in incidents.
+
+    **Same pattern elsewhere:** FinTech: a bank's AI disclosure error goes unfixed because compliance, product and IT each wait for the others.
+  takeaway: Every AI use case needs one accountable owner.
+  related:
+  - eval-20
+  - obs-08
+  code: |
+    RACI = {
+        "care_bot": {"accountable": "VP Digital Care", "responsible": {"platform": "AI Platform", "content": "Knowledge Team",
+                     "vendor": "Vendor Mgmt"}, "on_call": "pagerduty:care-ai"},
+    }
+
+    def open_incident(use_case, summary):
+        r = RACI[use_case]
+        return incidents.create(summary, owner=r["accountable"], page=r["on_call"])
+  lang: python
+- id: gov-09
+  title: Call records used to fine-tune a model without a legal basis
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's data-science team fine-tunes a model on two years of care transcripts and call-detail data to improve churn conversations. No one checked whether customer consent and CPNI rules allow this use. The privacy team halts the project and the model must be deleted.
+  antipattern: |-
+    **Training on customer data unreviewed.**
+
+    *Think of it this way:* Using customers' letters to train new staff without asking whether that's allowed.
+  fails: |-
+    - Data reused for a new purpose without assessment.
+    - No consent or legal-basis check.
+    - No data lineage for training sets.
+
+    **Root cause:** Training-data governance missing.
+
+    **Where it breaks:** Data governance.
+  diagram:
+    bad:
+    - 2 years · Transcripts + CDRs
+    - '!Fine-tune · Churn model'
+    - No review · Consent? CPNI?
+    - '!Halted · Model deleted'
+    bad_note: Training on customer data unreviewed
+    good:
+    - Privacy review · Before use
+    - +Legal basis · Checked
+    - +De-identify · Minimise
+    - Lineage · Traceable
+    good_note: Legal basis review, minimisation, lineage
+  solution: |-
+    1. Require a privacy and legal review (purpose, legal basis, consent, CPNI) before using customer data for training.
+    2. Minimise and de-identify training data.
+    3. Record lineage so models can be traced and retrained if data must be removed.
+  works: |-
+    **Trade-off to manage:** Slower experimentation.
+
+    **How you prove it worked:**
+
+    - Training datasets without approval records.
+
+    **Same pattern elsewhere:** FinTech: a bank trains on customer emails without checking GLBA and privacy notices.
+  takeaway: Training is a new purpose. Check you're allowed.
+  related:
+  - data-07
+  - ops-04
+  code: |
+    TRAINING_USE_REVIEW = ["purpose", "legal_basis", "consent", "cpni_rules", "dpia_ref"]
+
+    def approve_training_dataset(ds):
+        missing = [k for k in TRAINING_USE_REVIEW if not ds.review.get(k)]
+        if missing: raise PermissionError(f"privacy/legal review incomplete: {missing}")
+        ds = deidentify(minimise(ds, fields=["transcript_text", "intent"]))
+        lineage.record(dataset=ds.id, sources=ds.source_ids, model_targets=[])   # traceable for removal
+        return ds
+  lang: python
+- id: gov-10
+  title: Real-time emotion detection on call-centre agents
+  tags:
+  - Compliance
+  - Telco
+  - Critical
+  scenario: |-
+    A European carrier adds an AI feature that infers its care agents' emotions from their voice during calls and feeds it into performance dashboards. The EU AI Act prohibits emotion-recognition systems in the workplace (with narrow exceptions), and the works council challenges it.
+  antipattern: |-
+    **Deploy vendor AI features unclassified.**
+
+    *Think of it this way:* Fitting a lie detector to every employee's chair.
+  fails: |-
+    - The use case wasn't classified against AI Act risk categories.
+    - Vendor features enabled by default.
+    - No legal or employee-representative review.
+
+    **Root cause:** No AI risk classification before deployment.
+
+    **Where it breaks:** Governance.
+  diagram:
+    bad:
+    - Emotion AI · On agents
+    - '!Dashboards · Performance'
+    - Prohibited · Workplace
+    - '!Challenged · Works council'
+    bad_note: Deploy vendor AI features unclassified
+    good:
+    - Classify · AI Act tiers
+    - +Disable · Prohibited
+    - +Review · Legal, staff
+    - Inventory · Risk class
+    good_note: AI Act classification and stakeholder review
+  solution: |-
+    1. Classify every AI use case against the AI Act categories (prohibited, high-risk, limited, minimal) before deployment.
+    2. Disable prohibited features in vendor products.
+    3. Involve legal, privacy and employee representatives for workplace AI.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Inventory entries without risk classification.
+
+    **Same pattern elsewhere:** FinTech: a bank uses AI to infer customers' emotions to adjust collections strategies without assessing legal risk.
+  takeaway: Classify before you deploy. Some uses aren't allowed at all.
+  related:
+  - ops-15
+  - gov-01
+  code: |
+    AI_ACT_CATEGORY = {
+        "workplace_emotion_recognition": "prohibited",
+        "credit_scoring": "high_risk",
+        "customer_chatbot": "limited",       # transparency obligations
+        "spam_filter": "minimal"}
+
+    def register_use_case(uc):
+        cat = AI_ACT_CATEGORY.get(uc.function) or legal.classify(uc)
+        if cat == "prohibited":
+            vendor_config.disable(uc.vendor, feature=uc.feature)
+            raise PermissionError("prohibited AI practice")
+        return inventory.add(uc, ai_act_category=cat, reviewers=["legal", "privacy", "works_council"])
+  lang: python
+- id: gov-11
+  title: AI vendor dependency never assessed as third-party risk
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    An EU bank's customer-service assistant relies on a single external model provider. Under operational-resilience rules for financial entities, critical ICT third-party dependencies need risk assessment, contractual terms and exit plans. None exist, and a supervisor flags it.
+  antipattern: |-
+    **AI provider outside vendor risk.**
+
+    *Think of it this way:* Running the bank's phones through one supplier with no contract terms or backup.
+  fails: |-
+    - AI providers bypass vendor-risk processes.
+    - No exit strategy or substitutability assessment.
+    - Contracts lack audit and incident clauses.
+
+    **Root cause:** AI vendors not treated as critical third parties.
+
+    **Where it breaks:** Vendor risk management.
+  diagram:
+    bad:
+    - One provider · Critical
+    - '!No assessment · Vendor risk'
+    - No exit plan · Contracts weak
+    - '!Flagged · Supervisor'
+    bad_note: AI provider outside vendor risk
+    good:
+    - TPRM · Assess
+    - +Contract · Audit, incidents
+    - +Exit plan · Tested backup
+    - Monitor · Vendor
+    good_note: Third-party risk, contracts, exit plan
+  solution: |-
+    1. Run AI providers through third-party risk management (criticality, concentration, contracts, audit rights, incident reporting).
+    2. Document exit and substitution plans with a tested alternative model.
+    3. Monitor vendor performance and incidents.
+  works: |-
+    **Trade-off to manage:** Procurement takes longer.
+
+    **How you prove it worked:**
+
+    - AI vendors in use without risk assessments.
+
+    **Same pattern elsewhere:** Telco: a carrier's AI care platform vendor has no exit plan, and switching would take a year.
+  takeaway: Your model provider is a critical supplier. Manage it like one.
+  related:
+  - ops-16
+  - agf-16
+  code: |
+    tprm.assess(vendor="llm-provider-a", criticality="high",
+                checks=["concentration_risk", "contract_terms", "audit_rights", "data_location", "subprocessors"])
+
+    EXIT_PLAN = {"substitute": "provider-b/model-equiv", "evals_passed": "evals/runs/2026-10-substitute.html",
+                 "switch_procedure": "gateway route swap", "tested_on": "2026-10-14"}
+
+    monitor.vendor_slo("llm-provider-a", metrics=["availability", "p95_latency", "incidents"])
+  lang: python
+- id: gov-12
+  title: AI policy document says one thing, the system does another
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's AI policy says "AI must not make account changes without customer confirmation." An audit finds three agents that change plans without confirmation, because the policy lives in a PDF and isn't enforced in any system.
+  antipattern: |-
+    **Policy only in a PDF.**
+
+    *Think of it this way:* A speed limit sign on a road with no speed cameras and no police.
+  fails: |-
+    - Policies aren't mapped to technical controls.
+    - No automated checks.
+    - Compliance is assumed.
+
+    **Root cause:** Governance as documents, not controls.
+
+    **Where it breaks:** Governance implementation.
+  diagram:
+    bad:
+    - Policy PDF · Confirm changes
+    - '!Agents · Don''t confirm'
+    - No control · Enforced
+    - '!Audit · Violation'
+    bad_note: Policy only in a PDF
+    good:
+    - Map · Policy to control
+    - +Policy-as-code · Gateway, tools
+    - +Test · Continuously
+    - Coverage · Reported
+    good_note: Map policies to enforced, tested controls
+  solution: |-
+    1. Map each policy statement to a technical control (tool preconditions, pipeline checks, monitoring).
+    2. Encode rules as policy-as-code where possible (for example in the gateway or tool layer).
+    3. Test controls continuously and report coverage.
+  works: |-
+    **Trade-off to manage:** Engineering effort to implement controls.
+
+    **How you prove it worked:**
+
+    - Policy statements without mapped controls.
+
+    **Same pattern elsewhere:** FinTech: a bank's AI policy forbids customer PII in prompts to external models, but nothing enforces it.
+  takeaway: A policy without a control is a wish.
+  related:
+  - gov-20
+  - sec-06
+  code: |
+    POLICY_CONTROLS = {
+        "AI-POL-3.1 No credit decisions by AI":      "tool: credit_decision not exposed to agents",
+        "AI-POL-4.2 Human approval > $500 refunds":  "tool precondition in issue_refund",
+        "AI-POL-5.1 PII redacted in logs":           "collector redaction processor",
+    }
+
+    def control_coverage():
+        tested = {p: controls_test(p) for p in POLICY_CONTROLS}
+        return {"coverage": mean(bool(c) for c in POLICY_CONTROLS.values()),
+                "passing": mean(tested.values()), "failing": [p for p, ok in tested.items() if not ok]}
+  lang: python
+- id: gov-13
+  title: Human overrides are never fed back
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's fraud analysts override the AI triage recommendation in 18% of cases. The overrides are recorded as case outcomes but never analysed. The same misjudgements repeat for months.
+  antipattern: |-
+    **Overrides recorded but ignored.**
+
+    *Think of it this way:* A sat-nav that never learns from the drivers who keep ignoring its route.
+  fails: |-
+    - Overrides aren't captured as structured signals.
+    - No analysis of override patterns.
+    - The model and prompts don't improve.
+
+    **Root cause:** Human-in-the-loop used for control only, not learning.
+
+    **Where it breaks:** Feedback loop.
+  diagram:
+    bad:
+    - AI triage · Recommends
+    - '!18% override · Analysts'
+    - Not analysed · Outcomes only
+    - '!Repeats · Months'
+    bad_note: Overrides recorded but ignored
+    good:
+    - Reason codes · On override
+    - +Monthly · Pattern review
+    - +Eval cases · From overrides
+    - Track rate · By category
+    good_note: Reason codes, monthly analysis, eval cases
+  solution: |-
+    1. Capture overrides with reason codes.
+    2. Analyse override patterns monthly and turn them into eval cases and fixes.
+    3. Track override rate by category as a quality metric.
+  works: |-
+    **Trade-off to manage:** Analysts need a quick way to give reasons.
+
+    **How you prove it worked:**
+
+    - Override rate trend by category.
+
+    **Same pattern elsewhere:** Telco: NOC engineers override AI root-cause suggestions without any feedback loop.
+  takeaway: Every override is a free label.
+  related:
+  - ops-12
+  - eval-05
+  code: |
+    class Override(BaseModel):
+        case_id: str; ai_recommendation: str; human_decision: str
+        reason_code: Literal["wrong_fact", "policy_misread", "missing_context", "customer_preference", "other"]
+
+    @schedule(cron="0 8 1 * *")
+    def monthly_override_review():
+        rows = overrides.last_month()
+        for code, items in group_by(rows, "reason_code").items():
+            eval_set.add([to_eval_case(o) for o in items[:20]])
+            metrics.gauge("override_rate", len(items) / decisions.count_last_month(), reason=code)
+  lang: python
+- id: gov-14
+  title: Automated postpaid decline with no human review option
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    An EU carrier's online sales agent automatically declines postpaid applications based on an AI credit-risk score, with no human involvement. Applicants have no way to ask for review or explanation. A data protection authority complaint follows.
+  antipattern: |-
+    **Solely automated decline, no recourse.**
+
+    *Think of it this way:* A machine at the door that refuses entry and can't be appealed.
+  fails: |-
+    - Solely automated decisions with significant effects.
+    - No explanation or contest mechanism.
+    - Legal requirements for safeguards not met.
+
+    **Root cause:** Automated decision-making without required safeguards.
+
+    **Where it breaks:** Decision process.
+  diagram:
+    bad:
+    - AI score · Credit risk
+    - '!Auto decline · No human'
+    - No recourse · Applicant
+    - '!DPA complaint · Filed'
+    bad_note: Solely automated decline, no recourse
+    good:
+    - Explain logic · Meaningful
+    - +Human review · On request
+    - +Contest · Route
+    - Document · Lawful basis
+    good_note: Explanation, human review, contest route
+  solution: |-
+    1. Provide meaningful information about the logic, the right to human review and a way to contest.
+    2. Route declines or borderline cases to human review where required.
+    3. Document the decision process and lawful basis.
+  works: |-
+    **Trade-off to manage:** Human review costs.
+
+    **How you prove it worked:**
+
+    - Declines without review option; review request outcomes.
+
+    **Same pattern elsewhere:** FinTech: a bank's instant overdraft decision has no route to human review.
+  takeaway: Automated decisions with real effects need a human route.
+  related:
+  - gov-05
+  code: |
+    def postpaid_decision(application):
+        d = credit_rules.decide(application)
+        if d.outcome == "decline" or d.borderline:
+            review_queue.put(application, reason=d.factors)          # human review where required
+        notice = {"logic": d.plain_language_explanation, "main_factors": d.factors,
+                  "right_to_review": "Reply REVIEW or call 0800... to have a person reconsider",
+                  "lawful_basis": "contract"}
+        return d, notice
+  lang: python
+- id: gov-15
+  title: Human review queue with no SLA or capacity plan
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank routes high-risk AI fraud decisions to human analysts. Volume grows faster than the team, and the queue reaches 4 days. Legitimate customers' cards stay blocked, and complaints surge.
+  antipattern: |-
+    **Review step without capacity planning.**
+
+    *Think of it this way:* A checkpoint with one guard and a growing queue of cars.
+  fails: |-
+    - Review step without capacity planning.
+    - No SLA or prioritisation.
+    - Automation volume changes without staffing changes.
+
+    **Root cause:** Human-in-the-loop designed as a step, not as a service.
+
+    **Where it breaks:** Operations design.
+  diagram:
+    bad:
+    - AI flags · High risk
+    - '!Volume grows · Team doesn''t'
+    - 4-day queue · Cards blocked
+    - '!Complaints · Surge'
+    bad_note: Review step without capacity planning
+    good:
+    - SLA · Per queue
+    - +Capacity · Forecast
+    - +Prioritise · Risk, impact
+    - Age alerts · Before breach
+    good_note: SLAs, risk prioritisation, queue monitoring
+  solution: |-
+    1. Set SLAs for review queues and plan capacity from forecast volumes.
+    2. Prioritise by risk and customer impact; auto-resolve low-risk cases with safeguards.
+    3. Monitor queue age and alert before SLA breaches.
+  works: |-
+    **Trade-off to manage:** Staffing costs, or accepting more automation risk at the margin.
+
+    **How you prove it worked:**
+
+    - Queue age, throughput and SLA compliance.
+
+    **Same pattern elsewhere:** Telco: port-out fraud reviews queue for days, blocking legitimate customers from switching carriers within regulated timeframes.
+  takeaway: A human in the loop is a service with a capacity.
+  related:
+  - sec-19
+  code: |
+    def review_capacity_plan(forecast_items_per_day, minutes_per_item, sla_hours=24):
+        needed_fte = forecast_items_per_day * minutes_per_item / (7.5 * 60)
+        return {"needed_fte": round(needed_fte, 1), "sla_hours": sla_hours}
+
+    def route(item):
+        if item.risk == "low" and safeguards_pass(item):
+            return auto_resolve(item)
+        queue.put(item, priority=item.risk_score * item.customer_impact)
+
+    # alert when oldest item age > 0.75 × SLA
+  lang: python
+- id: gov-16
+  title: Staff paste customer data into public chatbots
+  tags:
+  - Compliance
+  - Security
+  - Telco
+  scenario: |-
+    Care agents at a carrier use free public AI chatbots to draft replies, pasting customer names, addresses and account details. The company has no approved alternative. A security review finds thousands of such pastes.
+  antipattern: |-
+    **No approved tool, so staff use public AI.**
+
+    *Think of it this way:* Staff photocopying customer files at a public library because the office copier is broken.
+  fails: |-
+    - No approved, safe internal tool.
+    - No policy awareness or technical controls.
+    - Data leaves the company's control.
+
+    **Root cause:** Shadow AI driven by unmet needs.
+
+    **Where it breaks:** Governance and IT provision.
+  diagram:
+    bad:
+    - Care agents · Need help
+    - '!Public chatbot · Free'
+    - Customer data · Pasted
+    - '!Thousands · Of pastes'
+    bad_note: No approved tool, so staff use public AI
+    good:
+    - Approved tool · Enterprise
+    - +Guidance · Training
+    - +DLP · AI domains
+    - Monitor · Events
+    good_note: Approved assistant, guidance, DLP
+  solution: |-
+    1. Provide an approved internal assistant with enterprise data protections.
+    2. Publish clear guidance, and train staff.
+    3. Use data-loss-prevention controls for known public AI sites.
+  works: |-
+    **Trade-off to manage:** Cost of an enterprise tool; much cheaper than a breach.
+
+    **How you prove it worked:**
+
+    - DLP events to AI domains.
+
+    **Same pattern elsewhere:** FinTech: relationship managers paste client portfolios into consumer chatbots to write summaries.
+  takeaway: Give people a safe tool, or they'll use an unsafe one.
+  related:
+  - sec-06
+  code: |
+    # DLP / secure web gateway rule (pseudo-config)
+    # - match: {category: "public_generative_ai", content: [PAN, IBAN, customer_id_pattern]}
+    #   action: block_and_coach
+    #   coach_message: "Use the internal assistant (assistant.corp) for customer data."
+
+    APPROVED_ASSISTANT = {"url": "https://assistant.corp", "data_retention": "none for training",
+                          "sso": True, "audit_log": True}
+  lang: python
+- id: gov-17
+  title: Pilot runs for two years with no success criteria
+  tags:
+  - Compliance
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's AI pilot for mortgage document review starts with "let's see how it goes". Two years later, it still runs in pilot mode, costs money, and nobody can say whether it should be scaled or stopped.
+  antipattern: |-
+    **Open-ended pilot.**
+
+    *Think of it this way:* A trial gym membership that never converts or cancels.
+  fails: |-
+    - No success or kill criteria defined upfront.
+    - No baseline measurement.
+    - No decision date.
+
+    **Root cause:** Pilots without governance.
+
+    **Where it breaks:** Portfolio management.
+  diagram:
+    bad:
+    - '''Let''s see'' · Pilot start'
+    - '!No baseline · No metrics'
+    - 2 years · Still pilot
+    - '!No decision · Cost runs'
+    bad_note: Open-ended pilot
+    good:
+    - Success metric · Defined
+    - +Baseline · Measured
+    - +Kill criteria · Upfront
+    - Decision date · Fixed
+    good_note: Success and kill criteria with a decision date
+  solution: |-
+    1. Define success metrics, baseline, kill criteria and a decision date before starting.
+    2. Review pilots at fixed checkpoints and decide (scale, change, stop).
+    3. Count pilot costs in the portfolio.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Pilots past their decision dates.
+
+    **Same pattern elsewhere:** Telco: a network-AI pilot runs for 18 months without a go or no-go decision.
+  takeaway: Every pilot needs a finish line.
+  related:
+  - ops-20
+  code: |
+    PILOT = {
+        "success_metrics": {"first_contact_resolution": "+5 pts", "cost_per_contact": "-20%"},
+        "baseline": {"first_contact_resolution": 0.62, "cost_per_contact": 6.10},
+        "kill_criteria": "no FCR gain at week 8 or CSAT drop > 2 pts",
+        "decision_date": "2027-02-28",
+        "checkpoints": ["2026-12-15", "2027-01-31"],
+    }
+    portfolio.register("care_pilot_7", PILOT, cost_to_date=finance.actuals("care_pilot_7"))
+  lang: python
+- id: gov-18
+  title: Voice bot unusable for customers with speech impairments
+  tags:
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier replaces its phone menu with an AI voice agent. Customers with speech impairments or strong accents are often misunderstood, and the agent has no option to switch to keypad input or reach a human. Accessibility complaints follow.
+  antipattern: |-
+    **Voice-only with no alternatives.**
+
+    *Think of it this way:* A building with only stairs at the entrance.
+  fails: |-
+    - Accessibility not tested.
+    - No alternative input or escalation.
+    - ASR performance varies across speakers.
+
+    **Root cause:** Inclusive design not part of requirements.
+
+    **Where it breaks:** Product requirements and testing.
+  diagram:
+    bad:
+    - Voice only · Agent
+    - '!Speech issues · Misheard'
+    - No keypad · No human
+    - '!Complaints · Accessibility'
+    bad_note: Voice-only with no alternatives
+    good:
+    - Alternatives · Keypad, text
+    - +Fast transfer · On failure
+    - +Diverse tests · Speakers
+    - Measure · By group
+    good_note: Alternative inputs, diverse testing, fast transfer
+  solution: |-
+    1. Offer alternatives (keypad, text channel, quick human transfer) when recognition fails repeatedly.
+    2. Test with diverse speakers, including speech impairments and accents.
+    3. Measure recognition failure rates by group where possible.
+  works: |-
+    **Trade-off to manage:** More human transfers for some groups; that's the requirement.
+
+    **How you prove it worked:**
+
+    - Repeated "didn't understand" events per call.
+
+    **Same pattern elsewhere:** FinTech: a bank's voice-only authentication excludes customers who can't use it reliably.
+  takeaway: Design for every customer, not the average one.
+  related:
+  - gov-04
+  code: |
+    def on_recognition_failure(call):
+        call.asr_failures += 1
+        if call.asr_failures >= 2:
+            return offer_options(call, ["press 1 to use the keypad", "press 2 for a text link",
+                                        "press 0 for a person"])     # alternatives, quick transfer
+
+    # eval: diverse speaker set incl. speech impairments and accents
+    report = asr_eval(test_sets=["general", "accents", "speech_impairment"], metric="task_failure_rate")
+  lang: python
+- id: gov-19
+  title: Nobody knows the regulator notification deadline for an AI incident
+  tags:
+  - Compliance
+  - FinTech
+  scenario: |-
+    An EU bank's AI assistant exposes customer data for six hours due to a caching bug. The incident team handles the technical fix but doesn't know whether it qualifies as a major ICT-related incident or a personal-data breach, or the reporting deadlines for each.
+  antipattern: |-
+    **Technical response only.**
+
+    *Think of it this way:* Knowing how to put out a fire but not that you must call the fire brigade.
+  fails: |-
+    - AI incidents aren't mapped to reporting obligations.
+    - Classification criteria are unknown to responders.
+    - Deadlines are missed.
+
+    **Root cause:** Regulatory reporting not integrated into AI incident response.
+
+    **Where it breaks:** Incident management.
+  diagram:
+    bad:
+    - Data exposed · 6 hours
+    - '!Tech fix · Done'
+    - Report? · Unknown
+    - '!Deadline · Missed'
+    bad_note: Technical response only
+    good:
+    - Map types · To regimes
+    - +Criteria · Deadlines
+    - +Compliance · Hour one
+    - Tabletop · Practised
+    good_note: Incident types mapped to reporting rules and clocks
+  solution: |-
+    1. Map AI incident types to reporting regimes (data protection breach notification, operational-resilience incident reporting) with criteria and deadlines.
+    2. Include compliance in AI incident playbooks from the first hour.
+    3. Practise with tabletop exercises.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Time from detection to classification decision.
+
+    **Same pattern elsewhere:** Telco: a carrier doesn't know whether an AI-driven CPNI exposure must be reported to the regulator and law enforcement, and within what timeframe.
+  takeaway: Know your reporting clock before the incident starts it.
+  related:
+  - sec-20
+  - obs-19
+  code: |
+    REPORTING = {
+        "personal_data_breach": {"regime": "GDPR Art. 33", "deadline_hours": 72, "notify": "DPO"},
+        "major_ict_incident":   {"regime": "DORA", "deadline_hours": 4, "notify": "Operational Resilience"},
+        "consumer_harm":        {"regime": "sector regulator", "deadline_hours": 24, "notify": "Compliance"},
+    }
+
+    def classify_ai_incident(inc):
+        hits = [r for t, r in REPORTING.items() if t in inc.types]
+        compliance.page(inc, deadlines=[(r["regime"], inc.detected_at + timedelta(hours=r["deadline_hours"])) for r in hits])
+  lang: python
+- id: gov-20
+  title: Governance checklist signed but never checked
+  tags:
+  - Compliance
+  - Security
+  - Telco
+  scenario: |-
+    A carrier's AI governance board approves launches based on a self-assessed checklist ("evals done: yes", "PII handled: yes"). Post-launch reviews show half of the "yes" answers had no evidence.
+  antipattern: |-
+    **Self-attested checklist.**
+
+    *Think of it this way:* A pilot ticking a pre-flight checklist from memory without looking at the plane.
+  fails: |-
+    - Self-attested answers.
+    - No linked evidence.
+    - No automated verification.
+
+    **Root cause:** Governance relies on attestation instead of evidence.
+
+    **Where it breaks:** Governance process.
+  diagram:
+    bad:
+    - Checklist · Self-assessed
+    - '!''Evals: yes'' · No proof'
+    - Approved · Launch
+    - '!Half missing · Evidence'
+    bad_note: Self-attested checklist
+    good:
+    - Evidence links · Per item
+    - +Pipeline · Generates
+    - +Spot checks · Approvals
+    - Report · Gaps
+    good_note: Evidence links generated by the pipeline
+  solution: |-
+    1. Require evidence links for each checklist item (eval report, DPIA, red-team results, model card).
+    2. Generate as much evidence automatically from the pipeline as possible.
+    3. Spot-check approvals.
+  works: |-
+    **Trade-off to manage:** More effort per launch, mostly automated.
+
+    **How you prove it worked:**
+
+    - Checklist items without evidence.
+
+    **Same pattern elsewhere:** FinTech: a bank's AI approvals cite "validated" models that have no validation report.
+  takeaway: Governance runs on evidence, not ticks.
+  related:
+  - gov-12
+  - cicd-15
+  code: |
+    CHECKLIST = {"eval_report": "evals/runs/*.html", "dpia": "privacy/dpia/*.pdf",
+                 "red_team": "security/redteam/*.json", "model_card": "governance/cards/*.md"}
+
+    def approve(use_case):
+        evidence = {k: find_artifact(use_case, pattern) for k, pattern in CHECKLIST.items()}
+        missing = [k for k, v in evidence.items() if not v]
+        if missing: raise PermissionError(f"evidence missing: {missing}")
+        approvals.record(use_case, evidence=evidence)
+        if random() < 0.1: audit.spot_check(use_case)
+  lang: python

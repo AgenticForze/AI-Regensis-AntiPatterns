@@ -1,7 +1,7 @@
 id: evals-ops
 num: 11
-short: Evaluation & LLMOps
-title: Evaluation, Observability & LLMOps
+short: LLM & Agent Evaluation
+title: LLM & Agent Evaluation
 summary: You can't manage what you can't measure. In AI systems that applies to quality as much as to uptime.
 patterns:
   - id: vibe-checks

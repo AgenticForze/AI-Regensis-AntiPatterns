@@ -1,5 +1,5 @@
 id: local-vs-cloud
-num: 14
+num: 17
 short: Local LLMs vs Cloud Cost
 title: Local LLMs vs Hyperscaler Hosting (Cost Management)
 summary: Self-hosting open-weight models can cut costs dramatically or burn money quietly. The difference is usage level, utilization and operational maturity.

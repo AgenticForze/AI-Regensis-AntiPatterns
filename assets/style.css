@@ -208,3 +208,14 @@ th{background:var(--surface2);font-weight:600;font-size:13px}
 .hl{background:#0d1117}
 :root[data-theme="dark"] .btn.ghost{color:var(--accent)}
 .theme svg{width:18px;height:18px;vertical-align:middle}
+.t-telco{color:#3b3ea6;background:#eceefe;border-color:#c9cbf5}
+.t-fin{color:#7a4e0c;background:#fbf0dc;border-color:#ecd3a3}
+.t-crit{color:#fff;background:#c92a2a;border-color:#c92a2a}
+.t-lead{color:#0b6e5f;background:#e3faf5;border-color:#a8e3d6}
+:root[data-theme="dark"] .t-crit{color:#fff;background:#a61e1e;border-color:#a61e1e}
+.related{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;font-size:13.5px}
+.related .k{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.related a{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:3px 11px;color:var(--text)}
+.related a span{color:var(--accent);font-weight:600;margin-right:6px}
+.related a:hover{border-color:var(--accent);text-decoration:none}
+.takeaway{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}

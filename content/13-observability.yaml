@@ -1,0 +1,6 @@
+id: observability
+num: 13
+short: Observability & Telemetry
+title: Observability & Telemetry
+summary: Agents are long-running, stateful and non-deterministic. If you can't trace a decision from the triggering event to the final action, with cost and quality attached, you can't operate it.
+patterns: []

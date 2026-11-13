@@ -40,7 +40,9 @@ def load():
         for fname in part["sections"]:
             sec = yaml.safe_load((CONTENT / fname).read_text())
             sec["part"] = part
-            sec.setdefault("patterns", [])
+            sec["patterns"] = list(sec.get("patterns") or [])
+            for imp in sorted((CONTENT / "imported").glob(f"*-{sec['id']}.yaml")):
+                sec["patterns"] += yaml.safe_load(imp.read_text()).get("patterns", [])
             sections.append(sec)
     return site, sections
 
@@ -67,12 +69,15 @@ def blocks_html(blocks, uid):
     return "\n".join(out)
 
 
-TAG_CLASS = {"Cost": "t-cost", "Quality": "t-quality", "Security": "t-sec", "Compliance": "t-comp",
+TAG_CLASS = {"Telco": "t-telco", "FinTech": "t-fin", "Critical": "t-crit", "Leadership": "t-lead", "Cost": "t-cost", "Quality": "t-quality", "Security": "t-sec", "Compliance": "t-comp",
              "Reliability": "t-rel", "Latency": "t-lat", "Adoption": "t-adopt", "Scale": "t-scale"}
 
 
 def tags_html(tags):
     return "".join(f'<span class="tag {TAG_CLASS.get(t, "")}">{escape(t)}</span>' for t in tags or [])
+
+
+REL = {}
 
 
 def pattern_html(sec, idx, p):
@@ -101,8 +106,18 @@ def pattern_html(sec, idx, p):
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>{escape(p['takeaway'])}</p></div>
     {f'<div><span class="k">Follow-up to expect</span><p>{escape(p["followup"])}</p></div>' if p.get('followup') else ''}
+    {f'<div><span class="k">General rule</span><p>{escape(p["generic"])}</p></div>' if p.get('generic') else ''}
   </section>
+  {related_html(p)}
 </article>"""
+
+
+def related_html(p):
+    links = [REL[r] for r in p.get("related", []) if r in REL]
+    if not links:
+        return ""
+    items = "".join(f'<a href="{u}"><span>{n}</span>{escape(t)}</a>' for u, n, t in links)
+    return f'<div class="related"><span class="k">Related</span>{items}</div>'
 
 
 def nav_html(site, sections, current):
@@ -236,6 +251,9 @@ def search_index(sections):
 
 def main():
     site, sections = load()
+    for s_ in sections:
+        for k, p in enumerate(s_["patterns"]):
+            REL[p["id"]] = (f'{s_["id"]}.html#{p["id"]}', f'{s_["num"]}.{k + 1}', p["title"])
     if OUT.exists():
         shutil.rmtree(OUT)
     (OUT / "assets").mkdir(parents=True)

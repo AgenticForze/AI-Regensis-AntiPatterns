@@ -1,0 +1,1180 @@
+source: regensis
+section: models
+patterns:
+- id: cost-01
+  title: No one knows what a resolved card dispute costs
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A card issuer's AI assistant costs $140k a month. Finance asks whether it pays for itself. The team can report total tokens but not cost per intent, cost per resolved dispute, or how it compares with an agent-handled contact.
+  antipattern: |-
+    **Only total spend is known.**
+
+    *Think of it this way:* A restaurant that knows its total food bill but not what each dish costs to make.
+  fails: |-
+    - Cost isn't attributed to intents or outcomes.
+    - No comparison with the human baseline.
+    - Optimisation targets are guesses.
+
+    **Root cause:** No unit economics.
+
+    **Where it breaks:** Metering and analytics.
+  diagram:
+    bad:
+    - $140k/month · Total
+    - '!Per intent? · Unknown'
+    - Vs agents? · Unknown
+    - '!Guessing · Priorities'
+    bad_note: Only total spend is known
+    good:
+    - Tag cost · Intent, outcome
+    - +Cost/success · Per intent
+    - +Human baseline · Compare
+    - Prioritise · High volume
+    good_note: Cost per successful outcome by intent
+  solution: |-
+    1. Tag cost per request with intent, outcome and version, and compute cost per successful outcome by intent.
+    2. Compare with fully loaded human cost per contact for the same intent.
+    3. Prioritise optimisation on high-volume, low-margin intents.
+  works: |-
+    **Trade-off to manage:** Outcome attribution needs joins to downstream systems.
+
+    **How you prove it worked:**
+
+    - Cost per outcome dashboard reviewed monthly.
+
+    **Same pattern elsewhere:** Telco: a carrier can't tell whether its bot is cheaper than care agents for plan changes versus bill explanations.
+  takeaway: Know the cost of a success, per intent.
+  related:
+  - ops-09
+  - obs-05
+  code: |
+    def cost_per_resolved(intent, month):
+        ai = ledger.sum(intent=intent, month=month)                              # tagged per request
+        resolved = outcomes.count(intent=intent, outcome="resolved", month=month)
+        human_baseline = contact_center.loaded_cost_per_contact(intent)
+        return {"ai_cost_per_resolved": ai / resolved, "human_cost_per_contact": human_baseline,
+                "volume": outcomes.count(intent=intent, month=month)}
+
+    priorities = sorted(INTENTS, key=lambda i: -(volume(i) * (1 - margin(i))))
+  lang: python
+- id: cost-02
+  title: Router sends hard complaints to the small model
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank introduces a router that sends "simple" questions to a small model and "complex" ones to a large model, based on message length. Short but serious complaints ("You closed my account and my salary bounced") go to the small model, which handles them poorly. Complaint escalations rise.
+  antipattern: |-
+    **Route by message length.**
+
+    *Think of it this way:* A hospital triaging patients by how long they talk rather than by symptoms.
+  fails: |-
+    - Routing criteria don't reflect difficulty or risk.
+    - The router wasn't evaluated.
+    - High-risk intents can hit the cheap path.
+
+    **Root cause:** Unvalidated routing heuristics.
+
+    **Where it breaks:** Router design.
+  diagram:
+    bad:
+    - Short message · Serious
+    - '!Router · By length'
+    - Small model · Handles it
+    - '!Escalations · Rise'
+    bad_note: Route by message length
+    good:
+    - Intent + risk · Router
+    - +High risk · Strong path
+    - +Router eval · Misroutes
+    - Escalate · If unsure
+    good_note: Route by intent and risk, evaluated, with escalation
+  solution: |-
+    1. Route by intent and risk tier (complaints, vulnerability and disputes always to the stronger path).
+    2. Evaluate the router (misroute rate) and each path per intent.
+    3. Allow the small model to escalate when uncertain.
+  works: |-
+    **Trade-off to manage:** Lower savings from routing; safer outcomes.
+
+    **How you prove it worked:**
+
+    - Quality by route and intent; escalations after small-model answers.
+
+    **Same pattern elsewhere:** Telco: a router sends short outage complaints from business customers to a small model that can't check incident data.
+  takeaway: Route by risk and intent, not by message length.
+  related:
+  - agf-20
+  - eval-09
+  code: |
+    ALWAYS_STRONG = {"complaint", "vulnerability", "dispute", "bereavement"}
+
+    def route(msg):
+        intent = router.classify(msg)
+        if intent.name in ALWAYS_STRONG or intent.risk_tier == "high":
+            return STRONG_MODEL
+        return SMALL_MODEL
+
+    def small_with_escalation(msg):
+        out = SMALL_MODEL.generate(msg, schema=WithConfidence)
+        return out if out.confidence >= 0.75 else STRONG_MODEL.generate(msg)
+    # eval: router misroute rate + quality per path per intent
+  lang: python
+- id: cost-03
+  title: Voice agent pauses for 3 seconds before every reply
+  tags:
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's AI voice agent chains speech recognition, an LLM call, a tool call and text-to-speech, each run to completion before the next starts. Callers hear 3 seconds of silence after every sentence and assume the line dropped.
+  antipattern: |-
+    **Sequential voice pipeline.**
+
+    *Think of it this way:* A conversation where the other person waits until they've written their whole reply before saying a word.
+  fails: |-
+    - No end-to-end latency budget.
+    - Stages run sequentially without streaming.
+    - Tool calls happen on the critical path.
+
+    **Root cause:** Voice pipeline designed without a latency budget.
+
+    **Where it breaks:** Voice architecture.
+  diagram:
+    bad:
+    - ASR · Full
+    - '!LLM + tool · Sequential'
+    - TTS · After all
+    - '!3 s silence · Hang-ups'
+    bad_note: Sequential voice pipeline
+    good:
+    - Budget · 800 ms first
+    - +Stream · ASR, LLM, TTS
+    - +Prefetch · Account data
+    - Filler · While tools run
+    good_note: Latency budget, streaming, prefetch
+  solution: |-
+    1. Set an end-to-end budget (for example under 800 ms to first audio) and per-stage targets.
+    2. Stream ASR partials, stream LLM tokens into TTS by sentence, and use a fast model for the first response.
+    3. Prefetch likely tool data (account summary) at call start; use filler acknowledgements while slow tools run.
+  works: |-
+    **Trade-off to manage:** Streaming complicates guardrails; check per sentence.
+
+    **How you prove it worked:**
+
+    - Time to first audio per turn; caller hang-ups during silence.
+
+    **Same pattern elsewhere:** FinTech: a bank's voice bot waits for the full balance lookup and answer before speaking.
+  takeaway: In voice, latency is the user experience.
+  related:
+  - tel-08
+  - rag-18
+  code: |
+    BUDGET_MS = {"asr_final": 200, "llm_first_token": 350, "tts_first_audio": 200}   # < 800 ms to first audio
+
+    async def on_call_start(call):
+        call.prefetch = asyncio.create_task(accounts.summary(call.customer_id))      # prefetch
+
+    async def on_utterance(call, partial_text):
+        async for sentence in sentences(fast_model.stream(partial_text, context=await call.prefetch)):
+            await tts.speak(sentence)                                                 # stream by sentence
+        if needs_slow_tool(partial_text):
+            await tts.speak("One moment while I check that.")                         # filler while tools run
+  lang: python
+- id: cost-04
+  title: Fifteen-thousand-token system prompt for a balance question
+  tags:
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's assistant system prompt has grown to 15k tokens covering every product. Ninety percent of conversations are about cards and balances. Each turn pays for the full prompt, and time to first token is 1.8 seconds.
+  antipattern: |-
+    **One 15k-token prompt for everything.**
+
+    *Think of it this way:* Reading the whole employee handbook before answering "what time do you close?"
+  fails: |-
+    - One giant prompt for all intents.
+    - Unused instructions cost money and latency.
+    - Attention is diluted.
+
+    **Root cause:** Prompt bloat.
+
+    **Where it breaks:** Prompt and context design.
+  diagram:
+    bad:
+    - 15k prompt · All products
+    - '!90% cards · Conversations'
+    - Pay full · Every turn
+    - '!1.8 s TTFT · Slow'
+    bad_note: One 15k-token prompt for everything
+    good:
+    - Core prompt · Compact
+    - +By intent · Load extras
+    - +Cache core · Prefix
+    - Measure · Per intent
+    good_note: Compact core plus intent-loaded instructions
+  solution: |-
+    1. Keep a compact core prompt and load product-specific instructions by intent.
+    2. Use prompt caching for the stable core.
+    3. Measure tokens and latency per intent.
+  works: |-
+    **Trade-off to manage:** Intent detection must be reliable.
+
+    **How you prove it worked:**
+
+    - Prompt tokens per turn by intent.
+
+    **Same pattern elsewhere:** Telco: a care bot includes instructions for every device brand in every prompt.
+  takeaway: Load instructions for the job at hand.
+  related:
+  - ctx-05
+  - ctx-06
+  code: |
+    CORE = load_prompt("care.core@9")                       # ~1.5k tokens, cached
+    MODULES = {"balance": "", "roaming": load_prompt("care.roaming@4"), "device": load_prompt("care.device@6")}
+
+    def build(intent, msg):
+        return {"system": [{"type": "text", "text": CORE, "cache_control": {"type": "ephemeral"}},
+                           {"type": "text", "text": MODULES.get(intent, "")}],
+                "messages": [{"role": "user", "content": msg}]}
+    metrics.observe("input_tokens", resp.usage.input_tokens, intent=intent)
+  lang: python
+- id: cost-05
+  title: Prompt caching enabled, but the cache expires between turns
+  tags:
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier enables prompt caching for its care bot. Hit rates are low because the provider's default cache lifetime is a few minutes, and customers often take longer to reply. The team assumed caching would work for whole conversations.
+  antipattern: |-
+    **Assume the cache lasts the conversation.**
+
+    *Think of it this way:* A coffee machine that switches off between cups.
+  fails: |-
+    - Cache lifetime wasn't understood.
+    - Traffic patterns weren't analysed.
+    - Hit rate wasn't monitored.
+
+    **Root cause:** Caching enabled without understanding its mechanics.
+
+    **Where it breaks:** Caching configuration.
+  diagram:
+    bad:
+    - Caching on · Default
+    - '!Short TTL · Minutes'
+    - Slow replies · Customers
+    - '!Low hits · Savings lost'
+    bad_note: Assume the cache lasts the conversation
+    good:
+    - TTL options · Checked
+    - +Shared prefix · Stays warm
+    - +Hit rate · Monitored
+    - Right TTL · By pattern
+    good_note: Choose lifetime by traffic, shared warm prefix
+  solution: |-
+    1. Check the provider's cache lifetime options and choose them by traffic pattern (longer lifetimes where offered and cost-effective).
+    2. Keep the shared prefix identical across all customers so it stays warm from overall traffic.
+    3. Monitor cached-token share.
+  works: |-
+    **Trade-off to manage:** Longer cache lifetimes may cost more to write.
+
+    **How you prove it worked:**
+
+    - Cache hit rate by time of day and conversation gap.
+
+    **Same pattern elsewhere:** FinTech: a bank's batch jobs run hours apart and never benefit from prompt caching.
+  takeaway: Know how your cache expires before you count the savings.
+  related:
+  - ctx-06
+  - ops-10
+  code: |
+    SHARED_PREFIX = CORE_PROMPT + TOOL_DEFINITIONS          # byte-identical for every customer
+
+    def request(customer_ctx, history, msg):
+        return {"system": [{"type": "text", "text": SHARED_PREFIX,
+                            "cache_control": {"type": "ephemeral", "ttl": CACHE_TTL_BY_TRAFFIC}}],   # lifetime chosen by traffic
+                "messages": history + [{"role": "user", "content": f"{customer_ctx}\n{msg}"}]}
+
+    metrics.gauge("cached_token_share", u.cache_read_input_tokens / (u.input_tokens + u.cache_read_input_tokens))
+  lang: python
+- id: cost-06
+  title: Semantic cache confuses cancel my card with cancel my card payment
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's semantic cache uses a similarity threshold of 0.88. "How do I cancel my card?" and "How do I cancel a card payment?" exceed it, so customers who want to stop a payment receive instructions for closing their card.
+  antipattern: |-
+    **Similarity-only cache hits.**
+
+    *Think of it this way:* A receptionist who answers the question they think you asked because it sounded similar.
+  fails: |-
+    - Similar wording, different intents.
+    - Threshold chosen without evaluation.
+    - Cached answers aren't checked against the intent.
+
+    **Root cause:** Over-aggressive semantic caching.
+
+    **Where it breaks:** Cache design.
+  diagram:
+    bad:
+    - '''Cancel card?'' · Cached'
+    - '!''Stop payment?'' · Asked'
+    - 0.88 similar · Hit
+    - '!Wrong steps · Card closed?'
+    bad_note: Similarity-only cache hits
+    good:
+    - Intent key · Plus text
+    - +Tuned · Near-miss set
+    - +FAQ only · Stable intents
+    - Feedback · On hits
+    good_note: Intent in the key, tuned threshold, FAQ-only
+  solution: |-
+    1. Tune thresholds on a labelled set of near-miss pairs, and add intent classification to the cache key.
+    2. Cache only for high-volume, stable FAQ intents.
+    3. Monitor negative feedback on cache hits.
+  works: |-
+    **Trade-off to manage:** Lower hit rates.
+
+    **How you prove it worked:**
+
+    - Feedback and rephrase rate on cached answers.
+
+    **Same pattern elsewhere:** Telco: "How do I block a number?" gets the cached answer for "How do I unblock my number?"
+  takeaway: Similar isn't the same. Key the cache by intent.
+  related:
+  - ctx-17
+  - ops-10
+  code: |
+    CACHEABLE_INTENTS = {"store_hours", "how_to_activate_card", "fee_schedule_general"}
+
+    def cache_get(q):
+        intent = classify(q)
+        if intent not in CACHEABLE_INTENTS:
+            return None
+        return semantic_cache.get(q, namespace=intent, min_sim=THRESHOLD[intent])   # intent in the key
+
+    # thresholds tuned on near-miss pairs: ("cancel my card", "cancel my card payment") must NOT match
+    # monitor: thumbs-down rate on cache hits vs misses
+  lang: python
+- id: cost-07
+  title: One conversation costs $40
+  tags:
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's agent costs about $0.08 per conversation on average. A few conversations with long troubleshooting loops and repeated tool calls cost over $40. With no per-conversation cap, outliers make up 20% of spend.
+  antipattern: |-
+    **No per-conversation cost cap.**
+
+    *Think of it this way:* An all-you-can-eat buffet with no time limit.
+  fails: |-
+    - No per-conversation budget.
+    - Outliers aren't monitored.
+    - Long sessions grow context cost quadratically.
+
+    **Root cause:** No cost caps per unit of work.
+
+    **Where it breaks:** Runtime limits.
+  diagram:
+    bad:
+    - Avg $0.08 · Per chat
+    - '!Outliers · $40+'
+    - 20% spend · From few
+    - '!Unseen · No cap'
+    bad_note: No per-conversation cost cap
+    good:
+    - Budget · Per chat
+    - +Handoff · When exceeded
+    - +Compact · Long sessions
+    - p99 alert · Weekly review
+    good_note: Budgets, compaction, outlier alerts
+  solution: |-
+    1. Set per-conversation and per-task budgets (tokens and dollars), with graceful handoff to a human when exceeded.
+    2. Compact context in long sessions.
+    3. Alert on cost outliers and review them weekly.
+  works: |-
+    **Trade-off to manage:** Some long, legitimate sessions get handed off.
+
+    **How you prove it worked:**
+
+    - Cost distribution per conversation (p99).
+
+    **Same pattern elsewhere:** FinTech: a few research-agent runs on complex companies cost hundreds of dollars each.
+  takeaway: Budget each conversation, not just the month.
+  related:
+  - agf-02
+  - obs-15
+  - mas-09
+  code: |
+    class ConversationBudget:
+        def __init__(self, usd=0.50, tokens=150_000): self.usd, self.tokens = usd, tokens
+        def charge(self, resp):
+            self.usd -= price(resp); self.tokens -= resp.usage.total_tokens
+            return self.usd > 0 and self.tokens > 0
+
+    if not budget.charge(resp):
+        return handoff_to_human(summary=compact(conversation))
+    if conversation.tokens > 40_000:
+        conversation = compact(conversation)
+  lang: python
+- id: cost-08
+  title: Replies three times longer than customers need
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's assistant averages 450 output tokens per reply, with long introductions and repeated disclaimers. Customers on mobile scroll past most of it. Output tokens cost several times more than input tokens.
+  antipattern: |-
+    **No length guidance.**
+
+    *Think of it this way:* Answering "what's the time?" with a history of clocks.
+  fails: |-
+    - No length guidance or limits.
+    - Disclaimers repeated every turn.
+    - Output cost isn't monitored.
+
+    **Root cause:** Unmanaged verbosity.
+
+    **Where it breaks:** Prompt and UX.
+  diagram:
+    bad:
+    - 450 tokens · Avg reply
+    - '!Intros · Repeated'
+    - Disclaimers · Every turn
+    - '!Cost + scroll · Wasted'
+    bad_note: No length guidance
+    good:
+    - Length guide · Per intent
+    - +Max tokens · Per channel
+    - +Disclaimer · Once in UI
+    - Measure · Readability
+    good_note: Length by intent and channel, disclaimers in UI
+  solution: |-
+    1. Set length guidance per intent and channel, and appropriate max output tokens.
+    2. Show required disclaimers once in the UI, not in every reply.
+    3. Measure output tokens and readability.
+  works: |-
+    **Trade-off to manage:** Too short can drop needed information; evaluate.
+
+    **How you prove it worked:**
+
+    - Output tokens per intent; scroll and engagement data.
+
+    **Same pattern elsewhere:** Telco: an SMS channel bot sends multi-part messages that cost per segment.
+  takeaway: Shorter answers are cheaper and usually better.
+  related:
+  - cost-04
+  code: |
+    LENGTH = {("balance", "chat"): 40, ("plan_compare", "chat"): 150, ("balance", "voice"): 25}   # words
+
+    def generate(intent, channel, msg):
+        words = LENGTH.get((intent, channel), 100)
+        return llm.generate(msg, max_tokens=int(words * 1.6),
+                            system=f"Answer in at most {words} words. Disclaimers are shown in the UI; don't repeat them.")
+    metrics.observe("output_tokens", resp.usage.output_tokens, intent=intent)
+  lang: python
+- id: cost-09
+  title: Nightly ticket summaries run on the real-time API
+  tags:
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier summarises 400,000 closed tickets each night for analytics, using the same real-time API as its chatbot, at full price. The job also competes with chatbot traffic for rate limits during early-morning peaks.
+  antipattern: |-
+    **Offline jobs on the real-time API.**
+
+    *Think of it this way:* Sending bulk mail by courier.
+  fails: |-
+    - Non-urgent work uses the real-time path.
+    - Batch discounts aren't used.
+    - Shared rate limits create contention.
+
+    **Root cause:** No distinction between real-time and batch workloads.
+
+    **Where it breaks:** Workload architecture.
+  diagram:
+    bad:
+    - 400k tickets · Nightly
+    - '!Real-time API · Full price'
+    - Rate limits · Contention
+    - '!Chatbot · Slowed'
+    bad_note: Offline jobs on the real-time API
+    good:
+    - Batch API · Discounted
+    - +Separate quota · Batch keys
+    - +Off-peak · Scheduled
+    - Cheaper · Same output
+    good_note: Batch API, separate quotas, off-peak scheduling
+  solution: |-
+    1. Use the provider's batch API for offline jobs (typically discounted, with higher throughput).
+    2. Separate quotas or keys for batch and interactive traffic.
+    3. Schedule jobs away from interactive peaks.
+  works: |-
+    **Trade-off to manage:** Batch results arrive later (hours), which is fine for analytics.
+
+    **How you prove it worked:**
+
+    - Share of offline tokens on real-time endpoints.
+
+    **Same pattern elsewhere:** FinTech: a bank classifies a month of transactions through the interactive API.
+  takeaway: If it can wait, batch it.
+  related:
+  - ops-17
+  code: |
+    def nightly_summaries():
+        reqs = [{"custom_id": t.id, "params": {"model": MODEL, "max_tokens": 300,
+                 "messages": [{"role": "user", "content": SUMMARY_PROMPT + t.text}]}}
+                for t in tickets.closed_since(hours=24)]
+        batch = batch_client.create(requests=reqs)           # discounted offline API, separate key/quota
+        scheduler.poll(batch.id, on_done=store_summaries)
+
+    # cron: 0 2 * * *   (away from interactive peaks)
+  lang: python
+- id: cost-10
+  title: Extended reasoning turned on for every request
+  tags:
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank switches its whole assistant to a reasoning model with a large thinking budget after it performed well on complex mortgage questions. Simple questions ("What's my sort code?") now take 9 seconds and cost 10 times more, with no quality gain.
+  antipattern: |-
+    **Maximum reasoning for every request.**
+
+    *Think of it this way:* Calling a committee meeting to decide what to have for lunch.
+  fails: |-
+    - Reasoning effort applied uniformly.
+    - Thinking tokens are billed and add latency.
+    - Simple tasks gain nothing.
+
+    **Root cause:** No effort routing.
+
+    **Where it breaks:** Model and parameter selection.
+  diagram:
+    bad:
+    - Reasoning · All requests
+    - '!''Sort code?'' · 9 seconds'
+    - 10x cost · Thinking
+    - '!No gain · Simple asks'
+    bad_note: Maximum reasoning for every request
+    good:
+    - Route · By complexity
+    - +Budget · Per intent
+    - +Evals · Prove gain
+    - Escalate · If unsure
+    good_note: Reasoning budgets by intent, validated by evals
+  solution: |-
+    1. Route by complexity; enable extended reasoning (or a higher effort setting) only for intents that benefit in evals.
+    2. Set thinking budgets per intent.
+    3. Measure quality, latency and cost per intent.
+  works: |-
+    **Trade-off to manage:** Routing errors may under-think hard questions; allow escalation.
+
+    **How you prove it worked:**
+
+    - Thinking tokens per intent.
+
+    **Same pattern elsewhere:** Telco: a care bot uses deep reasoning to answer "what's my balance?"
+  takeaway: Pay for thinking where thinking pays.
+  related:
+  - agf-20
+  - cost-02
+  code: |
+    REASONING = {"complaint_resolution": "high", "plan_comparison": "medium"}   # chosen from evals
+
+    def call(intent, msg):
+        effort = REASONING.get(intent)
+        kwargs = {"thinking_budget": BUDGET[effort]} if effort else {}         # off by default
+        return llm.generate(msg, **kwargs)
+
+    report = per_intent(metrics=["quality", "p95_latency", "cost"], compare=["reasoning_on", "reasoning_off"])
+  lang: python
+- id: cost-11
+  title: Customers stare at a spinner for 8 seconds
+  tags:
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's web chat waits for the full reply before showing anything. Complex bill explanations take 8 seconds. Many customers send a second message or leave before the answer appears.
+  antipattern: |-
+    **Wait for the whole reply.**
+
+    *Think of it this way:* A waiter who brings nothing until the whole meal is ready, not even water.
+  fails: |-
+    - No streaming.
+    - No progress indicators for tool calls.
+    - Perceived latency equals total latency.
+
+    **Root cause:** Non-streaming UX.
+
+    **Where it breaks:** Front end and API.
+  diagram:
+    bad:
+    - Full reply · Then show
+    - '!8 seconds · Spinner'
+    - Second msg · Or leave
+    - '!Abandon · Rate up'
+    bad_note: Wait for the whole reply
+    good:
+    - Stream · Tokens
+    - +Tool status · 'Checking bill'
+    - +Chunk checks · Guardrails
+    - Engaged · Users
+    good_note: Stream tokens and tool progress
+  solution: |-
+    1. Stream tokens to the UI.
+    2. Show step status for tool calls ("Checking your latest bill...").
+    3. Run fast output guardrails per chunk or hold back only high-risk segments.
+  works: |-
+    **Trade-off to manage:** Streaming makes full-response guardrails harder.
+
+    **How you prove it worked:**
+
+    - Abandonment and duplicate messages during waits.
+
+    **Same pattern elsewhere:** FinTech: a bank's assistant doesn't stream statements summaries, and users refresh the page.
+  takeaway: Show progress. Silence feels slower than it is.
+  related:
+  - tel-08
+  - cost-03
+  code: |
+    async def chat_stream(msg, ws):
+        async for event in agent.stream(msg):
+            if event.type == "tool_start":
+                await ws.send({"status": STATUS_TEXT[event.tool]})       # "Checking your latest bill..."
+            elif event.type == "token":
+                buf.append(event.text)
+                if sentence_complete(buf):
+                    chunk = "".join(buf); buf.clear()
+                    await ws.send({"text": chunk if fast_guard.ok(chunk) else "[removed]"})   # per-chunk guard
+  lang: python
+- id: cost-12
+  title: Independent lookups run one after another
+  tags:
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's onboarding agent calls ID verification, sanctions screening, address validation and device-risk scoring one by one, though none depends on the others. Each takes about 1.5 seconds, so the step takes 6 seconds.
+  antipattern: |-
+    **Independent calls in sequence.**
+
+    *Think of it this way:* Cooking four dishes one at a time on a four-burner stove.
+  fails: |-
+    - Independent calls are serialised.
+    - The agent loop makes one tool call per turn.
+    - No dependency analysis.
+
+    **Root cause:** Missed parallelism.
+
+    **Where it breaks:** Orchestration.
+  diagram:
+    bad:
+    - ID check · 1.5 s
+    - '!Sanctions · Then 1.5 s'
+    - Address, device · Then 3 s
+    - '!6 seconds · Total'
+    bad_note: Independent calls in sequence
+    good:
+    - Fan-out · All 4
+    - +Parallel · 1.5 s total
+    - +Timeouts · Per call
+    - Partial · Handled
+    good_note: Parallel fan-out with timeouts
+  solution: |-
+    1. Run independent tool calls in parallel (parallel tool calling or workflow fan-out).
+    2. Model dependencies explicitly in the workflow.
+    3. Set a timeout per call and handle partial results.
+  works: |-
+    **Trade-off to manage:** More concurrent load on downstream systems.
+
+    **How you prove it worked:**
+
+    - Critical-path latency vs sum of tool latencies.
+
+    **Same pattern elsewhere:** Telco: an order agent checks credit, serviceability and stock sequentially.
+  takeaway: Parallelise what doesn't depend on each other.
+  related:
+  - rag-18
+  code: |
+    async def context_for(account_id):
+        results = await asyncio.gather(
+            with_timeout(billing.latest(account_id), 2),
+            with_timeout(network.outages_near(account_id), 2),
+            with_timeout(orders.open(account_id), 2),
+            return_exceptions=True)                                  # independent → parallel
+        bill, outages, orders_ = [r if not isinstance(r, Exception) else None for r in results]
+        return {"bill": bill, "outages": outages, "orders": orders_, "partial": None in (bill, outages, orders_)}
+  lang: python
+- id: cost-13
+  title: Speculative prefetching that's mostly wasted
+  tags:
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    To cut latency, a carrier's agent prefetches bill, usage, device, roaming and ticket data at the start of every chat, with an LLM summary of each. Most chats need one of them. Prefetching triples BSS load and LLM cost.
+  antipattern: |-
+    **Prefetch and summarise everything.**
+
+    *Think of it this way:* Cooking every dish on the menu in case someone orders it.
+  fails: |-
+    - Prefetch isn't targeted.
+    - LLM summaries of unused data cost money.
+    - Backend load rises.
+
+    **Root cause:** Untargeted speculation.
+
+    **Where it breaks:** Context assembly strategy.
+  diagram:
+    bad:
+    - Chat starts · Prefetch all
+    - '!5 sources · Summarised'
+    - 1 used · Typically
+    - '!3x load · And cost'
+    bad_note: Prefetch and summarise everything
+    good:
+    - Cheap data · Account summary
+    - +Intent · First message
+    - +Summarise · Only if used
+    - Hit rate · Measured
+    good_note: Targeted prefetch by likely intent
+  solution: |-
+    1. Prefetch only cheap, high-probability data (account summary), using intent from the first message.
+    2. Skip LLM summarisation until data is needed.
+    3. Measure prefetch hit rate.
+  works: |-
+    **Trade-off to manage:** Slightly slower for less common intents.
+
+    **How you prove it worked:**
+
+    - Prefetched data used vs fetched.
+
+    **Same pattern elsewhere:** FinTech: a bank assistant pulls a year of transactions at login just in case.
+  takeaway: Prefetch what you'll probably use, not everything you might.
+  related:
+  - cost-03
+  code: |
+    async def on_first_message(session, msg):
+        intent = fast_intent(msg)
+        if intent.prob > 0.7 and intent.name in CHEAP_PREFETCH:
+            session.prefetched = await accounts.summary(session.customer_id)    # cheap data only
+            metrics.inc("prefetch", intent=intent.name)
+
+    def use_prefetched(session):
+        metrics.inc("prefetch_used" if session.prefetched else "prefetch_miss")
+        return session.prefetched                                  # summarise only when needed
+  lang: python
+- id: cost-14
+  title: Large model classifying 100 million transactions a month
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A neobank uses a large general model with a long prompt to categorise every card transaction (100 million a month). It works, but costs $180k a month. A small model fine-tuned on two years of labelled categories would match the accuracy at a fraction of the cost.
+  antipattern: |-
+    **Large model for a narrow, huge task.**
+
+    *Think of it this way:* Hiring a senior consultant to sort the post.
+  fails: |-
+    - A general model used for a narrow, high-volume task.
+    - Labelled data exists but isn't used.
+    - Cost scales linearly with volume.
+
+    **Root cause:** No consideration of specialised small models.
+
+    **Where it breaks:** Model strategy.
+  diagram:
+    bad:
+    - 100M txns · Monthly
+    - '!Large model · Long prompt'
+    - $180k/month · Cost
+    - '!Labels unused · 2 years'
+    bad_note: Large model for a narrow, huge task
+    good:
+    - Fine-tune · Small model
+    - +Confidence · Low to large
+    - +Same evals · Held-out
+    - Fraction · Of cost
+    good_note: Small fine-tuned model, large model for hard cases
+  solution: |-
+    1. Fine-tune or distil a small model (or train a classical classifier) for high-volume narrow tasks.
+    2. Use the large model for hard or low-confidence cases only.
+    3. Evaluate both on the same held-out set.
+  works: |-
+    **Trade-off to manage:** Fine-tuned models need retraining and MLOps upkeep.
+
+    **How you prove it worked:**
+
+    - Cost per thousand items; accuracy by confidence band.
+
+    **Same pattern elsewhere:** Telco: a carrier uses a frontier model to classify millions of network alarms.
+  takeaway: High volume and narrow scope means small model.
+  related:
+  - ft-03
+  - agf-20
+  code: |
+    small = train_classifier(labelled_txns, model="distilled-small")       # or logistic regression on embeddings
+
+    def categorise(txn):
+        pred = small.predict(txn)
+        if pred.confidence >= 0.9:
+            return pred.label                                              # ~95% of volume
+        return large_llm.classify(txn, labels=CATEGORIES)                 # hard / low-confidence cases
+
+    print(evaluate(small, heldout), evaluate(large_llm, heldout))         # same held-out set
+  lang: python
+- id: cost-15
+  title: Retry storm doubles cost during a provider incident
+  tags:
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    During a provider slowdown, a carrier's services retry failed calls immediately up to five times, at several layers (SDK, gateway, application). Each customer message generates up to 125 attempts. The provider throttles harder, and successful calls are billed multiple times when timeouts occurred after processing.
+  antipattern: |-
+    **Immediate retries at every layer.**
+
+    *Think of it this way:* Everyone in a traffic jam honking harder.
+  fails: |-
+    - Retries at multiple layers multiply.
+    - No backoff or jitter.
+    - No circuit breaker.
+
+    **Root cause:** Uncoordinated retry policy.
+
+    **Where it breaks:** Resilience configuration.
+  diagram:
+    bad:
+    - Provider slow · Incident
+    - '!SDK x5 · Gateway x5'
+    - App x5 · 125 attempts
+    - '!Throttled · Billed twice'
+    bad_note: Immediate retries at every layer
+    good:
+    - One layer · Gateway
+    - +Backoff · + jitter
+    - +Breaker · Degraded mode
+    - Retry budget · Max 10%
+    good_note: One retry layer, backoff, breaker, budget
+  solution: |-
+    1. Retry in one layer only (usually the gateway) with exponential backoff and jitter.
+    2. Add circuit breakers and fall back to degraded mode.
+    3. Set retry budgets (for example at most 10% extra traffic).
+  works: |-
+    **Trade-off to manage:** Fewer retries means some failures surface to users; use the degraded mode.
+
+    **How you prove it worked:**
+
+    - Attempts per request; retry ratio during incidents.
+
+    **Same pattern elsewhere:** FinTech: a bank's batch job retries every failed document instantly and exhausts its quota.
+  takeaway: Retry in one place, with backoff and a budget.
+  related:
+  - obs-12
+  - agf-16
+  code: |
+    # retries live ONLY in the gateway; SDK clients set max_retries=0
+    client = Provider(max_retries=0)
+
+    gateway = Gateway(
+        retry=Retry(max_attempts=3, backoff="exponential_jitter", budget_ratio=0.10),   # ≤10% extra traffic
+        circuit_breaker=CircuitBreaker(error_rate=0.3, window_s=30, cooldown_s=60),
+        on_open=degraded_mode)
+  lang: python
+- id: cost-16
+  title: Embeddings recomputed for unchanged documents every night
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's nightly job re-embeds all 3 million policy and product chunks, though fewer than 1% change each day. The job takes 5 hours and costs thousands a month.
+  antipattern: |-
+    **Re-embed everything nightly.**
+
+    *Think of it this way:* Repainting the whole house because one window frame chipped.
+  fails: |-
+    - Full re-embedding regardless of change.
+    - No content hashing.
+    - Waste of time and money.
+
+    **Root cause:** Non-incremental indexing.
+
+    **Where it breaks:** Ingestion pipeline.
+  diagram:
+    bad:
+    - 3M chunks · Nightly
+    - '!<1% changed · Daily'
+    - 5 hours · Job
+    - '!Wasted $ · Monthly'
+    bad_note: Re-embed everything nightly
+    good:
+    - Hash chunks · Content
+    - +Changed only · Embed
+    - +Deletions · Explicit
+    - Full rebuild · Model change
+    good_note: Content hashing, embed only changes
+  solution: |-
+    1. Hash chunk content and only embed new or changed chunks.
+    2. Process deletions explicitly.
+    3. Do full rebuilds only on embedding-model changes.
+  works: |-
+    **Trade-off to manage:** Hash and change tracking logic.
+
+    **How you prove it worked:**
+
+    - Embedding calls per day vs changed chunks.
+
+    **Same pattern elsewhere:** Telco: a carrier re-embeds its entire device-manual library weekly.
+  takeaway: Embed what changed.
+  related:
+  - rag-05
+  - ops-18
+  code: |
+    def nightly_index(docs):
+        for doc in docs:
+            for c in chunk(doc):
+                h = sha256(normalize(c.text))
+                if registry.hash(c.id) == h:
+                    continue                                   # unchanged → no embedding call
+                vdb.upsert(c.id, embed(c.text), meta={"hash": h}); registry.set(c.id, h)
+        for gone in registry.ids() - current_chunk_ids(docs):
+            vdb.delete(gone); registry.remove(gone)           # deletions explicit
+  lang: python
+- id: cost-17
+  title: AI costs land in one central budget
+  tags:
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's AI platform team pays for all model usage. Business units launch features without considering cost, because they don't see it. The platform budget is exhausted in Q3.
+  antipattern: |-
+    **One central budget, no attribution.**
+
+    *Think of it this way:* A shared office kitchen where nobody pays for the coffee they drink.
+  fails: |-
+    - No cost attribution to the teams that drive it.
+    - No incentives to optimise.
+    - Budget surprises.
+
+    **Root cause:** No chargeback or showback.
+
+    **Where it breaks:** Financial operations.
+  diagram:
+    bad:
+    - Central budget · Platform
+    - '!BUs launch · No cost view'
+    - Usage grows · Unchecked
+    - '!Q3 · Budget gone'
+    bad_note: One central budget, no attribution
+    good:
+    - Attribution · Team keys
+    - +Showback · Monthly
+    - +Chargeback · When trusted
+    - Estimates · In launch review
+    good_note: Attribute, show back, charge back
+  solution: |-
+    1. Attribute cost per team and feature via gateway keys and tags.
+    2. Show back monthly, and charge back once data is trusted.
+    3. Require cost estimates in launch reviews.
+  works: |-
+    **Trade-off to manage:** Chargeback can discourage experimentation; give teams a small sandbox budget.
+
+    **How you prove it worked:**
+
+    - Share of spend attributed to an owner.
+
+    **Same pattern elsewhere:** FinTech: a bank's central AI budget is consumed by one line of business's experiments.
+  takeaway: Whoever drives the cost should see the cost.
+  related:
+  - tel-04
+  - obs-05
+  code: |
+    for team in TEAMS:
+        gateway.keys.create(team=team.name, tags={"cost_center": team.cc}, max_budget=team.monthly_budget)
+
+    def monthly_showback(month):
+        rows = ledger.group_by(["team", "feature"], month=month)
+        email.send(to=finance_partners, subject=f"AI showback {month}", table=rows)
+
+    LAUNCH_REVIEW_REQUIRED = ["cost_estimate_per_task", "monthly_volume_forecast"]
+  lang: python
+- id: cost-18
+  title: Self-hosted GPUs sit idle 80% of the day
+  tags:
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank self-hosts a model for internal document review on dedicated GPUs sized for month-end peaks. Average utilisation is 20%, and the cluster costs more than the equivalent hosted API usage would.
+  antipattern: |-
+    **Static GPUs sized for peak.**
+
+    *Think of it this way:* Buying a bus for the one day a month you carry the whole team.
+  fails: |-
+    - Capacity sized for peak, running constantly.
+    - No autoscaling or workload scheduling.
+    - Build-vs-buy cost not revisited.
+
+    **Root cause:** Static provisioning without utilisation management.
+
+    **Where it breaks:** Infrastructure.
+  diagram:
+    bad:
+    - Sized · Month-end peak
+    - '!20% util · Average'
+    - Always on · Cluster
+    - '!Costly · Vs hosted'
+    bad_note: Static GPUs sized for peak
+    good:
+    - Autoscale · Queue depth
+    - +Scheduled · Known peaks
+    - +Batch fill · Idle time
+    - Compare · Build vs buy
+    good_note: Autoscale, fill with batch, burst to API
+  solution: |-
+    1. Autoscale on queue depth and use scheduled scaling for known peaks.
+    2. Fill idle capacity with batch work, or burst to hosted APIs at peak.
+    3. Compare total cost against hosted options regularly.
+  works: |-
+    **Trade-off to manage:** Scaling up takes time (model load); keep a warm minimum.
+
+    **How you prove it worked:**
+
+    - GPU utilisation and cost per thousand tokens.
+
+    **Same pattern elsewhere:** Telco: a carrier's on-prem inference cluster for sovereignty runs mostly idle at night.
+  takeaway: Idle GPUs are the most expensive tokens.
+  related:
+  - ops-08
+  code: |
+    # KEDA ScaledObject: scale vLLM deployment on queue depth; scheduled scaling for known peaks
+    # triggers:
+    #   - type: prometheus  {query: sum(vllm_num_requests_waiting), threshold: "10"}
+    #   - type: cron        {timezone: America/Chicago, start: "0 8 * * 1-5", end: "0 20 * * 1-5", desiredReplicas: "6"}
+
+    def fill_idle_capacity():
+        if gpu_utilisation() < 0.4:
+            batch_queue.release(next_jobs(n=200))         # batch work in idle hours
+  lang: python
+- id: cost-19
+  title: Latency SLO with no plan for when it's missed
+  tags:
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's agent-assist has a 2-second SLO. When the model is slow, requests just wait and eventually time out at 30 seconds. The agent on the call gets nothing.
+  antipattern: |-
+    **SLO on paper, requests just wait.**
+
+    *Think of it this way:* A train timetable with no plan for delays except waiting.
+  fails: |-
+    - SLO defined but not enforced.
+    - No fallback when the budget is exceeded.
+    - Timeout far beyond usefulness.
+
+    **Root cause:** No degradation strategy tied to the latency budget.
+
+    **Where it breaks:** Serving logic.
+  diagram:
+    bad:
+    - 2 s SLO · Stated
+    - '!Slow model · Waits'
+    - 30 s timeout · Useless
+    - '!Nothing shown · Agent'
+    bad_note: SLO on paper, requests just wait
+    good:
+    - Timeout · When useless
+    - +Fallback · Small model
+    - +Cached · Top article
+    - Degraded · Flagged
+    good_note: Useful timeout, fast fallback, degraded flag
+  solution: |-
+    1. Set timeouts at the point where the answer stops being useful.
+    2. Fall back to a faster path (smaller model, cached top article, search results) when the budget is exceeded.
+    3. Mark degraded responses and measure their rate.
+  works: |-
+    **Trade-off to manage:** Degraded answers are less complete.
+
+    **How you prove it worked:**
+
+    - SLO compliance and degraded-response rate.
+
+    **Same pattern elsewhere:** FinTech: a fraud-call assistant waits 20 seconds for a slow model instead of showing the standard script.
+  takeaway: When you miss the budget, degrade. Don't wait.
+  related:
+  - agf-16
+  - obs-14
+  code: |
+    async def answer(q):
+        try:
+            return await asyncio.wait_for(full_pipeline(q), timeout=USEFUL_LIMIT_S)
+        except asyncio.TimeoutError:
+            metrics.inc("degraded_response")
+            fast = cache.top_article(q) or await small_model.answer(q)
+            return {"text": fast, "degraded": True}           # marked, rate measured
+  lang: python
+- id: cost-20
+  title: Prompt compression saves tokens and drops the disclosures
+  tags:
+  - Cost
+  - Compliance
+  - FinTech
+  scenario: |-
+    To cut costs, a bank applies aggressive automatic prompt compression to its loan assistant's retrieved documents. Token use drops 45%, but compressed context sometimes removes the required APR range and fee disclosures, and answers omit them.
+  antipattern: |-
+    **Compress context to cut tokens.**
+
+    *Think of it this way:* Shrinking a contract to save paper and losing the small print.
+  fails: |-
+    - Compression drops low-frequency but critical text.
+    - Optimisation was measured on cost only.
+    - Disclosure completeness wasn't evaluated.
+
+    **Root cause:** Cost optimisation without quality gates.
+
+    **Where it breaks:** Optimisation process.
+  diagram:
+    bad:
+    - Compression · Aggressive
+    - '!-45% tokens · Saved'
+    - APR dropped · Disclosures
+    - '!Non-compliant · Answers'
+    bad_note: Compress context to cut tokens
+    good:
+    - Exempt · Disclosures
+    - +Evals · Compliance
+    - +Canary · Rollout
+    - Savings · Safe ones
+    good_note: Exempt critical text, quality-gated rollout
+  solution: |-
+    1. Evaluate every cost optimisation on quality, including compliance checks.
+    2. Exempt critical sections (disclosures, rates) from compression.
+    3. Roll out optimisations behind canaries.
+  works: |-
+    **Trade-off to manage:** Smaller savings.
+
+    **How you prove it worked:**
+
+    - Disclosure-presence checks on answers.
+
+    **Same pattern elsewhere:** Telco: compression drops contract cancellation terms from retrieved context.
+  takeaway: A saving that breaks compliance isn't a saving.
+  related:
+  - cicd-19
+  - eval-14
+  code: |
+    PROTECTED = ["<disclosure>", "<rate_table>"]
+
+    def compress(prompt):
+        parts = split_protected(prompt, PROTECTED)              # protected sections pass through untouched
+        return "".join(p if p.protected else compressor.compress(p.text, ratio=0.5) for p in parts)
+
+    results = eval_suite.run(pipeline_with(compress), include=["compliance_disclosures"])
+    assert results["compliance_disclosures"] == 1.0
+    flags.canary("prompt_compression", pct=0.05)
+  lang: python

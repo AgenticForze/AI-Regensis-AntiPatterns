@@ -1,0 +1,48 @@
+source: rag-scenarios
+section: evals-ops
+patterns:
+  - id: golden-set-one-team
+    title: A golden set of 50 questions from one team
+    tags: [Quality, Scale]
+    scenario: |
+      Offline scores look great and keep improving. Support tickets about wrong answers keep rising. The corpus has millions
+      of documents across dozens of departments and three languages.
+    antipattern: |
+      **A small, static, hand-written eval set covering only the head of the distribution**, written by one team.
+    fails: |
+      - Failures live in the long tail: other departments, other languages, rare document types and permission edge cases.
+      - Optimizing against a narrow set overfits to it, so offline gains don't reach production.
+      - The set never changes, while the corpus and users do.
+    diagram:
+      bad: ["50 questions, one team", "!Head of distribution only", "Scores rise", "!Tickets rise"]
+      bad_note: "Offline progress, production regressions"
+      good: ["Production query sample", "+Stratify by domain / language / doc type", "+Synthetic for gaps + special slices", "+Per-slice gates", "Representative evals"]
+      good_note: "Evaluation follows the real distribution and its tail"
+    solution: |
+      Use **stratified evaluation**:
+
+      - Sample real production queries by segment (domain, tenant size, language, query type, doc type) and label them.
+      - Synthesize extra questions from under-covered corpus regions.
+      - Keep separate slices for freshness, permissions and unanswerable questions.
+      - Report metrics **per slice**, never only the average, and add every production failure to the set.
+      - Re-run evals when the corpus changes, not only when code changes.
+    works: |
+      Offline scores now predict production quality because the set reflects real traffic and its tail. Labeling costs are
+      controlled with LLM judges calibrated against a human-labeled subset, and per-slice regression gates in CI plus online
+      signals (thumbs down, reformulated queries, escalations) catch what's left.
+    code: |
+      SEGMENTS = ["domain", "tenant_size", "language", "query_type", "doc_type"]
+
+      def build_golden(prod_queries, per_cell=15):
+          strata = group_by(prod_queries, SEGMENTS)
+          sample = [q for cell in strata.values() for q in random.sample(cell, min(per_cell, len(cell)))]
+          gaps = [c for c in corpus_regions() if coverage(sample, c) < 0.01]
+          sample += [synth_question(chunk) for c in gaps for chunk in c.sample(5)]
+          sample += special_slices(["freshness", "permissions", "unanswerable"])
+          return label(sample)
+
+      def gate(results):
+          for slice_, score in results.by_slice().items():
+              assert score >= THRESHOLD[slice_], f"regression in {slice_}"
+    takeaway: "A golden set from one team measures one team's questions. Stratify by real traffic, keep special slices, and gate on every slice."
+    followup: "Offline scores keep improving while support tickets about wrong answers rise. What's wrong with your evaluation?"

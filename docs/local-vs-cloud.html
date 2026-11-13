@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Local LLMs vs Hyperscaler Hosting (Cost Management) · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,36 +20,39 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="active" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="active" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part E · Platforms &amp; Economics</div>
-  <h1><span class="sn">14</span>Local LLMs vs Hyperscaler Hosting (Cost Management)</h1>
+  <h1><span class="sn">17</span>Local LLMs vs Hyperscaler Hosting (Cost Management)</h1>
   <p class="lede">Self-hosting open-weight models can cut costs dramatically or burn money quietly. The difference is usage level, utilization and operational maturity.</p>
   <span class="pill">6 anti-patterns</span>
 </div>
@@ -129,11 +132,11 @@
 <li><strong>Model refresh:</strong> re-evaluating and redeploying as new open models ship every few months.</li>
 <li><strong>Hidden infrastructure:</strong> load balancers, storage for weights, observability, redundancy across zones.</li>
 </ul></div>
-<div class="toc"><div class="toc-h">In this section</div><a href="#selfhost-low-volume"><span>14.1</span>Self-hosting &quot;to save money&quot; at low or spiky usage</a><a href="#token-price-only"><span>14.2</span>Comparing token prices while ignoring operations and quality</a><a href="#inefficient-serving"><span>14.3</span>Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)</a><a href="#no-hybrid-routing"><span>14.4</span>All-or-nothing hosting with no hybrid routing</a><a href="#local-equals-compliant"><span>14.5</span>Assuming &quot;local&quot; automatically means secure and compliant</a><a href="#no-cache-layer"><span>14.6</span>No caching layer in front of any model</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#selfhost-low-volume"><span>17.1</span>Self-hosting &quot;to save money&quot; at low or spiky usage</a><a href="#token-price-only"><span>17.2</span>Comparing token prices while ignoring operations and quality</a><a href="#inefficient-serving"><span>17.3</span>Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)</a><a href="#no-hybrid-routing"><span>17.4</span>All-or-nothing hosting with no hybrid routing</a><a href="#local-equals-compliant"><span>17.5</span>Assuming &quot;local&quot; automatically means secure and compliant</a><a href="#no-cache-layer"><span>17.6</span>No caching layer in front of any model</a></div>
 
 <article class="ap" id="selfhost-low-volume">
   <header class="ap-h">
-    <div class="ap-num">14.1</div>
+    <div class="ap-num">17.1</div>
     <div>
       <h2><a href="#selfhost-low-volume">Self-hosting &quot;to save money&quot; at low or spiky usage</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span></div>
@@ -211,12 +214,14 @@ across enough work to win.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Self-hosting trades variable cost for fixed cost. It only pays off when steady usage is high enough to keep GPUs busy, and people are counted in the TCO.</p></div>
     <div><span class="k">Follow-up to expect</span><p>At roughly what monthly token volume does self-hosting start to make sense, and what assumptions drive that?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="token-price-only">
   <header class="ap-h">
-    <div class="ap-num">14.2</div>
+    <div class="ap-num">17.2</div>
     <div>
       <h2><a href="#token-price-only">Comparing token prices while ignoring operations and quality</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
@@ -290,12 +295,14 @@ business case.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>The right unit is cost per correct outcome, not cost per token. Price the errors and the operating team before claiming savings.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you present a quality-adjusted cost comparison to a CFO?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="inefficient-serving">
   <header class="ap-h">
-    <div class="ap-num">14.3</div>
+    <div class="ap-num">17.3</div>
     <div>
       <h2><a href="#inefficient-serving">Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
@@ -373,12 +380,14 @@ Validating quantization on evals protects quality, and queue-based autoscaling m
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>If you self-host, the serving stack is the cost lever. Continuous batching, prefix caching and validated quantization decide how many GPUs you need.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you validate that quantization hasn&#x27;t degraded quality for a regulated use case?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-hybrid-routing">
   <header class="ap-h">
-    <div class="ap-num">14.4</div>
+    <div class="ap-num">17.4</div>
     <div>
       <h2><a href="#no-hybrid-routing">All-or-nothing hosting with no hybrid routing</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
@@ -452,12 +461,14 @@ the architecture.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Local versus cloud is a routing decision, not a religion. Send each request to the cheapest compliant model that meets its quality bar.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What signals would you use for confidence-based escalation?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="local-equals-compliant">
   <header class="ap-h">
-    <div class="ap-num">14.5</div>
+    <div class="ap-num">17.5</div>
     <div>
       <h2><a href="#local-equals-compliant">Assuming &quot;local&quot; automatically means secure and compliant</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
@@ -542,12 +553,14 @@ holes. One control framework across local and cloud keeps governance consistent 
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>On-prem isn&#x27;t automatically secure. Verify the model supply chain, review licenses, patch the stack, and hold local models to the same controls as cloud.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What goes into an AI bill of materials?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-cache-layer">
   <header class="ap-h">
-    <div class="ap-num">14.6</div>
+    <div class="ap-num">17.6</div>
     <div>
       <h2><a href="#no-cache-layer">No caching layer in front of any model</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
@@ -623,7 +636,9 @@ the cost of the misses too. Scoping and invalidation keep caching from creating 
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>The cheapest model call is the one you don&#x27;t make. Layer prefix, exact and semantic caches, scoped by permissions and invalidated by source changes.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What are the risks of semantic caching, and how do you mitigate them?</p></div>
+    
   </section>
+  
 </article>
 <div class="prose"><h3>Decision matrix</h3>
 <table>
@@ -681,7 +696,7 @@ the cost of the misses too. Scoping and invalidation keep caching from creating 
 </tr>
 </tbody>
 </table></div>
-<div class="pn"><a class="prev" href="hyperscalers.html">← 13. Hyperscaler Platforms</a><a class="next" href="harness.html">15. Harness Engineering →</a></div>
+<div class="pn"><a class="prev" href="hyperscalers.html">← 16. Hyperscaler Platforms</a><a class="next" href="harness.html">18. Harness Engineering →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

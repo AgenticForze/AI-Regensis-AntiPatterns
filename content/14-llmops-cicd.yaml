@@ -1,0 +1,6 @@
+id: llmops-cicd
+num: 14
+short: LLMOps & CI/CD
+title: LLMOps & CI/CD for Agentic AI
+summary: Prompts, models, tools, indexes and policies all change behaviour. Each needs versioning, a gated release path and a way back.
+patterns: []

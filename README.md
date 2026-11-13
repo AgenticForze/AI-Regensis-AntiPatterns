@@ -1,6 +1,6 @@
 # Applied AI Anti-Patterns
 
-A field guide to production AI anti-patterns: 103 entries across 18 sections, from RAG and retrieval through agentic AI, evaluation, security and governance, the three hyperscaler platforms, local vs. cloud economics, harness engineering, and Claude and other AI tools.
+A field guide to production AI anti-patterns: 488 entries across 21 sections, from RAG and retrieval through agentic AI, evaluation, observability, LLMOps and CI/CD, security, governance, the three hyperscaler platforms, local vs. cloud economics, harness engineering, and Claude and other AI tools. It includes 360 telecom and financial-services production scenarios.
 
 Each entry contains a problem statement, the anti-pattern, why it fails, a broken-vs-fixed architecture diagram (generated SVG), the recommended solution, why it succeeds, a reference implementation, and a key takeaway.
 
@@ -9,6 +9,7 @@ Each entry contains a problem statement, the anti-pattern, why it fails, a broke
 ```
 content/          One YAML file per section (all text, code and diagram specs)
   site.yaml       Site metadata and part/section ordering
+  imported/       Additional entries per section (<source>-<section-id>.yaml), appended after the section's own entries
 build/
   build.py        Static site generator → docs/
   diagrams.py     SVG diagram engine (flows, layer stacks, TCO chart)

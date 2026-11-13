@@ -1,0 +1,46 @@
+source: rag-agentic-prep
+section: multi-agent
+patterns:
+  - id: subagents-vague-briefs
+    title: Sub-agents with vague briefs
+    tags: [Quality, Cost]
+    scenario: |
+      An orchestrator agent sends three research workers the instruction "look into competitor pricing". They duplicate
+      each other's work and return inconsistent prose that the orchestrator can't merge.
+    antipattern: |
+      **Workers get one-line, open-ended instructions** with no scope boundaries, tools or output format.
+    fails: |
+      - Without scope boundaries, workers overlap and waste tokens on the same sources.
+      - Free-text outputs can't be merged, deduplicated or checked automatically.
+      - Errors in one worker go unnoticed because nothing defines what "done" looks like.
+    diagram:
+      bad: ["Orchestrator", "!\"Look into competitor pricing\" × 3", "Overlapping work", "!Inconsistent prose"]
+      bad_note: "Vague briefs produce duplicate, unmergeable work"
+      good: ["Orchestrator", "+Brief: objective, scope, tools, schema", "Workers (non-overlapping)", "+Schema-validated outputs", "+Merge, dedupe, verify"]
+      good_note: "Precise briefs in, structured results out"
+    solution: |
+      - The orchestrator writes **precise briefs**: objective, scope boundaries (what not to cover), allowed tools and an output schema.
+      - Validate worker outputs against the JSON schema; reject and re-brief on failure.
+      - Merge, deduplicate and verify centrally.
+      - Track overlap between worker outputs and end-task accuracy.
+    works: |
+      Non-overlapping scopes remove duplicate spend, and structured outputs make merging and verification mechanical. The
+      overlap metric shows immediately when briefs are too loose.
+    code: |
+      class Brief(BaseModel):
+          objective: str
+          in_scope: list[str]; out_of_scope: list[str]
+          tools: list[str]
+          output_schema: dict
+
+      class PricingFinding(BaseModel):
+          competitor: str; plan: str; monthly_price: Decimal; source_url: str; as_of: date
+
+      briefs = [Brief(objective=f"Collect current consumer plan prices for {c}",
+                      in_scope=[c], out_of_scope=[x for x in COMPETITORS if x != c],
+                      tools=["web_search", "fetch"], output_schema=PricingFinding.model_json_schema())
+                for c in COMPETITORS]
+      results = [list_of(PricingFinding).validate(worker.run(b)) for b in briefs]
+      merged = dedupe(flatten(results), key=lambda f: (f.competitor, f.plan))
+    takeaway: "Sub-agents are only as good as their briefs. Give each a scoped objective, tools and an output schema, then merge and verify centrally."
+    followup: "Your sub-agents duplicate work and return inconsistent results. What do you change in the orchestrator?"

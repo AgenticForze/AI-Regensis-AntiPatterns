@@ -1,7 +1,7 @@
 id: models
 num: 6
-short: Model Selection & Routing
-title: Model Selection & Routing
+short: Models, Cost & Latency
+title: Model Selection, Cost, Latency & Routing
 summary: Models are a portfolio, not a single dependency. These anti-patterns overpay, underperform or fail completely when a provider has a bad day.
 patterns:
   - id: one-model-for-all

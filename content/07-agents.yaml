@@ -1,7 +1,7 @@
 id: agents
 num: 7
-short: Agent Design & Tool Use
-title: Single-Agent Design & Tool Use
+short: Agent Design & Frameworks
+title: Agent Design, Frameworks & Tool Use
 summary: An agent is an LLM in a loop with tools and state. Most production failures come from the loop, the tools or the state, not from the model.
 intro:
   - flow:

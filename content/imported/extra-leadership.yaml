@@ -1,0 +1,283 @@
+source: leadership-guide
+section: leadership
+patterns:
+  - id: build-everything-or-buy-everything
+    title: Building everything, or buying everything
+    tags: [Leadership, Cost]
+    scenario: |
+      The steering committee asks whether to build an in-house RAG platform or buy a vendor product. Two camps argue
+      "always build for control" versus "always buy for speed".
+    antipattern: |
+      **A blanket build-or-buy preference applied to the whole AI stack.**
+    fails: |
+      - Build-vs-buy is a portfolio decision per layer, not one decision.
+      - Building commodity layers wastes scarce engineers on undifferentiated work.
+      - Buying the differentiating layer hands the advantage to a vendor and creates lock-in.
+    diagram:
+      bad: ["Whole AI stack", "!One blanket decision", "Build commodity | Buy differentiation", "Wasted talent or lock-in"]
+      bad_note: "One answer for every layer"
+      good: ["Each layer", "+Score: differentiation, time-to-value, TCO, control, risk", "Buy: models, vector DB, observability | Build: data pipelines, retrieval, evals", "+Abstractions + annual review"]
+      good_note: "Per-layer build / buy / partner with optionality"
+    solution: |
+      Decide **per layer** using differentiation, time-to-value, total cost of ownership (TCO), control and risk:
+
+      - **Buy or use managed** for commodity infrastructure: foundation models, vector DB, observability.
+      - **Build** what encodes proprietary advantage: domain data pipelines, retrieval tuned to your corpus, evals that define quality for your business, workflow integration.
+      - **Partner** where speed matters but customization is needed.
+      - Protect optionality with abstraction layers and data portability, and revisit annually.
+    works: |
+      Engineers spend their time on what differentiates the business, while commodity layers improve with the market. In one
+      example, the team bought a managed vector DB and observability tool, and built the ingestion pipeline, permission-aware
+      retrieval service and eval suite because those encoded the company's data and quality definitions.
+    code: |
+      CRITERIA = {"differentiation": .3, "time_to_value": .2, "tco": .2, "control": .15, "risk": .15}
+
+      def decide(layer_scores):                  # scores 1–5; high differentiation favours build
+          build = sum(CRITERIA[c] * s["build"] for c, s in layer_scores.items())
+          buy = sum(CRITERIA[c] * s["buy"] for c, s in layer_scores.items())
+          return "build" if build - buy > 0.5 else "buy" if buy - build > 0.5 else "partner"
+
+      decisions = {layer: decide(scores) for layer, scores in workshop_scores.items()}
+    takeaway: "Build what differentiates, buy what's commodity, and keep the seams portable. Decide per layer, not once for the stack."
+    followup: "Should we build our own RAG platform or buy a vendor product?"
+
+  - id: leaderboard-churn
+    title: Chasing leaderboards and model churn
+    tags: [Leadership, Quality, Cost]
+    scenario: |
+      A new model just topped the public benchmarks. The team wants to switch every workload to it this sprint.
+    antipattern: |
+      **Model choice driven by headlines**: either switch everything immediately, or refuse to switch at all.
+    fails: |
+      - Public benchmarks rarely match your task, data or constraints.
+      - Switching on headlines causes regressions in formats, refusals and tool-calling behaviour, and constant churn.
+      - Refusing to switch leaves cost and quality on the table.
+    diagram:
+      bad: ["New #1 model", "!Switch every route", "Format / refusal regressions", "Churn"]
+      bad_note: "Headline-driven model changes"
+      good: ["Candidate model", "+LLM gateway (swap by config)", "+Task-specific evals per route", "Switch winners via canary | Keep incumbents", "+Pinned versions + fallback"]
+      good_note: "Model choice is a cheap, evidence-based, per-route decision"
+    solution: |
+      Make model choice an **evidence-based, low-cost decision**:
+
+      - Put all calls behind an **LLM gateway** so models are swappable by configuration.
+      - Run every candidate through your own **task-specific eval suite**, comparing quality, latency, cost and safety per use case.
+      - Roll out winners **per route via canary**; pin versions in production; track deprecations; keep a fallback model.
+    works: |
+      Gains are captured where they're real and regressions are avoided where they aren't. In one example, the new model won on
+      reasoning-heavy analysis (+6 points) but regressed JSON compliance for extraction; the team switched one route, kept the
+      other, and saved 30% on a third by moving it to a smaller model with equal scores.
+    code: |
+      def evaluate_candidate(candidate, routes):
+          decisions = {}
+          for route in routes:
+              cur, new = run_evals(route, ROUTE_MODEL[route]), run_evals(route, candidate)
+              better = new.quality >= cur.quality + 0.02 and new.safety >= cur.safety and new.format_ok >= cur.format_ok
+              cheaper = new.quality >= cur.quality - 0.005 and new.cost < cur.cost * 0.8
+              decisions[route] = "canary" if better or cheaper else "keep"
+          return decisions
+    takeaway: "Treat new models as candidates, not upgrades. A gateway plus your own evals turns model churn into routine, per-route decisions."
+    followup: "A new model just topped the benchmarks. The team wants to switch everything. Your call?"
+
+  - id: governance-bolted-on
+    title: Governance bolted on at the end
+    tags: [Leadership, Compliance]
+    scenario: |
+      Legal blocked a customer-facing AI launch two weeks before go-live over data and safety concerns. The team had never
+      engaged them during the build.
+    antipattern: |
+      **Risk review is a single gate at the end of delivery**, after design decisions are locked in.
+    fails: |
+      - Late surprises cause rework and adversarial relationships between delivery and risk teams.
+      - Real risks (prompt injection, data leakage, biased outcomes, IP, regulatory duties) go unmanaged during pilots.
+      - Every use case gets the same heavy review, so low-risk work queues behind high-risk work.
+    diagram:
+      bad: ["Build", "Pilot", "!Risk review at the end", "!Launch blocked"]
+      bad_note: "Governance as a late gate"
+      good: ["+Risk tiering at intake", "+Paved-road controls (PII, guardrails, logging)", "+Tier-specific evidence (system card, red team)", "+Governance council with SLA", "On-time launch"]
+      good_note: "Governance by design, proportional to risk"
+    solution: |
+      Make governance **part of delivery, scaled to risk**:
+
+      - **Risk tiering at intake** (internal productivity vs customer-facing vs consequential decisions about people), with proportionate controls per tier.
+      - Bake controls into the paved road: data classification and PII redaction, approved models with agreed data terms, guardrails, logging and audit trails.
+      - For higher tiers: a **system card**, red-team results against the OWASP LLM Top 10, an impact assessment, human-oversight design and incident playbooks.
+      - Align to a framework (NIST AI RMF, ISO/IEC 42001) and map EU AI Act obligations with Legal.
+      - Run an **AI governance council** (Legal, Security, Privacy, business) that approves within an SLA.
+    works: |
+      Most use cases clear quickly through standard controls, freeing review capacity for the few high-risk ones. In one
+      example, 70% of use cases (internal, low-risk) were cleared in days.
+    code: |
+      TIERS = {
+          "internal_productivity": {"controls": ["pii_redaction", "approved_models", "logging"], "review_days": 3},
+          "customer_facing":       {"controls": ["+guardrails", "+red_team", "+system_card"], "review_days": 10},
+          "consequential":         {"controls": ["+impact_assessment", "+human_oversight", "+incident_playbook"], "review_days": 20},
+      }
+
+      def intake(use_case):
+          tier = classify_tier(use_case)       # at intake, not at launch
+          return governance.open(use_case, tier=tier, required=TIERS[tier]["controls"], sla_days=TIERS[tier]["review_days"])
+    takeaway: "Governance that arrives at the end blocks launches. Tier risk at intake and build the controls into the paved road."
+    followup: "Legal blocked your launch two weeks before go-live. How do you prevent that next time?"
+
+  - id: wrong-team-shape
+    title: The wrong team shape for applied AI
+    tags: [Leadership, Adoption]
+    scenario: |
+      You have headcount for 10 people to build applied AI products. One proposal is ten ML PhDs; another is ten full-stack
+      engineers who know prompting.
+    antipattern: |
+      **Staffing an applied AI team as either a research lab or a pure app team.**
+    fails: |
+      - Applied AI value comes mostly from data, integration, evaluation and product judgment, not model research.
+      - A research-heavy team builds impressive prototypes nobody ships.
+      - A team with no ML depth can't debug quality or design evaluations.
+    diagram:
+      bad: ["10 hires", "!All researchers | All app engineers", "Prototypes or quality gaps", "Nothing reliable ships"]
+      bad_note: "One skill profile for a multi-skill job"
+      good: ["10 hires", "+AI engineers ×4 | Platform ×2 | Data eng ×1", "+AI PM ×1 | Eval lead ×1 | Designer (shared)", "+SME time from each BU", "Full delivery loop"]
+      good_note: "Hire for the whole loop from data to adoption"
+    solution: |
+      Hire for the **full delivery loop**:
+
+      - AI/ML engineers who build LLM systems end to end (retrieval, agents, evals).
+      - A data engineer for pipelines, connectors and quality; a platform engineer for the gateway, reliability and scale.
+      - An **AI product manager** who owns outcomes; an **evaluation lead** who owns golden sets and error analysis.
+      - Access to domain experts for rubrics and labeling, and a design partner for trust-building UX.
+      - Hire T-shaped people with shipping records, set up a career ladder, and upskill existing engineers through pairing.
+    works: |
+      Every stage from data to adoption has an owner, so prototypes become products. Example shape: 4 AI engineers, 2 platform,
+      1 data engineer, 1 AI PM, 1 eval lead, 1 designer at 50%, plus 3 SME hours a week from each business unit served.
+    code: |
+      TEAM = {"ai_engineer": 4, "platform_engineer": 2, "data_engineer": 1,
+              "ai_product_manager": 1, "eval_lead": 1, "designer": 0.5}
+      SME_HOURS_PER_WEEK = {bu: 3 for bu in BUSINESS_UNITS_SERVED}
+
+      LOOP = ["data", "retrieval/agents", "evaluation", "platform/reliability", "product/outcomes", "ux/adoption"]
+      coverage = {stage: [r for r, owns in ROLE_OWNS.items() if stage in owns and TEAM.get(r)] for stage in LOOP}
+      assert all(coverage.values()), f"unowned stages: {[s for s, r in coverage.items() if not r]}"
+    takeaway: "Applied AI is a delivery loop, not a research problem. Staff every stage, from data and evals to product and adoption."
+    followup: "You have headcount for 10. Who do you hire to build applied AI products?"
+
+  - id: launch-and-leave
+    title: Launch and leave
+    tags: [Leadership, Quality, Reliability]
+    scenario: |
+      Six months after launch, usage dropped and answers got worse. Nobody changed any code. The proposed fix is to retrain
+      the model.
+    antipattern: |
+      **The AI feature is treated as a finished project after launch**, with no owner, monitoring or feedback loop.
+    fails: |
+      - AI systems drift even when code doesn't: content changes, user behaviour shifts, providers update models, new edge cases appear.
+      - Without ownership and online monitoring, quality decays silently and trust erodes.
+      - Retraining is proposed without any evidence of what changed.
+    diagram:
+      bad: ["Launch", "!No owner / monitoring", "Content + usage drift", "!Quality and usage decline"]
+      bad_note: "Silent decay after launch"
+      good: ["Launch", "+Named owner + on-call", "+Online quality SLOs", "+Weekly failure review → eval set", "Sustained quality"]
+      good_note: "AI features run as living products with LLMOps"
+      good_loop: "Failures feed the golden set every week"
+    solution: |
+      Treat AI features as **living products with LLMOps**:
+
+      - A named owner and on-call rotation.
+      - Online monitoring of quality (sampled judge scores, feedback, escalation and reformulation rates), freshness, latency and cost, with **SLOs and alerts**.
+      - A **feedback loop**: weekly failure triage into the eval set, monthly metric reviews with business owners, re-evaluation whenever providers update models.
+      - **Change management**: training, champions, in-product guidance and release notes.
+    works: |
+      Drift is detected and fixed continuously instead of discovered by users. In one example, a weekly 30-minute failure
+      review fed 40 new cases a month into the golden set; online quality recovered from 81% to 90% and usage regained its peak
+      within a quarter.
+    code: |
+      @schedule(cron="0 10 * * MON")
+      def weekly_failure_review():
+          failures = traces.sample(feedback="down", days=7, n=40) + traces.sample(escalated=True, days=7, n=20)
+          for f in triage_session(failures, owner=OWNER):
+              golden.add(f.as_eval_case())
+          report.post(channel="#ai-assistant", metrics=online_quality(days=7), new_cases=len(failures))
+
+      provider.on_model_update(lambda m: run_full_evals(model=m))      # re-evaluate on provider changes
+    takeaway: "AI quality decays without ownership. Run AI features as products with SLOs, a weekly failure review and change management."
+    followup: "Six months after launch, usage dropped and answers got worse. Nobody changed anything. Why?"
+
+  - id: overpromising-to-executives
+    title: Overpromising to executives
+    tags: [Leadership, Adoption]
+    scenario: |
+      The CEO announced that the AI assistant will handle 80% of customer queries by Q2. Your data says 45% is realistic at
+      the current quality bar.
+    antipattern: |
+      **Committing to deterministic targets for a probabilistic system**, either by trying to hit the number anyway or by
+      telling the CEO they're wrong.
+    fails: |
+      - Pressure to hit the target leads to cutting corners on quality and safety.
+      - When the target slips, the AI program loses credibility and budget.
+      - A flat "you're wrong" damages trust without offering a path.
+    diagram:
+      bad: ["CEO: 80% by Q2", "!Commit to the number", "Quality / safety corners cut", "!Credibility crisis"]
+      bad_note: "Deterministic promise, probabilistic system"
+      good: ["Containment data by query type", "+Scenarios with trade-offs (45% / 60% / 80%)", "+Error budget + guardrail metrics", "+Regular progress reporting", "Credible roadmap"]
+      good_note: "Reset expectations early with evidence and a path"
+    solution: |
+      Reset expectations early, **with evidence and a path**:
+
+      - Show containment by query type, error rate at each automation level and the customer impact of wrong answers.
+      - Offer **scenarios with trade-offs**: 45% at today's quality bar by Q2; 60% by Q3 with listed investments; 80% only with a higher error rate or narrower scope.
+      - Agree an **error budget** and **guardrail metrics** (CSAT, compliance) that can't be traded away.
+      - Report progress on a regular cadence with the same metrics.
+    works: |
+      Leadership gets a choice instead of a surprise, and quality guardrails are protected. In one example, the executive
+      team agreed to "50% by Q2, 70% by Q4, CSAT ≥ 4.3"; the team beat the Q2 number, which built the credibility to win budget
+      for the next phase.
+    code: |
+      def scenarios(by_query_type):
+          out = []
+          for target_quality in (0.95, 0.92, 0.88):            # stricter → lower containment
+              contained = sum(v.volume for v in by_query_type if v.accuracy >= target_quality)
+              out.append({"quality_bar": target_quality, "containment": contained / total_volume(by_query_type),
+                          "investments": investments_needed(target_quality)})
+          return out
+
+      GUARDRAILS = {"csat_min": 4.3, "compliance_violations": 0}   # not tradeable for containment
+    takeaway: "Probabilistic systems need scenario-based commitments. Offer trade-offs with evidence, agree guardrail metrics, and report against them."
+    followup: "Your CEO announced 80% automation by Q2; your data says 45%. What do you do?"
+
+  - id: design-starts-with-the-model
+    title: System design that starts with the model
+    tags: [Leadership, Quality]
+    scenario: |
+      In an architecture review (or a design interview), the first sentence is "I'd use a frontier model with LangChain",
+      before anyone has asked about users, scale, data or risk.
+    antipattern: |
+      **The design starts from a model and framework choice** instead of requirements and constraints.
+    fails: |
+      - Requirements such as latency, cost, permissions and risk end up retrofitted around an early tool choice.
+      - Model and framework choices are the most volatile part of the stack, so the design ages fastest where it began.
+      - Reviewers and interviewers read it as a lack of systems thinking.
+    diagram:
+      bad: ["\"Use model X + framework Y\"", "!Requirements retrofitted", "Gaps in data / risk / ops", "Weak design"]
+      bad_note: "Tool-first design"
+      good: ["+Users, scale, latency & cost targets", "+Data, permissions, risk level", "Retrieval · workflow vs agent · guardrails", "+Evaluation + operations", "Model choice last"]
+      good_note: "Every requirement traced to a component"
+    solution: |
+      Use a **six-step design template**:
+
+      1. Clarify users, scale (documents, QPS), latency and cost targets, and risk level.
+      2. Data: sources, ingestion, chunking, metadata, freshness, permissions.
+      3. Retrieval: hybrid + rerank + compression, and why each.
+      4. Generation or agent: workflow vs agent, tools, guardrails, human approval.
+      5. Evaluation: golden set, offline metrics, online feedback, tracing.
+      6. Operations: latency and cost budget, caching, monitoring, failure modes, rollout.
+    works: |
+      The design is anchored in durable requirements, so model and framework become replaceable details chosen last. Tracing
+      every requirement to a component makes gaps visible during review rather than in production.
+    code: |
+      DESIGN_TEMPLATE = ["requirements", "data", "retrieval", "generation_or_agent", "evaluation", "operations"]
+
+      def review(design):
+          missing = [s for s in DESIGN_TEMPLATE if not design.sections.get(s)]
+          untraced = [r for r in design.requirements if not any(r.id in c.satisfies for c in design.components)]
+          return {"missing_sections": missing, "untraced_requirements": untraced,
+                  "model_chosen_before_requirements": design.first_decision == "model"}
+    takeaway: "Start from requirements and risk, and choose the model last. A design should trace every requirement to a component."
+    followup: "Walk me through how you'd design an enterprise document Q&A system over 5 million documents with strict permissions."

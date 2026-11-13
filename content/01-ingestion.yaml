@@ -1,7 +1,7 @@
 id: ingestion
 num: 1
-short: Ingestion & Chunking
-title: Data Ingestion & Chunking
+short: Ingestion & Data Pipelines
+title: Data Ingestion, Pipelines & Governance
 summary: Retrieval quality is capped by ingestion quality. These anti-patterns corrupt knowledge before a single query is run.
 patterns:
   - id: fixed-size-chunking

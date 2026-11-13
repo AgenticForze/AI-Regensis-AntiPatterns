@@ -1,0 +1,46 @@
+source: rag-scenarios
+section: ingestion
+patterns:
+  - id: nightly-full-rebuild
+    title: Rebuilding the whole index every night
+    tags: [Cost, Reliability, Scale]
+    scenario: |
+      The nightly index job now takes 30 hours, so it overlaps itself. Embedding bills spike, and documents edited at 9 am
+      aren't searchable until the next day.
+    antipattern: |
+      **Full rebuilds instead of incremental updates.** Fine at 10K documents; at 50M chunks it re-embeds 25B tokens to pick
+      up a 0.1% change.
+    fails: |
+      - Cost and runtime scale with the whole corpus, not with what changed.
+      - Freshness is capped at once a day, and slips further as the job grows.
+      - Overlapping runs compete for the same resources and can corrupt or double-write the index.
+    diagram:
+      bad: ["Sources", "!Nightly full re-embed", "!30-hour job", "Stale index + cost spikes"]
+      bad_note: "Paying to re-embed 99.9% unchanged content"
+      good: ["Change events / updated_at", "+Hash each chunk", "+Re-embed changed only", "+Upsert + tombstones", "+Weekly reconciliation"]
+      good_note: "Change data capture as the main path; full reconciliation only as a safety net"
+    solution: |
+      Use **change data capture**:
+
+      1. Consume change events (or poll `updated_at`).
+      2. Hash each chunk's normalized text and **re-embed only chunks whose hash changed**.
+      3. Upsert by stable chunk ID; tombstone removed chunks.
+      4. Keep a periodic **full reconciliation (weekly)** to catch drift, not as the main path.
+    works: |
+      Embedding cost tracks the rate of change rather than corpus size, and edits become searchable in minutes. The
+      trade-off is more moving parts (queue, hash registry). Catch regressions with an index-lag SLO ("95% of edits searchable
+      within 15 minutes") and embedding tokens per day.
+    code: |
+      def on_doc_changed(doc):
+          new = {chunk_id(doc.id, c.section, i): c for i, c in enumerate(chunk_doc(doc))}
+          old = registry.chunk_hashes(doc.id)             # {chunk_id: hash}
+          changed = [cid for cid, c in new.items() if old.get(cid) != sha256(normalize(c.text))]
+          removed = set(old) - set(new)
+          if changed:
+              vecs = embed([new[c].text for c in changed])  # only what changed
+              store.upsert(ids=changed, vectors=vecs, meta=[new[c].meta for c in changed])
+          if removed:
+              store.delete(ids=list(removed))
+          registry.save(doc.id, {cid: sha256(normalize(c.text)) for cid, c in new.items()})
+    takeaway: "Re-embed what changed, not what exists. Change data capture plus a weekly reconciliation beats nightly rebuilds on cost and freshness."
+    followup: "Your nightly index rebuild now takes longer than a day. What do you change?"

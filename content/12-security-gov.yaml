@@ -1,7 +1,7 @@
 id: security-gov
 num: 12
-short: Security & Governance
-title: Security, Governance & Responsible AI
+short: Guardrails & AI Security
+title: Guardrails, AI Security & Responsible AI
 summary: Enterprise AI succeeds or stalls in the risk committee. These anti-patterns are the ones CISOs, regulators and audit teams find first.
 patterns:
   - id: prompt-injection

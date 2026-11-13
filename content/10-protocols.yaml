@@ -1,7 +1,7 @@
 id: protocols
 num: 10
-short: Protocols (MCP & A2A)
-title: Protocols & Interoperability
+short: Tools, MCP & A2A
+title: Tool Design, MCP & A2A
 summary: The Model Context Protocol (MCP) standardizes how agents reach tools and data. Agent-to-agent (A2A) protocols standardize how agents reach each other. Both widen the attack surface if they're adopted without identity and governance.
 patterns:
   - id: bespoke-integrations

@@ -1,0 +1,2473 @@
+source: regensis
+section: observability
+patterns:
+- id: obs-01
+  title: All dashboards green while the bot invents outage ETAs
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    During a regional fiber outage, a carrier's chatbot tells thousands of customers "Service will be restored by 6 pm." No such estimate existed; the NOC's restoration time was unknown. APM dashboards show 99.9% availability and normal latency the whole time. Social media catches it before the operations team does.
+  antipattern: |-
+    **Classic APM only (latency, errors, CPU).**
+
+    *Think of it this way:* A smoke detector that only checks its own battery. It reports "working" while the kitchen burns.
+  fails: |-
+    **Mechanism:** LLM failures are semantic. A hallucination returns HTTP 200.
+
+    - Monitoring covers availability, latency and errors only.
+    - A hallucination returns HTTP 200.
+    - No signal measured whether answers were grounded in outage data.
+
+    **Root cause:** Classic APM was used as the only monitoring for a semantic system.
+
+    **Where it breaks:** Production monitoring.
+  diagram:
+    bad:
+    - Fiber outage · Region
+    - '!Bot: ''by 6 pm'' · Invented ETA'
+    - 99.9% uptime · All green
+    - '!Social media · Finds it first'
+    bad_note: APM only (uptime, latency, errors)
+    good:
+    - Faithfulness · Sampled judge
+    - +Claim check · Vs incident data
+    - +Block promise · If unsupported
+    - Spike alerts · Times, credits
+    good_note: Quality signals and claim checks per intent
+  solution: |-
+    1. Add quality signals (sampled online judge for faithfulness to tool data, refusal rate, escalation rate, thumbs-down rate) per intent.
+    2. For outage intents, check that any time or credit promise appears in the incident system (TMF642 alarm or incident record) and block it otherwise.
+    3. Alert on spikes in specific claims (times, money, promises) during incidents.
+  works: |-
+    **Trade-off to manage:** Online judging costs money; sample, and run cheap rule checks on 100% of risky intents.
+
+    **How you prove it worked:**
+
+    - Online faithfulness score per intent with alerts; claim-pattern monitoring.
+
+    **Same pattern elsewhere:** FinTech: a bank bot tells customers a payment outage will be fixed "within the hour" during a core-banking incident with no ETA.
+  takeaway: In LLM systems, 200 OK doesn't mean correct.
+  related:
+  - obs-18
+  - obs-19
+  code: |
+    CLAIM = re.compile(r"(\b\d{1,2}(:\d{2})?\s?(am|pm)\b|\$\d+|credit|back up by)", re.I)
+
+    def guard_outage_reply(reply, account):
+        if CLAIM.search(reply):
+            inc = tmf642.incident_for(account.service_id)
+            if not inc or not claims_match(reply, inc.eta, inc.credit_policy):
+                metrics.inc("blocked_unbacked_claim", intent="outage")
+                return "We're working on the outage. I'll text you as soon as there's a confirmed restore time."
+        return reply
+  lang: python
+- id: obs-02
+  title: Wrong escrow answer cannot be reconstructed
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A borrower complains that the mortgage assistant told them their escrow shortage would be spread over 12 months, but their statement demanded a lump sum. The complaints team asks engineering what happened. Logs are split across five services with no shared id; the retrieved documents, the prompt version and the model version can't be determined.
+  antipattern: |-
+    **Separate logs per service with no shared trace ID.**
+
+    *Think of it this way:* An aircraft with no flight recorder. After an incident, everyone has a theory.
+  fails: |-
+    **Mechanism:** One answer spans retrieval, reranking, several LLM calls, and tools. Without correlation, debugging is guesswork.
+
+    - One answer spans query rewrite, retrieval, two LLM calls and a servicing API.
+    - Each service logs separately, with no correlation id.
+    - Prompts and retrieved content weren't recorded.
+
+    **Root cause:** No end-to-end tracing with LLM-specific detail.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - Complaint · Escrow answer
+    - '!5 services · Separate logs'
+    - No trace id · No prompt
+    - '!Unknown cause · Can''t replay'
+    bad_note: Separate logs, no trace id
+    good:
+    - OTel spans · Every step
+    - +Record · Prompt, doc ids
+    - +Versions · Model, prompt
+    - Replay · From trace id
+    good_note: End-to-end trace with prompts, docs, versions
+  solution: |-
+    1. Distributed tracing (OpenTelemetry plus an LLM tracing backend such as Langfuse, LangSmith or Arize Phoenix) with spans for every step.
+    2. Record rendered prompt, retrieved document ids, tool inputs and outputs, model and prompt versions per span (with redaction).
+    3. Show the trace id in the complaint system so any answer can be replayed.
+  works: |-
+    **Trade-off to manage:** Storing full traces costs money and raises privacy risk; redact and set retention.
+
+    **How you prove it worked:**
+
+    - Percentage of production answers with a complete trace.
+
+    **Same pattern elsewhere:** Telco: a customer disputes what the bot said about a device trade-in value, and the carrier can't show what the bot saw.
+  takeaway: Every answer should be replayable from its trace.
+  related:
+  - tel-07
+  - tel-19
+  - obs-03
+  code: |
+    from opentelemetry import trace
+    tracer = trace.get_tracer("escrow-assistant")
+
+    with tracer.start_as_current_span("answer") as root:
+        root.set_attribute("prompt.version", P.version); root.set_attribute("gen_ai.request.model", MODEL)
+        with tracer.start_as_current_span("retrieve") as s:
+            docs = retrieve(q); s.set_attribute("retrieval.doc_ids", [d.id for d in docs])
+        with tracer.start_as_current_span("generate") as s:
+            out = llm(render(P, docs, q)); s.set_attribute("gen_ai.prompt", redact(render(P, docs, q)))
+        complaints.attach_trace_id(case_id, root.get_span_context().trace_id)
+  lang: python
+- id: obs-03
+  title: Two thousand thumbs-down clicks with no trace
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's app assistant collects thumbs-up and thumbs-down. After a quarter, there are 2,000 negative votes in an analytics table, keyed only by timestamp and app session. None can be linked to the specific answer, prompt or retrieved content, so none can be turned into fixes or eval cases.
+  antipattern: |-
+    **Feedback stored in a separate table without a trace ID.**
+
+    *Think of it this way:* A suggestion box full of notes that say "this was bad" with no indication of what "this" was.
+  fails: |-
+    **Mechanism:** Feedback without context can't be diagnosed or turned into eval cases.
+
+    - Feedback and traces live in different systems with no shared key.
+    - Triage is impossible without the context.
+    - The best source of eval cases is wasted.
+
+    **Root cause:** Feedback events don't carry the trace id.
+
+    **Where it breaks:** Instrumentation and data model.
+  diagram:
+    bad:
+    - Thumbs down · 2,000 votes
+    - '!Timestamp only · No trace id'
+    - No context · Can't triage
+    - '!Wasted · No fixes'
+    bad_note: Feedback stored without a trace id
+    good:
+    - Trace id · On response
+    - +On feedback · Same id
+    - +Triage queue · Weekly
+    - Eval cases · From failures
+    good_note: Trace id on feedback, triage queue, eval cases
+  solution: |-
+    1. Return a trace id with every response and attach it to feedback events.
+    2. Build a triage queue of negative-feedback traces, reviewed weekly.
+    3. Turn confirmed failures into eval cases.
+  works: |-
+    **Trade-off to manage:** Few users leave feedback; combine explicit votes with implicit signals (rephrasing, escalation).
+
+    **How you prove it worked:**
+
+    - Share of feedback events linked to a trace.
+
+    **Same pattern elsewhere:** FinTech: a bank's thumbs-down data can't be tied to the answer that caused it, so complaints about wrong fee information go unfixed.
+  takeaway: Feedback is only useful when it points to a trace.
+  related:
+  - tel-13
+  - eval-05
+  code: |
+    @app.post("/chat")
+    def chat(req):
+        with tracer.start_as_current_span("chat") as span:
+            reply = assistant(req.message)
+            return {"reply": reply, "trace_id": format(span.get_span_context().trace_id, "032x")}
+
+    @app.post("/feedback")
+    def feedback(f: Feedback):                       # {"trace_id": ..., "rating": "down", "comment": ...}
+        store.save(f)
+        if f.rating == "down":
+            triage_queue.put(f.trace_id)             # weekly review → confirmed failures become eval cases
+  lang: python
+- id: obs-04
+  title: Average latency hides 40-second dispute answers
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  scenario: |-
+    A card issuer's dispute assistant averages 2.1 seconds per answer, well within its target. But 5% of customers, mostly those with several disputed transactions, wait over 40 seconds, and many abandon the chat and call. The team only charts the mean.
+  antipattern: |-
+    **Mean-based dashboards and alerts.**
+
+    *Think of it this way:* A bus company saying the average wait is 5 minutes, ignoring the stop where people wait an hour.
+  fails: |-
+    **Mechanism:** LLM latency has long tails (long outputs, retries, agent loops).
+
+    - LLM latency has a long tail (long outputs, retries, multi-tool runs).
+    - Means smooth over the tail.
+    - Alerts never fire.
+
+    **Root cause:** Mean-based dashboards and alerts.
+
+    **Where it breaks:** Metrics and SLOs.
+  diagram:
+    bad:
+    - Avg 2.1 s · Looks fine
+    - '!5% wait 40 s · Multi-dispute'
+    - Mean only · Charted
+    - '!Abandon · Then call'
+    bad_note: Alert on average latency
+    good:
+    - p95 / p99 · Alerting
+    - +TTFT · First token
+    - +Per step · Breakdown
+    - By intent · SLO budget
+    good_note: P95/p99, TTFT and per-step latency by intent
+  solution: |-
+    1. Track and alert on p95 and p99, time to first token and per-step latency.
+    2. Track output token length distributions, which drive the tail.
+    3. Break down latency by intent and complexity (number of transactions).
+  works: |-
+    **Trade-off to manage:** Percentiles need histogram metrics, which cost a bit more to store.
+
+    **How you prove it worked:**
+
+    - SLO on p95 latency per intent, with an error budget.
+
+    **Same pattern elsewhere:** Telco: a bill-explanation bot's average looks fine, but multi-line family accounts wait 30+ seconds.
+  takeaway: Users experience the tail, not the mean.
+  related:
+  - tel-08
+  - rag-18
+  code: |
+    # Prometheus: alert on the tail, not the mean
+    # - alert: DisputeAnswerP99High
+    #   expr: histogram_quantile(0.99, sum by (le, intent) (rate(llm_request_seconds_bucket[5m]))) > 12
+    # - alert: TTFTHigh
+    #   expr: histogram_quantile(0.95, sum by (le) (rate(llm_ttft_seconds_bucket[5m]))) > 1.5
+
+    latency.labels(intent=intent, complexity=bucket(n_transactions)).observe(elapsed)
+    output_tokens.labels(intent=intent).observe(resp.usage.output_tokens)
+  lang: python
+- id: obs-05
+  title: One MVNO tenant burns the monthly LLM budget in a week
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier offers its AI care assistant to MVNO partners as a white-label service. One MVNO integrates it into an automated workflow that calls it in a loop. The carrier only sees cost on the provider's monthly invoice. By then the MVNO has used $60k of tokens, against a $15k monthly budget for all tenants.
+  antipattern: |-
+    **Cost tracked only from the provider's monthly bill.**
+
+    *Think of it this way:* A shared office phone with no per-desk billing. You find out who called abroad when the bill arrives.
+  fails: |-
+    **Mechanism:** One runaway agent, prompt bug, or abusive tenant can burn the budget in days.
+
+    - Cost is tracked from the invoice, not in real time.
+    - No per-tenant quotas or attribution.
+    - Automated misuse is invisible until month end.
+
+    **Root cause:** No cost observability at the request level.
+
+    **Where it breaks:** Gateway and metering.
+  diagram:
+    bad:
+    - MVNO tenant · Loops calls
+    - '!No metering · Per tenant'
+    - Monthly bill · Only view
+    - '!$60k used · Vs $15k budget'
+    bad_note: Cost visible only on the invoice
+    good:
+    - Gateway meter · Per request
+    - +Tenant quota · Rate limits
+    - +Budget alerts · 50/80/100%
+    - Chargeback · Same meter
+    good_note: Real-time metering and quotas per tenant
+  solution: |-
+    1. Meter tokens and cost per request, feature, tenant and user, in real time, via an LLM gateway.
+    2. Set per-tenant quotas and rate limits, with budget alerts at 50%, 80% and 100%.
+    3. Bill or charge back tenants from the same meter.
+  works: |-
+    **Trade-off to manage:** Hard quotas can block legitimate peaks; use soft limits with alerts plus hard caps.
+
+    **How you prove it worked:**
+
+    - Daily cost per tenant against forecast; anomaly detection on call rates.
+
+    **Same pattern elsewhere:** FinTech: a bank's API partner in an embedded-finance programme triggers runaway calls to the bank's AI document checker.
+  takeaway: Tokens are money, so meter them like money.
+  related:
+  - cost-07
+  - tel-04
+  - ops-07
+  code: |
+    @gateway.middleware
+    def meter(req, call_next):
+        if spend.month_to_date(req.tenant) >= quota[req.tenant]:
+            raise QuotaExceeded(req.tenant)
+        resp = call_next(req)
+        usd = price(req.model, resp.usage)
+        spend.add(tenant=req.tenant, feature=req.feature, user=req.user, usd=usd)   # same meter drives chargeback
+        for pct in (0.5, 0.8, 1.0):
+            if crossed(req.tenant, pct): alert(owner(req.tenant), f"{int(pct*100)}% of monthly AI budget")
+        return resp
+  lang: python
+- id: obs-06
+  title: Tax-season questions drift outside what the bot knows
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's assistant was built around everyday banking. Each January to April, questions about tax forms (1099-INT, corrected forms, mortgage interest statements) rise to 20% of traffic. Answer quality drops, but nobody sees it, because outputs are not monitored by topic and the overall score is averaged over the year.
+  antipattern: |-
+    **Static dashboards, no baselines.**
+
+    *Think of it this way:* A shop that doesn't notice its customers have changed from tourists to locals and keeps stocking postcards.
+  fails: |-
+    **Mechanism:** Query mix, documents, and model behavior shift gradually.
+
+    - Input mix shifts with seasons, product launches and events.
+    - No baseline for topics or retrieval scores.
+    - Annual averages hide seasonal problems.
+
+    **Root cause:** No drift detection on inputs or retrieval.
+
+    **Where it breaks:** Monitoring.
+  diagram:
+    bad:
+    - Jan-Apr · Tax questions
+    - '!20% of traffic · New topic'
+    - Annual average · Hides it
+    - '!Quality drops · Unseen'
+    bad_note: Static dashboards, no input baseline
+    good:
+    - Cluster inputs · Embeddings
+    - +Baseline · Cluster shares
+    - +Alert · New clusters
+    - Pre-load · Seasonal content
+    good_note: Topic clusters and score distributions vs baseline
+  solution: |-
+    1. Cluster query embeddings and track cluster shares against a baseline; alert on new or growing clusters.
+    2. Track retrieval-score distributions and abstain rates per cluster.
+    3. Pre-load seasonal content and eval cases before known seasons.
+  works: |-
+    **Trade-off to manage:** Clustering produces noise; review the top movers only.
+
+    **How you prove it worked:**
+
+    - Weekly drift report of new topic clusters.
+
+    **Same pattern elsewhere:** Telco: each September, a new flagship phone launch shifts traffic to trade-in and pre-order questions.
+  takeaway: Watch the inputs, not just the outputs.
+  related:
+  - eval-05
+  - obs-09
+  code: |
+    def drift_report(window_days=7):
+        recent = embed_queries(logs.last(days=window_days))
+        labels = kmeans_baseline.predict(recent)
+        share = Counter(labels); base = baseline_share
+        new_clusters = [c for c in share if share[c] / len(labels) > 2 * base.get(c, 0.005)]
+        abstain = {c: abstain_rate(cluster=c) for c in new_clusters}
+        if new_clusters:
+            alert("query drift", clusters=describe(new_clusters), abstain=abstain)
+  lang: python
+- id: obs-07
+  title: Nobody can explain why the agent cancelled a line
+  tags:
+  - Reliability
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's care agent cancels a business customer's secondary line. The customer says they asked to cancel an add-on, not the line. The tool-call log shows cancel_subscription with the line id, but not what the agent saw or why it chose that tool. The carrier can't defend or explain the decision.
+  antipattern: |-
+    **Logging tool calls without the reasoning and context that led to them.**
+
+    *Think of it this way:* A bank teller's till log that shows a withdrawal but not the slip the customer signed.
+  fails: |-
+    **Mechanism:** Post-incident review and compliance need the decision path.
+
+    - Tool calls are logged without inputs, reasoning or context.
+    - Customer instructions and the agent's interpretation are lost.
+    - Compliance and complaint handling need the decision path.
+
+    **Root cause:** Action logging without decision context.
+
+    **Where it breaks:** Tracing and audit logging.
+  diagram:
+    bad:
+    - '''Cancel add-on'' · Customer'
+    - '!cancel_sub · Line cancelled'
+    - 'Log: call only · No context'
+    - '!Can''t explain · Complaint'
+    bad_note: Tool calls logged without context
+    good:
+    - Step trace · Input, plan
+    - +Tool + args · Recorded
+    - +Confirmation · Captured
+    - Audit log · Immutable
+    good_note: Decision trace and immutable audit for writes
+  solution: |-
+    1. Record per step the model input (redacted), the model's stated plan or rationale where available, the tool chosen, arguments and result.
+    2. Keep an immutable audit log for every write action, linked to the conversation and customer confirmation.
+    3. Require explicit confirmation for destructive actions and record it.
+  works: |-
+    **Trade-off to manage:** Detailed audit logs are sensitive data; restrict access and set retention.
+
+    **How you prove it worked:**
+
+    - Audit completeness checks on write actions.
+
+    **Same pattern elsewhere:** FinTech: a bank agent closes a savings account and the bank cannot show what the customer asked for.
+  takeaway: For agents, the audit trail is a product requirement.
+  related:
+  - gov-07
+  - aev-12
+  code: |
+    def execute_write(action, ctx):
+        confirmation = ctx.require_confirmation(action) if action.destructive else None
+        result = tools[action.tool](**action.args)
+        audit_log.append(immutable=True, record={
+            "conversation_id": ctx.conversation_id, "customer_id": ctx.customer_id,
+            "model_input_ref": ctx.redacted_input_ref, "rationale": action.rationale,
+            "tool": action.tool, "args": action.args, "result": result.status,
+            "confirmation_id": confirmation.id if confirmation else None})
+        return result
+  lang: python
+- id: obs-08
+  title: Forty dashboards and no SLO during an incident
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's AI platform has 40 dashboards for its assistants. During a quality incident in the payments assistant, the on-call engineer cannot tell which metric defines "broken", who owns it, or whether to roll back. The incident runs for 3 hours.
+  antipattern: |-
+    **Metric sprawl without SLOs.**
+
+    *Think of it this way:* A cockpit with every gauge but no red lines and no checklist.
+  fails: |-
+    **Mechanism:** Too many signals and no defined targets.
+
+    - Metrics without targets or owners.
+    - Too many signals, no hierarchy.
+    - No runbook links from alerts.
+
+    **Root cause:** Dashboards built before SLOs.
+
+    **Where it breaks:** Operating model.
+  diagram:
+    bad:
+    - 40 dashboards · No targets
+    - '!Incident · Payments bot'
+    - Which metric? · Who owns?
+    - '!3 hours · To resolve'
+    bad_note: Metric sprawl without SLOs
+    good:
+    - SLOs · 4 per assistant
+    - +Error budget · Per SLO
+    - +Owner · Named
+    - Runbook · From alert
+    good_note: Few SLOs with owners, budgets, runbooks
+  solution: |-
+    1. Define a few SLOs per assistant (availability, p95 latency, quality score, cost per task) with targets and error budgets.
+    2. Assign owners, and link every alert to a runbook.
+    3. Build one overview dashboard per SLO and drill-downs underneath.
+  works: |-
+    **Trade-off to manage:** Quality SLOs are harder to define than latency; start with proxies and refine.
+
+    **How you prove it worked:**
+
+    - Mean time to detect and resolve for AI incidents.
+
+    **Same pattern elsewhere:** Telco: during a bot incident, the care operations team and the AI team argue about which dashboard is right.
+  takeaway: Define SLOs first, dashboards second.
+  related:
+  - eval-20
+  - obs-19
+  code: |
+    SLOS = {
+        "card_assistant": {
+            "availability": {"target": 0.995, "owner": "platform"},
+            "p95_latency_s": {"target": 4.0, "owner": "platform"},
+            "quality_score": {"target": 0.92, "owner": "product"},
+            "cost_per_task_usd": {"target": 0.04, "owner": "finops"}}}
+
+    for name, slo in SLOS["card_assistant"].items():
+        alerting.burn_rate_alert(name, slo["target"], owner=slo["owner"], runbook=f"runbooks/card_assistant/{name}.md")
+  lang: python
+- id: obs-09
+  title: Team rewrites prompts while an index shard is empty
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    Answer quality of a carrier's device-support bot drops sharply for Samsung and Pixel questions. The team rewrites prompts for a week. The real cause was a failed reindex that left the Android device-guide shard empty. Retrieval returned zero results, and the model answered from memory.
+  antipattern: |-
+    **Observing only the LLM call.**
+
+    *Think of it this way:* Repainting a shop's sign when the problem is that the shelves are empty.
+  fails: |-
+    **Mechanism:** Retrieval is often the root cause.
+
+    - Only the LLM call is observed.
+    - Retrieval returned zero or low-score results silently.
+    - The model filled the gap from training data.
+
+    **Root cause:** No observability on retrieval.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - Android Qs · Quality drop
+    - '!Shard empty · Failed reindex'
+    - Zero results · Silent
+    - '!Prompt rewrites · A week'
+    bad_note: Observe only the LLM call
+    good:
+    - Log docs · Ids, scores
+    - +Zero-result · Alert
+    - +Shard check · Doc counts
+    - Root cause · Same day
+    good_note: Retrieval metrics and shard health checks
+  solution: |-
+    1. Log retrieved doc ids, scores and result counts per request.
+    2. Alert on zero-result rate and on drops in top-score distributions per collection.
+    3. Health-check each index shard (document count against expected).
+  works: |-
+    **Trade-off to manage:** Per-request retrieval logs add storage; aggregate them to metrics and keep samples.
+
+    **How you prove it worked:**
+
+    - Zero-result and low-score rates by collection.
+
+    **Same pattern elsewhere:** FinTech: a bank's policy assistant degrades after a SharePoint permissions change makes half the policy library invisible to the indexer.
+  takeaway: Observe retrieval as closely as generation.
+  related:
+  - rag-16
+  - rag-05
+  code: |
+    def logged_retrieve(q, collection):
+        hits = index.search(q, collection=collection, k=10)
+        metrics.observe("retrieval_results", len(hits), collection=collection)
+        metrics.observe("retrieval_top_score", hits[0].score if hits else 0, collection=collection)
+        trace.current_span().set_attribute("retrieval.doc_ids", [h.id for h in hits])
+        return hits
+
+    @schedule(every="5m")
+    def shard_health():
+        for shard in index.shards():
+            if shard.doc_count < 0.9 * expected_count[shard.id]: page("index shard under-populated", shard.id)
+  lang: python
+- id: obs-10
+  title: PII filter blocks 15% of legitimate account questions
+  tags:
+  - Reliability
+  - Security
+  - FinTech
+  scenario: |-
+    A bank adds an input PII filter to its assistant. It starts blocking any message with a long number, including "my last payment of 1250 to account ending 4471". For a week, 15% of legitimate questions get "I can't help with that" before anyone notices.
+  antipattern: |-
+    **Guardrails run silently.**
+
+    *Think of it this way:* A bouncer told to stop anyone suspicious who ends up turning away regular customers, and no one counts how many.
+  fails: |-
+    **Mechanism:** Guardrails have false positives and false negatives that change over time.
+
+    - Guardrails run silently with no metrics.
+    - False positives look like normal refusals.
+    - Changes to guardrail rules aren't monitored.
+
+    **Root cause:** Guardrails are not observed like models.
+
+    **Where it breaks:** Guardrail instrumentation.
+  diagram:
+    bad:
+    - PII filter · Added
+    - '!Blocks numbers · Any long one'
+    - 15% blocked · Legit questions
+    - '!A week · Unnoticed'
+    bad_note: Guardrails run silently
+    good:
+    - Block rate · Per rule
+    - +Sample review · False positives
+    - +Alert · Sudden change
+    - Canary · Rule changes
+    good_note: Block-rate metrics, review samples, canary changes
+  solution: |-
+    1. Emit block rate per guardrail and rule, by intent.
+    2. Sample blocked items for human review and measure false-positive rate.
+    3. Alert on sudden changes, and deploy guardrail changes with canaries.
+  works: |-
+    **Trade-off to manage:** Reviewing blocked content may involve sensitive data; use restricted access.
+
+    **How you prove it worked:**
+
+    - Block rate trends and reviewed false-positive rate.
+
+    **Same pattern elsewhere:** Telco: a toxicity filter blocks customers describing a "dead line" or "killed signal".
+  takeaway: Monitor your guardrails like any other model.
+  related:
+  - sec-11
+  - obs-14
+  code: |
+    def apply_guardrail(text, intent):
+        result = pii_guard.check(text)
+        metrics.inc("guardrail_decision", rule=result.rule, action=result.action, intent=intent)
+        if result.action == "block" and random() < 0.05:
+            review_queue.put(text_ref=store_redacted(text), rule=result.rule)   # measure false positives
+        return result
+
+    # alert: block rate for an intent changes >2x vs 7-day baseline; guardrail changes ship behind a canary flag
+  lang: python
+- id: obs-11
+  title: Quality dip that can't be split by prompt version
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier ships a new prompt to 50% of traffic on Tuesday and an index refresh on Wednesday. Quality dips Thursday. Traces carry no prompt or index version tags, so the team can't compare cohorts and rolls back both changes.
+  antipattern: |-
+    **Traces not tagged with prompt, model, and config versions.**
+
+    *Think of it this way:* Changing two ingredients in a recipe at once without writing down which batch had which.
+  fails: |-
+    **Mechanism:** You can't attribute changes to deploys.
+
+    - Traces lack version metadata.
+    - Changes overlap in time.
+    - Attribution is guesswork.
+
+    **Root cause:** No version tags on telemetry.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - 'Tue: prompt · 50% traffic'
+    - '!Wed: index · Refreshed'
+    - 'Thu: dip · No tags'
+    - '!Roll back all · Guesswork'
+    bad_note: Traces without version tags
+    good:
+    - Version tags · On traces
+    - +Flags · Recorded
+    - +Cohorts · Side by side
+    - Diff · Root cause
+    good_note: Tag prompt, model, index, flags; compare cohorts
+  solution: |-
+    1. Tag every trace with prompt version, model version, index version, tool versions and feature-flag assignments.
+    2. Compare metrics by cohort side by side.
+    3. Avoid overlapping releases on the same assistant, or use flags to separate them.
+  works: |-
+    **Trade-off to manage:** More tags means more cardinality; put versions on traces and logs, not on high- volume metrics labels.
+
+    **How you prove it worked:**
+
+    - Cohort comparison dashboard per release.
+
+    **Same pattern elsewhere:** FinTech: a bank can't tell if a fraud-summary regression came from a model upgrade or a new data field.
+  takeaway: Version tags turn a mystery into a diff.
+  related:
+  - tel-10
+  - ops-01
+  code: |
+    def tag_trace(span, cfg):
+        for k, v in {"prompt.version": cfg.prompt_version, "model.version": cfg.model,
+                     "index.version": cfg.index_alias_target, "tools.version": cfg.tools_hash,
+                     "flags": ",".join(f"{f}={v}" for f, v in cfg.flags.items())}.items():
+            span.set_attribute(k, v)
+
+    cohort_compare(metric="quality_score", by=["prompt.version", "index.version"], window="7d")
+  lang: python
+- id: obs-12
+  title: Payday 429s blamed on application bugs
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A neobank sees random assistant failures on the 1st and 15th of each month. Engineers spend weeks debugging the app. The real cause is provider 429 rate-limit responses at payday peaks, retried without backoff, which made things worse.
+  antipattern: |-
+    **Not monitoring 429s, provider latency, and retries.**
+
+    *Think of it this way:* Blaming the car for slow traffic during rush hour.
+  fails: |-
+    **Mechanism:** Provider-side limits and degradations look like application bugs.
+
+    - Provider responses (429, 5xx) are not monitored separately.
+    - Retries without backoff amplify the problem.
+    - Capacity is not planned for known peaks.
+
+    **Root cause:** The model provider is an unobserved dependency.
+
+    **Where it breaks:** Gateway metrics and capacity planning.
+  diagram:
+    bad:
+    - Payday peaks · 1st and 15th
+    - '!429s · From provider'
+    - Retry storm · No backoff
+    - '!Blamed app · Weeks lost'
+    bad_note: Provider limits not monitored
+    good:
+    - 429/5xx rate · Per provider
+    - +Headroom · TPM vs limit
+    - +Backoff · Plus jitter
+    - Peak quota · Planned
+    good_note: Provider health metrics, backoff, peak capacity
+  solution: |-
+    1. Monitor 429 and 5xx rates per provider and model, retry counts, queue depth and tokens-per-minute headroom.
+    2. Retry with exponential backoff and jitter, and shed low-priority traffic first.
+    3. Plan quota or provisioned throughput for known peaks.
+  works: |-
+    **Trade-off to manage:** Provisioned throughput costs more; use it for peak windows only if possible.
+
+    **How you prove it worked:**
+
+    - Headroom dashboard against provider limits.
+
+    **Same pattern elsewhere:** Telco: chatbot failures every bill-run day are traced to provider rate limits.
+  takeaway: Your provider is a dependency, so observe it.
+  related:
+  - ops-17
+  - agf-16
+  code: |
+    @retry(wait=wait_exponential_jitter(initial=0.5, max=20), stop=stop_after_attempt(4),
+           retry=retry_if_exception_type((RateLimited, ServerError)))
+    def call_model(req):
+        if req.priority == "low" and headroom_tpm(req.model) < 0.1:
+            raise Shed("low-priority traffic shed")              # shed first
+        return provider.generate(req)
+
+    metrics.gauge("provider_tpm_headroom", headroom_tpm(MODEL), model=MODEL)
+    metrics.inc("provider_status", code=resp.status_code, provider=PROVIDER)
+  lang: python
+- id: obs-13
+  title: Every reply looks fine but customers abandon long chats
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's per-message quality scores are high. Yet 35% of chats longer than 8 turns end in abandonment. Session review shows the bot asking for the same information twice, and looping between two help articles.
+  antipattern: |-
+    **Only per-request observability.**
+
+    *Think of it this way:* Rating every sentence of a phone call as polite while the caller still couldn't get their problem solved.
+  fails: |-
+    **Mechanism:** Many failures are conversational: repetition, forgetting, loops, frustration.
+
+    - Observability is per request.
+    - Conversational failures (loops, repetition, forgetting) appear only across turns.
+    - Nobody reviews whole sessions.
+
+    **Root cause:** No session-level metrics.
+
+    **Where it breaks:** Analytics and review.
+  diagram:
+    bad:
+    - Per-reply score · High
+    - '!Long chats · 8+ turns'
+    - Loops · Repeat asks
+    - '!35% abandon · Unseen'
+    bad_note: Per-message metrics only
+    good:
+    - Session metrics · Turns, repeats
+    - +Sentiment trend · Over turns
+    - +Session review · Sampled
+    - Repeat alert · Patterns
+    good_note: Session metrics and full-session review
+  solution: |-
+    1. Track turns to resolution, repeated questions, repeated article suggestions, sentiment trend and abandonment per session.
+    2. Review full sessions, not single turns, in quality sampling.
+    3. Alert on repetition patterns.
+  works: |-
+    **Trade-off to manage:** Session analysis needs stitching across channels and devices.
+
+    **How you prove it worked:**
+
+    - Abandonment by session length, repetition rate.
+
+    **Same pattern elsewhere:** FinTech: a bank chatbot loops between "reset password" and "unlock account" articles for locked-out users.
+  takeaway: Customers judge conversations, not single replies.
+  related:
+  - aev-20
+  - obs-03
+  code: |
+    def session_metrics(session):
+        qs = [t.user_text for t in session.turns]
+        return {"turns_to_resolution": len(session.turns) if session.resolved else None,
+                "repeated_questions": sum(similar(a, b) > 0.85 for a, b in pairwise(qs)),
+                "repeated_articles": len(session.articles) - len(set(session.articles)),
+                "sentiment_trend": slope([sentiment(t.user_text) for t in session.turns]),
+                "abandoned": not session.resolved and session.ended_by == "user"}
+    # alert when repeated_questions >= 2 rate rises week over week
+  lang: python
+- id: obs-14
+  title: Silent fallback to a weaker model for three days
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's gateway falls back to a smaller model when the primary times out. A network misconfiguration causes timeouts on 60% of requests for three days. The fallback handles them quietly. Quality of loan-FAQ answers drops measurably and nobody knows why until a weekly review.
+  antipattern: |-
+    **Fallbacks without metrics or alerts.**
+
+    *Think of it this way:* A spare tyre that works so quietly you drive on it for a month.
+  fails: |-
+    **Mechanism:** Resilience features hide degradation.
+
+    - Resilience features hide degradation.
+    - Fallbacks emit no metric.
+    - Quality monitoring isn't split by which model answered.
+
+    **Root cause:** Fallbacks without telemetry.
+
+    **Where it breaks:** Gateway instrumentation.
+  diagram:
+    bad:
+    - Timeouts · 60% requests
+    - '!Fallback model · Quietly'
+    - Quality drop · 3 days
+    - '!Found weekly · Too late'
+    bad_note: Fallbacks with no telemetry
+    good:
+    - Fallback metric · Every one
+    - +Alert · Above baseline
+    - +Quality split · By model
+    - Fix root · Same day
+    good_note: Fallback metric, alert, quality by model
+  solution: |-
+    1. Emit a metric and trace attribute for every fallback, retry and degraded-mode response.
+    2. Alert when fallback rate exceeds baseline.
+    3. Split quality metrics by serving model.
+  works: |-
+    **Trade-off to manage:** None significant; it's a few counters.
+
+    **How you prove it worked:**
+
+    - Fallback rate dashboard and alert.
+
+    **Same pattern elsewhere:** Telco: a care bot silently falls back to a menu flow for a week after an API key expired.
+  takeaway: Every fallback should leave a footprint.
+  related:
+  - agf-16
+  - obs-10
+  code: |
+    def generate(req):
+        try:
+            return primary.generate(req)
+        except ProviderError:
+            span = trace.get_current_span()
+            span.set_attribute("llm.fallback", True); span.set_attribute("llm.serving_model", FALLBACK_MODEL)
+            metrics.inc("llm_fallback", reason="provider_error")
+            return fallback.generate(req)
+
+    # alert: rate(llm_fallback) > 3x baseline for 15m; quality dashboards split by llm.serving_model
+  lang: python
+- id: obs-15
+  title: Diagnosis agent repeats the same check 200 times overnight
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A NOC assistant agent investigating a cell-site alarm repeats the same KPI query 200 times overnight because the KPI API returns an empty result for a decommissioned site. The cost is $900 and the KPI API team sees load spikes.
+  antipattern: |-
+    **No live view of agent step counts.**
+
+    *Think of it this way:* A burglar alarm that keeps ringing all night because nobody set it to alert the owner.
+  fails: |-
+    **Mechanism:** Loops are cheap per step and expensive in total.
+
+    - No live view of agent step counts or repetition.
+    - Loops are cheap per step and expensive in total.
+    - No kill switch.
+
+    **Root cause:** Runaway agents are not detected in real time.
+
+    **Where it breaks:** Runtime monitoring.
+  diagram:
+    bad:
+    - Site alarm · Agent starts
+    - '!Empty KPI · Retired site'
+    - 200 repeats · Overnight
+    - '!$900 + load · Found later'
+    bad_note: No live view of agent runs
+    good:
+    - Live counters · Steps, cost
+    - +Repeat alert · Same args
+    - +Kill switch · Automatic
+    - On-call note · Summary
+    good_note: Live step/repeat alerts and a kill switch
+  solution: |-
+    1. Real-time alerts on steps per run, repeated tool-argument pairs and run duration outliers.
+    2. Automatic kill switch on thresholds, with a summary to on-call.
+    3. Combine with in-loop caps (see agf-02).
+  works: |-
+    **Trade-off to manage:** Tight thresholds may kill legitimate long runs; tune per agent.
+
+    **How you prove it worked:**
+
+    - Live runs dashboard with step and cost counters.
+
+    **Same pattern elsewhere:** FinTech: a sanctions-screening agent re-screens the same name variant thousands of times.
+  takeaway: Detect loops in minutes, not on the invoice.
+  related:
+  - agf-02
+  - cost-07
+  code: |
+    @on_span_end(kind="tool")
+    def runaway_detector(span):
+        run = runs.get(span.run_id)
+        run.calls[(span.tool, span.args_hash)] += 1
+        if run.steps > 50 or max(run.calls.values()) > 5 or run.duration_s > 1800:
+            kill_switch.stop(run.id)
+            oncall.notify(summary(run))                  # what it was doing and why it was stopped
+  lang: python
+- id: obs-16
+  title: Traces redacted so heavily that nothing can be debugged
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    To meet PCI DSS and privacy rules, a card issuer replaces every number and name in traces with "[REDACTED]". When the dispute assistant misreads transaction amounts, engineers see "Customer disputes [REDACTED] at [REDACTED] for [REDACTED]" and can't debug.
+  antipattern: |-
+    **All-or-nothing approach to sensitive data.**
+
+    *Think of it this way:* Blacking out every word of a document to keep it safe, then wondering why nobody can use it.
+  fails: |-
+    **Mechanism:** Too much redaction kills debuggability. Too little violates privacy.
+
+    - All-or-nothing redaction removes debugging value.
+    - Amounts and merchants aren't sensitive in the same way as card numbers.
+    - No controlled access path exists for real investigations.
+
+    **Root cause:** Redaction designed without considering debugging needs.
+
+    **Where it breaks:** Telemetry pipeline and access policy.
+  diagram:
+    bad:
+    - PCI concern · Traces
+    - '!All redacted · Every number'
+    - Amount bug · Can't see
+    - '!Undebuggable · Incidents'
+    bad_note: Redact everything
+    good:
+    - Mask PAN · Last 4
+    - +Keep amounts · Dates, MCC
+    - +Raw store · Restricted
+    - Break-glass · Audited
+    good_note: Field-level redaction plus audited raw access
+  solution: |-
+    1. Redact field by field (mask PAN to last 4, tokenise names, keep amounts, dates and merchant categories).
+    2. Keep raw traces in a restricted store with short retention and role-based access.
+    3. Provide audited break-glass access for incidents.
+  works: |-
+    **Trade-off to manage:** Restricted raw stores add compliance scope; keep them minimal and audited.
+
+    **How you prove it worked:**
+
+    - Share of incidents closed with a known root cause.
+
+    **Same pattern elsewhere:** Telco: traces redact all phone numbers and addresses, making porting and serviceability bugs impossible to reproduce.
+  takeaway: Redact precisely, not bluntly.
+  related:
+  - tel-02
+  - tel-15
+  code: |
+    REDACTORS = {
+        "pan": lambda v: "*" * 12 + v[-4:],
+        "name": tokenize,                                # reversible only in the vault
+        "amount": lambda v: v, "merchant_category": lambda v: v, "date": lambda v: v,
+    }
+
+    def export_span(span):
+        redacted = {k: REDACTORS.get(field_type(k), redact_default)(v) for k, v in span.attrs.items()}
+        debug_store.write(redacted)
+        raw_store.write(span.attrs, retention_days=7, acl="incident-responders")   # break-glass, audited
+  lang: python
+- id: obs-17
+  title: Every failure logged as "LLM error"
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's AI team reports "2.3% LLM errors" each week. Nobody knows what those are. When they finally classify a sample, they find timeouts, refusals, wrong plan prices, format errors and tool failures, each needing a different fix and owner.
+  antipattern: |-
+    **No classification of failure modes.**
+
+    *Think of it this way:* A hospital that records every visit as "illness".
+  fails: |-
+    **Mechanism:** You can't prioritize what you can't count.
+
+    - No classification of failure modes.
+    - Different root causes are counted together.
+    - Prioritisation is impossible.
+
+    **Root cause:** No failure taxonomy.
+
+    **Where it breaks:** Logging and analytics.
+  diagram:
+    bad:
+    - 2.3% errors · Weekly
+    - '!One bucket · ''LLM error'''
+    - Mixed causes · Unknown
+    - '!No priority · No owner'
+    bad_note: One 'LLM error' bucket
+    good:
+    - Taxonomy · 8 categories
+    - +Auto-classify · Codes, schemas
+    - +Sample review · Manual
+    - Owner + trend · Per category
+    good_note: Failure taxonomy with owners and trends
+  solution: |-
+    1. Define a taxonomy (retrieval miss, hallucination, refusal, format error, tool failure, timeout, policy violation, wrong action).
+    2. Classify automatically where possible (error codes, schema checks, judges) and manually on samples.
+    3. Track trends per category with owners.
+  works: |-
+    **Trade-off to manage:** Taxonomies need upkeep as systems change.
+
+    **How you prove it worked:**
+
+    - Category share over time, by intent.
+
+    **Same pattern elsewhere:** FinTech: a bank lumps fraud-assistant errors together and misses that most are timeouts from one vendor.
+  takeaway: Name your failure modes, then count them.
+  related:
+  - aev-10
+  - aev-17
+  code: |
+    class Failure(str, Enum):
+        RETRIEVAL_MISS = "retrieval_miss"; HALLUCINATION = "hallucination"; REFUSAL = "refusal"
+        FORMAT = "format_error"; TOOL = "tool_failure"; TIMEOUT = "timeout"
+        POLICY = "policy_violation"; WRONG_ACTION = "wrong_action"
+
+    def classify_failure(trace) -> Failure:
+        if trace.timed_out: return Failure.TIMEOUT
+        if trace.schema_error: return Failure.FORMAT
+        if any(s.status == "error" for s in trace.tool_spans): return Failure.TOOL
+        if not trace.retrieved_relevant: return Failure.RETRIEVAL_MISS
+        return judge.classify(trace, labels=list(Failure))
+  lang: python
+- id: obs-18
+  title: Online judge on 100% of traffic costs more than the product
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A wealth platform runs a large-model judge inline on every assistant answer to check faithfulness. It doubles latency and costs more than the assistant itself. Finance asks for the assistant to be shut down.
+  antipattern: |-
+    **Running an expensive judge on every request.**
+
+    *Think of it this way:* Hiring a second chef to taste every dish before it leaves the kitchen.
+  fails: |-
+    **Mechanism:** Online evaluation doubles cost and latency if done inline.
+
+    - Expensive evaluation on every request.
+    - Inline evaluation adds user-visible latency.
+    - Most answers are low risk.
+
+    **Root cause:** No sampling strategy for online evaluation.
+
+    **Where it breaks:** Online eval design.
+  diagram:
+    bad:
+    - Every answer · Judged inline
+    - '!2x latency · User sees'
+    - Cost > product · Judge
+    - '!Shutdown ask · From finance'
+    bad_note: Inline judge on every request
+    good:
+    - Sample 1-10% · Async
+    - +Oversample · Risky slices
+    - +Inline rules · 100% cheap
+    - Cost share · Tracked
+    good_note: Async sampled judging plus cheap inline checks
+  solution: |-
+    1. Sample 1-10% for judge evaluation, asynchronously, after the response.
+    2. Oversample risky intents, negative feedback and new versions.
+    3. Run cheap deterministic checks (amounts, schema, banned phrases) inline on 100%.
+  works: |-
+    **Trade-off to manage:** Sampling can miss rare failures; that is why risky slices are oversampled.
+
+    **How you prove it worked:**
+
+    - Eval cost as a share of serving cost.
+
+    **Same pattern elsewhere:** Telco: a care bot runs a judge on every answer during peak and breaches its latency SLO.
+  takeaway: Sample smart, judge asynchronously.
+  related:
+  - obs-01
+  - cost-01
+  code: |
+    RISKY = {"payments", "disputes", "complaints"}
+
+    def after_response(trace):
+        inline_checks(trace)                                 # 100%: amounts, schema, banned phrases
+        rate = 0.02
+        if trace.intent in RISKY or trace.feedback == "down" or trace.version in NEW_VERSIONS:
+            rate = 0.25                                      # oversample risk
+        if random() < rate:
+            judge_queue.put_async(trace.id)                  # judged later, off the request path
+  lang: python
+- id: obs-19
+  title: Bot promises outage credits and nobody knows how to stop it
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    After a major outage, a carrier's bot starts telling customers they will receive a $50 credit, a figure it pulled from an old press release. The team debates for 2 hours whether to roll back the prompt, disable the intent or switch off the bot, while thousands more customers get the promise.
+  antipattern: |-
+    **Incident process designed for outages only.**
+
+    *Think of it this way:* A building with fire extinguishers but no evacuation plan.
+  fails: |-
+    **Mechanism:** Quality incidents need different decisions: roll back the prompt, switch models, disable a feature, add a filter.
+
+    - Incident process was designed for outages, not wrong answers.
+    - No kill switch per intent.
+    - No pre-agreed decision rights.
+
+    **Root cause:** No LLM-specific incident runbooks.
+
+    **Where it breaks:** Operations.
+  diagram:
+    bad:
+    - Bot promises · $50 credit
+    - '!Old release · Source'
+    - 2-hour debate · No runbook
+    - '!More promises · Thousands'
+    bad_note: Outage-only incident process
+    good:
+    - Runbook · Quality incident
+    - +Kill switch · Per intent
+    - +Decision owner · Pre-agreed
+    - Game days · Practised
+    good_note: Quality runbooks with kill switches per intent
+  solution: |-
+    1. Write runbooks for quality incidents (disable intent, force handoff, roll back prompt or index, add a blocking rule).
+    2. Build kill switches and feature flags per intent and per tool.
+    3. Pre-agree who can pull them, and practise in game days.
+  works: |-
+    **Trade-off to manage:** Disabling intents shifts load to care; that's acceptable during an incident.
+
+    **How you prove it worked:**
+
+    - Time from detection to mitigation for quality incidents.
+
+    **Same pattern elsewhere:** FinTech: a bank bot tells customers a fee will be refunded during an incident, and nobody has authority to switch it off quickly.
+  takeaway: Plan the rollback before you need it.
+  related:
+  - obs-08
+  - cicd-09
+  code: |
+    FLAGS = {"intent.outage_credit": True, "tool.issue_credit": True}
+
+    def respond(msg, intent):
+        if not flags.enabled(f"intent.{intent}"):
+            return handoff_to_human(msg)                    # kill switch per intent
+        reply = assistant(msg, tools=[t for t in TOOLS if flags.enabled(f"tool.{t.name}")])
+        return block_rules.apply(reply)                      # hot-loaded blocking rules
+
+    # runbook: who may flip flags (on-call + product owner), rollback prompt/index, game-day practised quarterly
+  lang: python
+- id: obs-20
+  title: First-week incident with no data to debug
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A credit union launches a member assistant with "tracing to be added in phase 2". In week one, members report wrong loan-rate answers. With no traces, cost data or feedback capture, the team cannot reproduce the issue and takes the assistant offline.
+  antipattern: |-
+    **"We'll add tracing later.".**
+
+    *Think of it this way:* Opening a restaurant and installing the smoke alarms after the first fire.
+  fails: |-
+    **Mechanism:** You can't retroactively capture traces.
+
+    - Instrumentation was deferred.
+    - Traces can't be captured retroactively.
+    - The launch had no observability exit criteria.
+
+    **Root cause:** Observability treated as a later phase.
+
+    **Where it breaks:** Launch checklist.
+  diagram:
+    bad:
+    - Launch · No tracing
+    - '!Wrong rates · Week one'
+    - No data · Can't reproduce
+    - '!Taken offline · Lost trust'
+    bad_note: Tracing in phase 2
+    good:
+    - Prototype · Has tracing
+    - +Metering · Cost, feedback
+    - +Debug drill · Pre-launch
+    - Checklist · Signed off
+    good_note: Observability as a launch requirement
+  solution: |-
+    1. Make tracing, cost metering, feedback capture and quality sampling launch requirements.
+    2. Build them into the prototype, so they're tested before launch.
+    3. Run a pre-launch "can we debug this?" drill.
+  works: |-
+    **Trade-off to manage:** Slightly slower first launch, much faster everything after.
+
+    **How you prove it worked:**
+
+    - Launch checklist sign-off.
+
+    **Same pattern elsewhere:** Telco: a new store-associate copilot launches without traces and a pricing issue can't be diagnosed.
+  takeaway: Instrument before you launch, not after the first incident.
+  related:
+  - obs-02
+  - cicd-15
+  code: |
+    LAUNCH_CHECKLIST = {
+        "tracing": lambda: traces.sample_exists(span_names=["retrieve", "generate", "tool.*"]),
+        "cost_metering": lambda: ledger.has_records(app=APP),
+        "feedback_capture": lambda: feedback.linked_to_traces(rate=0.99),
+        "quality_sampling": lambda: online_eval.enabled(app=APP),
+        "debug_drill": lambda: drills.passed("can-we-debug-this", app=APP),
+    }
+    assert all(check() for check in LAUNCH_CHECKLIST.values()), "launch blocked"
+  lang: python
+- id: tel-01
+  title: Switching trace vendors means rewriting 30 services
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank instrumented its AI services with one observability vendor's proprietary SDK. Procurement moves to a different vendor for cost reasons. Every service calls the old SDK directly, so migrating means changing instrumentation in 30 services and losing historical comparability.
+  antipattern: |-
+    **Calling a vendor SDK directly everywhere.**
+
+    *Think of it this way:* Wiring every room of a house with a plug type only one supplier makes.
+  fails: |-
+    **Mechanism:** Telemetry becomes locked to one backend.
+
+    - Instrumentation is tied to one backend's API.
+    - Span names and attributes are vendor-specific.
+    - Migration becomes a multi-quarter project.
+
+    **Root cause:** No vendor-neutral instrumentation standard.
+
+    **Where it breaks:** Instrumentation layer.
+  diagram:
+    bad:
+    - 30 services · Vendor SDK
+    - '!Vendor switch · Procurement'
+    - Rewrite all · Instrumentation
+    - '!History lost · No comparison'
+    bad_note: Vendor SDK calls in every service
+    good:
+    - OTel SDK · GenAI attrs
+    - +Shared library · Consistent
+    - +Collector · Routing
+    - New backend · Config change
+    good_note: OpenTelemetry GenAI conventions plus collector
+  solution: |-
+    1. Instrument with OpenTelemetry and the GenAI semantic conventions (gen_ai.request.model, gen_ai.usage.input_tokens, gen_ai.usage.output_tokens and related attributes).
+    2. Route through the OpenTelemetry Collector, so changing backends is a config change.
+    3. Wrap LLM and tool calls in a shared internal library that sets attributes consistently.
+  works: |-
+    **Trade-off to manage:** Some vendor-specific features need extra attributes; keep them in the shared library.
+
+    **How you prove it worked:**
+
+    - Share of services emitting OTel-conformant GenAI spans.
+
+    **Same pattern elsewhere:** Telco: a carrier's AI care stack is locked into an APM vendor whose contract is not renewed after a merger.
+  takeaway: Instrument once with OpenTelemetry, export anywhere.
+  related:
+  - tel-04
+  - obs-02
+  code: |
+    # shared lib: llm_otel.py — every service imports this, never a vendor SDK
+    def traced_llm_call(model, messages, **kw):
+        with tracer.start_as_current_span(f"chat {model}") as s:
+            s.set_attribute("gen_ai.operation.name", "chat")
+            s.set_attribute("gen_ai.request.model", model)
+            resp = client.generate(model=model, messages=messages, **kw)
+            s.set_attribute("gen_ai.usage.input_tokens", resp.usage.input_tokens)
+            s.set_attribute("gen_ai.usage.output_tokens", resp.usage.output_tokens)
+            return resp
+    # otel-collector.yaml: exporters: [otlp/vendor_b]   ← switching backends is a config change
+  lang: python
+- id: tel-02
+  title: Customer addresses and call records found in the logging platform
+  tags:
+  - Reliability
+  - Security
+  - Compliance
+  - Telco
+  - Critical
+  scenario: |-
+    A carrier's care bot logs full prompts and completions to its central logging platform, which 600 engineers can search. A privacy audit finds customer addresses, account PINs and call-detail summaries (CPNI) in logs retained for 13 months.
+  antipattern: |-
+    **Capturing raw prompt and completion text by default.**
+
+    *Think of it this way:* Photocopying every customer's file and leaving the copies in the staff kitchen.
+  fails: |-
+    **Mechanism:** Prompts contain user data. Logs are widely accessible and long-retained.
+
+    - Prompts contain customer data by design.
+    - Logs are widely accessible and long-retained.
+    - Nobody classified telemetry as a data store.
+
+    **Root cause:** Content capture on by default, with no redaction or access policy.
+
+    **Where it breaks:** Telemetry pipeline.
+  diagram:
+    bad:
+    - Full prompts · Logged
+    - '!Addresses, PINs · CPNI'
+    - 600 engineers · Can search
+    - '!13 months · Retention'
+    bad_note: Full prompts logged by default
+    good:
+    - Redact · At collector
+    - +Opt-in content · Per env
+    - +Restricted store · Short retention
+    - Audited access · Break-glass
+    good_note: Redact at the collector, restricted content store
+  solution: |-
+    1. Detect and redact PII before export (Microsoft Presidio or a similar library at the collector), and never log PINs or secrets.
+    2. Make content capture opt-in per environment and per field.
+    3. Store sensitive content in a restricted, short-retention store with audited access.
+  works: |-
+    **Trade-off to manage:** Redaction removes some debugging context; keep tokenised identifiers to stitch traces.
+
+    **How you prove it worked:**
+
+    - Scheduled PII scans of log indexes; access audit reports.
+
+    **Same pattern elsewhere:** FinTech: a bank finds full card numbers and SSNs in assistant logs, putting the logging platform in PCI scope.
+  takeaway: Prompts are customer data, so treat logs as a data store.
+  related:
+  - obs-16
+  - sec-06
+  - data-07
+  code: |
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_anonymizer import AnonymizerEngine
+    analyzer, anonymizer = AnalyzerEngine(), AnonymizerEngine()
+
+    CAPTURE_CONTENT = {"dev": True, "staging": True, "prod": False}       # opt-in per environment
+
+    def redact_for_export(text: str) -> str:
+        found = analyzer.analyze(text, language="en", entities=["PERSON", "PHONE_NUMBER", "LOCATION", "EMAIL_ADDRESS"])
+        return anonymizer.anonymize(text, found).text
+
+    span.set_attribute("gen_ai.prompt", redact_for_export(prompt) if CAPTURE_CONTENT[ENV] else "[not captured]")
+  lang: python
+- id: tel-03
+  title: Account ID as a metric label explodes the metrics bill
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's engineers add account_id and session_id as labels on assistant latency and token metrics so they can filter by customer. Active time series grow from 40,000 to 30 million. The metrics bill rises tenfold and dashboards time out.
+  antipattern: |-
+    **Using user ID, session ID, or prompt text as metric labels.**
+
+    *Think of it this way:* Creating a separate filing cabinet for every customer instead of one cabinet with folders.
+  fails: |-
+    **Mechanism:** Each unique label value creates a new time series.
+
+    - Each unique label combination creates a new time series.
+    - Account and session ids are unbounded.
+    - Metrics backends aren't built for per-entity data.
+
+    **Root cause:** High-cardinality identifiers on metrics.
+
+    **Where it breaks:** Metrics design.
+  diagram:
+    bad:
+    - Add labels · account_id
+    - '!Series · 40k to 30M'
+    - Bill x10 · Metrics
+    - '!Dashboards · Time out'
+    bad_note: Account and session ids as labels
+    good:
+    - Labels · Model, intent
+    - +Ids on traces · And logs
+    - +Allow-list · In collector
+    - Series alert · Per metric
+    good_note: Low-cardinality labels, ids on traces
+  solution: |-
+    1. Keep metric labels low-cardinality (model, feature, intent, tenant tier, status).
+    2. Put per-customer and per-session detail on traces and structured logs.
+    3. Enforce label allow-lists in the shared instrumentation library and the collector.
+  works: |-
+    **Trade-off to manage:** Per-customer questions need a trace or log query, which is slower than a metric.
+
+    **How you prove it worked:**
+
+    - Active series count alerts per metric.
+
+    **Same pattern elsewhere:** Telco: engineers add MSISDN as a label on bot metrics and the metrics cluster falls over.
+  takeaway: Metrics for aggregates, traces for individuals.
+  related:
+  - tel-18
+  - tel-14
+  code: |
+    ALLOWED_LABELS = {"model", "feature", "intent", "tenant_tier", "status"}
+
+    def record_latency(seconds, **labels):
+        bad = set(labels) - ALLOWED_LABELS
+        if bad:
+            raise ValueError(f"high-cardinality labels not allowed on metrics: {bad}")   # put them on traces
+        llm_latency.labels(**labels).observe(seconds)
+
+    span.set_attribute("account.id_hash", h(account_id))                           # per-customer detail on traces
+  lang: python
+- id: tel-04
+  title: Three teams report token usage three different ways
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's care, sales and network teams each log LLM usage. One logs "tokens" (input plus output), one logs only output, one logs characters. Finance cannot reconcile internal reports with the provider's invoice, and chargebacks to business units are disputed.
+  antipattern: |-
+    **Ad-hoc field names per team.**
+
+    *Think of it this way:* Three branches measuring sales in dollars, euros and "units", then adding them up.
+  fails: |-
+    **Mechanism:** You can't aggregate what isn't standardized.
+
+    - No shared schema for usage and cost.
+    - Cached and reasoning tokens are priced differently and often missing.
+    - Aggregation produces nonsense.
+
+    **Root cause:** Ad-hoc usage fields per team.
+
+    **Where it breaks:** Shared instrumentation and gateway.
+  diagram:
+    bad:
+    - 'Care: tokens · In + out'
+    - '!Sales: output · Only'
+    - 'Network: chars · Characters'
+    - '!No reconcile · Invoice'
+    bad_note: Ad-hoc usage fields per team
+    good:
+    - Schema · In/out/cached
+    - +Gateway · Fills it
+    - +Cost USD · Per BU
+    - Monthly · Reconcile
+    good_note: One usage schema populated at the gateway
+  solution: |-
+    1. Define a shared usage schema (input, output, cached and reasoning tokens, model, provider, cost in USD, feature, tenant, business unit).
+    2. Populate it in one place, the LLM gateway or shared client library, from provider usage fields.
+    3. Reconcile monthly against invoices.
+  works: |-
+    **Trade-off to manage:** Teams must migrate to the shared client; make it the easiest path.
+
+    **How you prove it worked:**
+
+    - Variance between internal cost totals and invoices.
+
+    **Same pattern elsewhere:** FinTech: a bank's chargeback model for AI usage collapses because divisions report usage inconsistently.
+  takeaway: Standardise the schema before you build the dashboard.
+  related:
+  - tel-12
+  - obs-05
+  code: |
+    @dataclass
+    class Usage:
+        provider: str; model: str; input_tokens: int; output_tokens: int
+        cached_tokens: int; reasoning_tokens: int; cost_usd: float
+        feature: str; tenant: str; business_unit: str
+
+    def from_provider(resp, ctx) -> Usage:                 # populated once, in the gateway
+        u = resp.usage
+        return Usage(ctx.provider, resp.model, u.input_tokens, u.output_tokens,
+                     getattr(u, "cache_read_input_tokens", 0), getattr(u, "reasoning_tokens", 0),
+                     PRICES.cost(resp.model, u), ctx.feature, ctx.tenant, ctx.bu)
+  lang: python
+- id: tel-05
+  title: The 1% trace sample contains almost no failed disputes
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    To control cost, a card issuer samples 1% of traces at the start of each request. The dispute assistant fails on about 0.5% of requests. In a week of traffic, the trace store holds 3 failed traces, too few to diagnose a new failure pattern.
+  antipattern: |-
+    **Random sampling decided at the start of the request.**
+
+    *Think of it this way:* Keeping one in a hundred security-camera clips at random, and then finding the robbery wasn't recorded.
+  fails: |-
+    **Mechanism:** Failures and slow requests are rare, so random sampling throws them away.
+
+    - Head sampling decides before the outcome is known.
+    - Failures are rare, so random samples rarely contain them.
+    - The interesting traces are thrown away.
+
+    **Root cause:** Sampling strategy ignores outcomes.
+
+    **Where it breaks:** Collector configuration.
+  diagram:
+    bad:
+    - 1% sampled · At start
+    - '!0.5% fail · Rare'
+    - 3 failures · Kept per week
+    - '!Can''t diagnose · Too few'
+    bad_note: Random 1% head sampling
+    good:
+    - Tail sampling · At collector
+    - +Keep 100% · Errors, slow
+    - +Plus feedback · And guardrails
+    - 1% baseline · Random
+    good_note: Tail sampling keeps every interesting trace
+  solution: |-
+    1. Use tail-based sampling at the collector, keeping 100% of errors, slow requests, negative feedback, guardrail hits and escalations.
+    2. Keep a small random baseline (1%) for unbiased statistics.
+    3. Raise sampling temporarily for new releases.
+  works: |-
+    **Trade-off to manage:** Tail sampling needs collectors that buffer whole traces, which costs memory.
+
+    **How you prove it worked:**
+
+    - Count of retained failure traces per day.
+
+    **Same pattern elsewhere:** Telco: random sampling of the care bot's traces misses almost all port-in failures.
+  takeaway: Sample after you know whether the request was interesting.
+  related:
+  - obs-18
+  code: |
+    # otel-collector tail_sampling processor
+    # processors:
+    #   tail_sampling:
+    #     decision_wait: 10s
+    #     policies:
+    #       - {name: errors,    type: status_code, status_code: {status_codes: [ERROR]}}
+    #       - {name: slow,      type: latency,     latency: {threshold_ms: 8000}}
+    #       - {name: feedback,  type: string_attribute, string_attribute: {key: feedback, values: [down]}}
+    #       - {name: guardrail, type: boolean_attribute, boolean_attribute: {key: guardrail.hit, value: true}}
+    #       - {name: escalated, type: boolean_attribute, boolean_attribute: {key: escalated, value: true}}
+    #       - {name: baseline,  type: probabilistic, probabilistic: {sampling_percentage: 1}}
+  lang: python
+- id: tel-06
+  title: Slow tracing backend slows down customer replies
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's tracing backend has a bad day and responds slowly. The care bot's trace exporter sends spans synchronously, so every customer reply waits for it. Median latency goes from 1.5 to 7 seconds, and the bot breaches its SLO because of its own monitoring.
+  antipattern: |-
+    **Synchronous export of spans and logs.**
+
+    *Think of it this way:* A shop that can't serve customers while the security camera is buffering.
+  fails: |-
+    **Mechanism:** Monitoring becomes a dependency of the product.
+
+    - Spans and logs are exported synchronously on the request path.
+    - Telemetry backends have their own outages.
+    - No buffer or drop policy.
+
+    **Root cause:** Telemetry is a hard dependency of the product.
+
+    **Where it breaks:** Exporter configuration.
+  diagram:
+    bad:
+    - Trace backend · Slow
+    - '!Sync export · On request'
+    - 1.5 s to 7 s · Median
+    - '!SLO breach · Self-inflicted'
+    bad_note: Synchronous span export
+    good:
+    - Async batch · Exporter
+    - +Local agent · Collector
+    - +Bounded buffer · Drop if full
+    - Drop metric · Alerted
+    good_note: Async batched export, drop instead of block
+  solution: |-
+    1. Use async, batched exporters and a local collector agent.
+    2. Bound buffers and drop telemetry rather than blocking requests.
+    3. Alert on dropped-span counts.
+  works: |-
+    **Trade-off to manage:** Dropping telemetry loses data during backend outages; that's the right trade.
+
+    **How you prove it worked:**
+
+    - Exporter latency and dropped spans as metrics.
+
+    **Same pattern elsewhere:** FinTech: a payments assistant times out because the logging service's TLS handshake is slow.
+  takeaway: Telemetry must never take down the thing it watches.
+  related:
+  - tel-07
+  code: |
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+    provider.add_span_processor(BatchSpanProcessor(
+        OTLPSpanExporter(endpoint="localhost:4317"),     # local collector agent, not the remote backend
+        max_queue_size=4096,                             # bounded: drop, never block requests
+        schedule_delay_millis=2000, export_timeout_millis=5000))
+    # alert on otelcol_exporter_send_failed_spans and processor dropped-span counters
+  lang: python
+- id: tel-07
+  title: Traces stop at the Kafka topic between fraud scoring and the agent
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's fraud pipeline publishes high-risk transactions to Kafka. A customer-contact agent consumes them and contacts the customer. Traces stop at the producer; the agent's spans start a new trace. When a customer complains about a confusing fraud-alert message, nobody can connect it to the scoring decision.
+  antipattern: |-
+    **Not passing trace context across async boundaries.**
+
+    *Think of it this way:* A relay race where each runner starts their own stopwatch, so no one knows the team's total time.
+  fails: |-
+    **Mechanism:** Agents use queues, background jobs, and sub-agents. Each hop drops the parent context.
+
+    - Trace context isn't propagated in message headers.
+    - Async hops, sub-agents and tools break the trace.
+    - Root-cause analysis across systems fails.
+
+    **Root cause:** Broken context propagation across asynchronous boundaries.
+
+    **Where it breaks:** Instrumentation of queues and agents.
+  diagram:
+    bad:
+    - Fraud score · Trace A
+    - '!Kafka topic · No context'
+    - Agent · Trace B
+    - '!Can''t link · Complaint'
+    bad_note: No trace context across the queue
+    good:
+    - traceparent · In headers
+    - +Agent span · Child of A
+    - +Span links · Fan-out
+    - Test · Propagation
+    good_note: W3C context in headers, span links
+  solution: |-
+    1. Propagate W3C trace context in Kafka headers and in tool and sub-agent calls.
+    2. Use span links for fan-out and fan-in.
+    3. Test propagation in integration tests.
+  works: |-
+    **Trade-off to manage:** Very long-lived traces can be awkward in some backends; use links rather than one giant trace.
+
+    **How you prove it worked:**
+
+    - Share of agent traces with a parent span from the upstream system.
+
+    **Same pattern elsewhere:** Telco: an order event goes through a message bus to a provisioning agent and the trace breaks at the bus.
+  takeaway: A trace is only as complete as its weakest hop.
+  related:
+  - obs-02
+  - tel-11
+  code: |
+    from opentelemetry.propagate import inject, extract
+
+    def publish_score(event):
+        headers = {}
+        inject(headers)                                  # W3C traceparent into Kafka headers
+        producer.send("fraud-scores", value=event, headers=list(headers.items()))
+
+    def consume(msg):
+        ctx = extract(dict(msg.headers))
+        with tracer.start_as_current_span("fraud_agent.handle", context=ctx):
+            agent.run(msg.value)
+  lang: python
+- id: tel-08
+  title: Voice bot feels slow, but total latency looks fine
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's IVR voice bot answers in 2.8 seconds on average, which looks acceptable. Callers say it feels slow and talk over it. The metric measured total response time. Time to first audio was 2.6 seconds, because speech synthesis waited for the full LLM response before starting.
+  antipattern: |-
+    **Measuring only total request duration.**
+
+    *Think of it this way:* A waiter who brings every dish at once after an hour, versus one who brings the first course in five minutes.
+  fails: |-
+    **Mechanism:** For streaming, perceived speed depends on time to first token.
+
+    - Only total duration was measured.
+    - Perceived speed depends on the first token and first audio.
+    - The pipeline waited instead of streaming.
+
+    **Root cause:** Telemetry didn't capture the user-experience timing.
+
+    **Where it breaks:** Instrumentation and pipeline design.
+  diagram:
+    bad:
+    - Avg 2.8 s · Total time
+    - '!First audio · 2.6 s'
+    - TTS waits · Full reply
+    - '!Callers · Talk over bot'
+    bad_note: Measure total duration only
+    good:
+    - TTFT metric · Separate
+    - +First audio · SLO under 1 s
+    - +Stream TTS · By sentence
+    - Barge-in · Tracked
+    good_note: Time to first token/audio, stream to TTS
+  solution: |-
+    1. Emit time to first token, time to first audio, tokens per second and total duration as separate metrics.
+    2. Stream tokens into speech synthesis by sentence.
+    3. Set SLOs on time to first audio for voice (for example under 1 second).
+  works: |-
+    **Trade-off to manage:** Streaming makes post-generation guardrails harder; run fast checks per sentence.
+
+    **How you prove it worked:**
+
+    - Barge-in rate (callers talking over the bot) by latency band.
+
+    **Same pattern elsewhere:** FinTech: a bank's voice assistant waits for the full answer before speaking card balance information.
+  takeaway: For streaming, time to first token is the UX metric.
+  related:
+  - obs-04
+  - cost-03
+  code: |
+    async def speak(reply_stream):
+        t0 = monotonic(); first_tok = first_audio = None; buf = ""
+        async for tok in reply_stream:
+            first_tok = first_tok or monotonic()
+            buf += tok
+            if buf.rstrip().endswith((".", "?", "!")):
+                await tts.play(buf); buf = ""
+                first_audio = first_audio or monotonic()
+        ttft.observe(first_tok - t0); time_to_first_audio.observe(first_audio - t0)   # SLO: < 1 s
+  lang: python
+- id: tel-09
+  title: GDPR deletion request no one can fulfil in the trace store
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    A European neobank receives a right-to-erasure request. Customer data has been deleted from core systems, but three years of assistant traces and conversation logs remain in the observability platform, not indexed by customer. The DPO can't confirm deletion within the legal deadline.
+  antipattern: |-
+    **Keeping everything forever.**
+
+    *Think of it this way:* Moving house but leaving copies of your letters in every room of the old one.
+  fails: |-
+    **Mechanism:** Cost grows without limit and so does legal exposure.
+
+    - No retention policy for telemetry.
+    - Traces aren't indexed by customer identity.
+    - Deletion processes ignore observability stores.
+
+    **Root cause:** Retention and deletion were not designed for telemetry.
+
+    **Where it breaks:** Data governance for telemetry.
+  diagram:
+    bad:
+    - Erasure ask · GDPR
+    - '!Core deleted · Systems'
+    - 3 years traces · Unindexed
+    - '!Can''t confirm · Deadline'
+    bad_note: Keep all telemetry forever
+    good:
+    - Raw 30 days · Content
+    - +Redacted 90 · Traces
+    - +Customer key · Pseudonymous
+    - DSR process · Includes telemetry
+    good_note: Tiered retention and per-customer deletion
+  solution: |-
+    1. Tier retention (raw content 30 days, redacted traces 90 days, aggregates for years).
+    2. Tag traces with a pseudonymous customer key so per-customer deletion is possible.
+    3. Include telemetry stores in the data-subject request process and records of processing.
+  works: |-
+    **Trade-off to manage:** Short retention limits long-term analysis; keep redacted aggregates for that.
+
+    **How you prove it worked:**
+
+    - Age of the oldest raw-content record; DSR completion time.
+
+    **Same pattern elsewhere:** Telco: an EU operator can't erase a subscriber's chatbot conversations because they sit in an unindexed log archive.
+  takeaway: Retention is a design decision, not a default.
+  related:
+  - data-07
+  - gov-09
+  code: |
+    RETENTION = {"raw_content": 30, "redacted_traces": 90, "aggregates": 365 * 5}   # days
+
+    span.set_attribute("customer.pseudo_key", hmac_sha256(KEY, customer_id))      # deletable per customer
+
+    def fulfil_dsr(customer_id):
+        key = hmac_sha256(KEY, customer_id)
+        for store in (raw_content_store, trace_store, log_store):
+            store.delete(filter={"customer.pseudo_key": key})
+        dsr_log.record(customer_id, stores=["raw_content", "traces", "logs"])
+  lang: python
+- id: tel-10
+  title: Which prompt produced last Tuesday's bad answer?
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's care team escalates a bad bot answer from last Tuesday. The trace has the prompt text but not the prompt version, model version, index version or experiment arm. Three prompt versions were live that day.
+  antipattern: |-
+    **Spans without deployment metadata.**
+
+    *Think of it this way:* A photo with no date or camera settings when you're trying to work out why it's blurry.
+  fails: |-
+    **Mechanism:** Telemetry is useless for attribution if it lacks the variables that changed.
+
+    - Spans lack deployment metadata.
+    - Several versions run at once (A/B, canary).
+    - Attribution needs the variables that changed.
+
+    **Root cause:** Missing version attributes in telemetry.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - Bad answer · Last Tuesday
+    - '!3 prompts live · A/B + canary'
+    - No version · On span
+    - '!Unknown · Which one'
+    bad_note: Spans with no deployment metadata
+    good:
+    - Manifest · Release
+    - +Span attrs · Prompt, model
+    - +Index + flags · Recorded
+    - Attributed · Instantly
+    good_note: Version attributes from the release manifest
+  solution: |-
+    1. Add resource attributes (service version, region) and span attributes (prompt id and version, model version, index version, flags and experiment arms).
+    2. Set them centrally in the shared library from the release manifest.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Share of spans with complete version attributes.
+
+    **Same pattern elsewhere:** FinTech: a bank can't tell which model version produced a disputed credit-limit explanation.
+  takeaway: Stamp every span with what was deployed.
+  related:
+  - obs-11
+  - ops-01
+  code: |
+    manifest = load_release_manifest()                    # written by CI at deploy time
+    resource = Resource.create({"service.version": manifest.version, "cloud.region": REGION})
+
+    def set_release_attrs(span, cfg):
+        span.set_attribute("prompt.id", cfg.prompt_id); span.set_attribute("prompt.version", cfg.prompt_version)
+        span.set_attribute("model.version", cfg.model_version); span.set_attribute("index.version", cfg.index_version)
+        span.set_attribute("experiment.arm", cfg.experiment_arm)
+  lang: python
+- id: tel-11
+  title: A 12-second gap in the trace is an uninstrumented bureau call
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  scenario: |-
+    A lender's application assistant has slow responses. The trace shows two LLM spans with a 12-second gap between them. Only LLM calls emit spans; the gap turns out to be a credit-bureau call that retries three times on timeout.
+  antipattern: |-
+    **Only LLM calls emit spans.**
+
+    *Think of it this way:* A delivery tracker that shows "left depot" and "delivered" and nothing about the four-hour stop in between.
+  fails: |-
+    **Mechanism:** Tool latency and failures are invisible.
+
+    - Only LLM calls are instrumented.
+    - Tool and API latency and failures are invisible.
+    - Time is misattributed to the model.
+
+    **Root cause:** Incomplete span coverage.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - LLM span · 1.1 s
+    - '!Gap · 12 s unknown'
+    - LLM span · 0.9 s
+    - '!Blames model · Wrong cause'
+    bad_note: Only LLM calls emit spans
+    good:
+    - Tool spans · Every call
+    - +Bureau call · 3 retries seen
+    - +Auto-instrument · HTTP, DB
+    - Gap metric · Unaccounted
+    good_note: Spans for every tool and external call
+  solution: |-
+    1. Emit spans for every tool call, retrieval, database query and external API, with (redacted) arguments, status, retries and result size.
+    2. Auto-instrument HTTP clients and DB drivers.
+  works: |-
+    **Trade-off to manage:** More spans cost more; sample by trace, not by span.
+
+    **How you prove it worked:**
+
+    - Unaccounted time per trace (root duration minus child spans).
+
+    **Same pattern elsewhere:** Telco: the gap is a slow serviceability check against a legacy OSS system.
+  takeaway: No gaps in the trace.
+  related:
+  - tel-07
+  - obs-02
+  code: |
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    RequestsInstrumentor().instrument(); SQLAlchemyInstrumentor().instrument(engine=engine)
+
+    def traced_tool(fn):
+        def wrapper(**args):
+            with tracer.start_as_current_span(f"tool {fn.__name__}") as s:
+                s.set_attribute("tool.args", redact(json.dumps(args)))
+                out = fn(**args)
+                s.set_attribute("tool.result_size", len(json.dumps(out))); return out
+        return wrapper
+  lang: python
+- id: tel-12
+  title: Cost estimates 15% off the provider bill
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's AI team estimates token usage with a generic tokenizer and a fixed price per token. Its cost dashboard is consistently 15% below the provider invoice, because the model tokenises differently and cached and reasoning tokens are priced differently.
+  antipattern: |-
+    **Estimating tokens with a generic tokenizer.**
+
+    *Think of it this way:* Estimating your phone bill from a stopwatch instead of the carrier's call records.
+  fails: |-
+    **Mechanism:** Models tokenize differently, and cached and reasoning tokens are priced differently.
+
+    - Client-side token counts differ from provider counts.
+    - Pricing differs by token type.
+    - Estimates drift as models change.
+
+    **Root cause:** Estimated usage instead of provider-reported usage.
+
+    **Where it breaks:** Usage capture.
+  diagram:
+    bad:
+    - Generic · Tokenizer
+    - '!Flat price · Per token'
+    - 15% low · Vs invoice
+    - '!Wrong budget · Forecasts'
+    bad_note: Estimate tokens client-side
+    good:
+    - API usage · Per response
+    - +Token types · Cached, reasoning
+    - +Price table · Versioned
+    - Reconcile · Monthly
+    good_note: Record provider usage, versioned prices
+  solution: |-
+    1. Record the usage numbers returned by the provider API on every response.
+    2. Maintain a versioned price table per model and token type.
+    3. Reconcile with billing monthly.
+  works: |-
+    **Trade-off to manage:** Streaming responses report usage at the end; handle interrupted streams.
+
+    **How you prove it worked:**
+
+    - Internal versus invoice variance.
+
+    **Same pattern elsewhere:** FinTech: a bank's per-team chargeback is wrong because it counts characters, not provider tokens.
+  takeaway: Use the provider's usage numbers as the source of truth.
+  related:
+  - tel-04
+  code: |
+    PRICES = {  # versioned price table, USD per 1M tokens
+        ("model-x", "2026-10"): {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75}}
+
+    def cost(model, usage, month):
+        p = PRICES[(model, month)]
+        return (usage.input_tokens * p["input"] + usage.output_tokens * p["output"] +
+                usage.cache_read_input_tokens * p["cache_read"]) / 1e6   # provider-reported usage, not a local tokenizer
+
+    assert abs(ledger.month_total() - invoice.total) / invoice.total < 0.02, "reconcile monthly"
+  lang: python
+- id: tel-13
+  title: Support tickets are the only quality signal
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank learns about assistant quality problems from complaints weeks later. The app already knows when a user rephrases the same question, copies an answer, abandons, or taps "talk to an agent", but none of this is emitted as telemetry.
+  antipattern: |-
+    **No in-product feedback events.**
+
+    *Think of it this way:* A shop that only learns customers are unhappy from formal complaints, while ignoring people putting items back and walking out.
+  fails: |-
+    **Mechanism:** You lack the fastest, cheapest quality signal.
+
+    - No in-product feedback events.
+    - Implicit signals are available but discarded.
+    - Feedback isn't tied to traces.
+
+    **Root cause:** Feedback telemetry was never designed.
+
+    **Where it breaks:** Product analytics and instrumentation.
+  diagram:
+    bad:
+    - Complaints · Weeks later
+    - '!Rephrase · Not captured'
+    - Abandon · Not captured
+    - '!Slow fixes · No signal'
+    bad_note: Learn quality from complaints
+    good:
+    - Thumbs · Explicit
+    - +Rephrase, copy · Implicit
+    - +Escalate · Event
+    - Trace id · On every event
+    good_note: Explicit and implicit feedback events with trace ids
+  solution: |-
+    1. Emit explicit feedback (thumbs, ratings) and implicit events (rephrase, retry, copy, abandon, escalate) with the trace id.
+    2. Build quality indicators from them per intent.
+  works: |-
+    **Trade-off to manage:** Implicit signals are noisy; use them as triage signals, not ground truth.
+
+    **How you prove it worked:**
+
+    - Implicit-dissatisfaction rate per intent and version.
+
+    **Same pattern elsewhere:** Telco: a carrier ignores that customers retype "speak to a human" in 20% of billing chats.
+  takeaway: Implicit feedback is free telemetry.
+  related:
+  - obs-03
+  code: |
+    IMPLICIT = {"rephrase", "retry", "copy", "abandon", "escalate"}
+
+    def emit_feedback(trace_id, kind, value=None):
+        assert kind in IMPLICIT | {"thumbs", "rating"}
+        events.emit("assistant_feedback", trace_id=trace_id, kind=kind, value=value)
+
+    quality = sql("""SELECT intent, AVG(CASE WHEN kind='thumbs' AND value='down' THEN 1 ELSE 0 END) AS down_rate,
+                     AVG(CASE WHEN kind='rephrase' THEN 1 ELSE 0 END) AS rephrase_rate
+                     FROM assistant_feedback JOIN traces USING (trace_id) GROUP BY intent""")
+  lang: python
+- id: tel-14
+  title: Finding failed refunds means regex over 500 GB of logs
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's agent logs lines like "Agent applied credit of 25 dollars to acct 123...". When finance asks how many credits failed last month, an engineer spends two days writing regex over 500 GB of logs and still isn't sure the number is right.
+  antipattern: |-
+    **`print(f"Agent did {x}")` style logging.**
+
+    *Think of it this way:* Keeping accounts as a diary instead of a ledger.
+  fails: |-
+    **Mechanism:** Unstructured text can't be queried or aggregated reliably.
+
+    - Logs are free-text sentences.
+    - Formats vary by developer and change over time.
+    - Queries are slow and unreliable.
+
+    **Root cause:** Unstructured logging.
+
+    **Where it breaks:** Logging practice.
+  diagram:
+    bad:
+    - '''Applied credit'' · Prose log'
+    - '!Formats vary · By developer'
+    - 500 GB regex · Two days
+    - '!Unsure count · For finance'
+    bad_note: Free-text log sentences
+    good:
+    - JSON event · credit_applied
+    - +Keys · Amount, status
+    - +Trace ids · Linked
+    - Query · Seconds
+    good_note: Structured JSON events with a schema
+  solution: |-
+    1. Emit structured JSON events with consistent keys (event, tool, status, amount, currency, account_ref, trace_id, span_id).
+    2. Define an event schema for business actions.
+  works: |-
+    **Trade-off to manage:** Structured events are less readable raw; tooling handles that.
+
+    **How you prove it worked:**
+
+    - Share of logs that parse as structured events.
+
+    **Same pattern elsewhere:** FinTech: a bank can't count fee reversals done by its agent without parsing prose logs.
+  takeaway: Log events, not sentences.
+  related:
+  - tel-03
+  code: |
+    class RefundEvent(BaseModel):
+        event: Literal["refund.requested", "refund.issued", "refund.failed"]
+        tool: str; status: str; amount: Decimal; currency: str
+        account_ref: str; trace_id: str; span_id: str
+
+    def log_refund(evt: RefundEvent):
+        logger.info(evt.model_dump_json())           # structured JSON, consistent keys
+
+    # query: SELECT * FROM logs WHERE event = 'refund.failed' AND ts > now() - interval '1 day'
+  lang: python
+- id: tel-15
+  title: BaaS partner sees another partner's prompts in shared dashboards
+  tags:
+  - Reliability
+  - FinTech
+  - Critical
+  scenario: |-
+    A banking-as-a-service provider offers an AI support assistant to several fintech partners. Partner support engineers get access to a shared observability dashboard. One partner's engineer can filter traces and see another partner's customers' conversations.
+  antipattern: |-
+    **One telemetry store with no tenant scoping.**
+
+    *Think of it this way:* A shared mailroom where any tenant can open any other tenant's post.
+  fails: |-
+    **Mechanism:** Telemetry contains customer content, and access control was forgotten.
+
+    - Telemetry isn't scoped by tenant.
+    - Access control was designed for the product, not for telemetry.
+    - Telemetry contains customer content.
+
+    **Root cause:** Multi-tenant telemetry without isolation.
+
+    **Where it breaks:** Telemetry access control.
+  diagram:
+    bad:
+    - Shared dash · All partners
+    - '!No tenant scope · Filters'
+    - Other partner · Visible
+    - '!Data breach · Contract risk'
+    bad_note: One shared telemetry store, no tenant scope
+    good:
+    - Tenant id · On all data
+    - +Row-level · Access
+    - +Separate store · Regulated
+    - Isolation test · Regular
+    good_note: Tenant tags, row-level access, separate stores
+  solution: |-
+    1. Tag all telemetry with tenant id and enforce row-level access by tenant.
+    2. Use separate stores for regulated or high-risk tenants, with data residency where required.
+    3. Test isolation like any other security control.
+  works: |-
+    **Trade-off to manage:** Per-tenant stores raise cost and operations; use them only where required.
+
+    **How you prove it worked:**
+
+    - Access audits and cross-tenant query alerts.
+
+    **Same pattern elsewhere:** Telco: an MVNO's staff see the host operator's other MVNO customers' chats in a shared tool.
+  takeaway: Telemetry inherits the data's security requirements.
+  related:
+  - ctx-17
+  - rag-06
+  code: |
+    def export(span, tenant):
+        span.set_attribute("tenant.id", tenant.id)
+        store = tenant.dedicated_store if tenant.risk == "high" else shared_store
+        store.write(span, region=tenant.data_region)
+
+    # dashboards: row-level security  WHERE tenant_id = current_setting('app.tenant_id')
+    def test_tenant_isolation(client_a):
+        assert not client_a.query_traces(filter={"tenant.id": "partner-b"})
+  lang: python
+- id: tel-16
+  title: Eval results live only in CI logs
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's AI team runs evals on every release. Results print to CI logs that expire after 30 days. When leadership asks how bot quality changed over the last 50 releases, nobody can answer, and a slow decline goes unnoticed.
+  antipattern: |-
+    **Eval results live only in CI logs.**
+
+    *Think of it this way:* Weighing yourself every day and never writing the number down.
+  fails: |-
+    **Mechanism:** You lose the quality history needed to spot slow drift.
+
+    - Eval results aren't stored as data.
+    - History is lost with CI log retention.
+    - Slow drift is invisible.
+
+    **Root cause:** Eval results not treated as telemetry.
+
+    **Where it breaks:** Eval pipeline.
+  diagram:
+    bad:
+    - Evals run · Every release
+    - '!CI logs · 30-day expiry'
+    - 50 releases · No history
+    - '!Slow decline · Unnoticed'
+    bad_note: Eval output in expiring CI logs
+    good:
+    - Eval records · Versioned
+    - +Tracker · Or metrics store
+    - +Chart · Per release
+    - Trend alert · Across releases
+    good_note: Eval results stored per release and charted
+  solution: |-
+    1. Push eval results as versioned records (release, prompt, model, metric, slice) to an experiment tracker or metrics store.
+    2. Chart quality per release and slice.
+    3. Alert on downward trends across releases.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Presence of eval records for every release.
+
+    **Same pattern elsewhere:** FinTech: a bank's model risk team can't evidence ongoing performance because eval history wasn't kept.
+  takeaway: Eval results are telemetry too.
+  related:
+  - eval-20
+  - cicd-01
+  code: |
+    def publish_eval(results, release):
+        for r in results:
+            metrics_store.write("eval_score", value=r.score,
+                                tags={"release": release.version, "prompt": release.prompt_version,
+                                      "model": release.model, "metric": r.metric, "slice": r.slice})
+
+    if trend(metric="faithfulness", last_n_releases=4) < 0:
+        alert("faithfulness trending down across releases")
+  lang: python
+- id: tel-17
+  title: Child spans appear to start before their parents
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's traces of the payments assistant show tool spans starting before the agent span that called them, and latency breakdowns don't add up. Hosts in two data centres have clock drift of up to 400 ms.
+  antipattern: |-
+    **Unsynchronized clocks in distributed services.**
+
+    *Think of it this way:* Two referees with watches set differently arguing about when the goal was scored.
+  fails: |-
+    **Mechanism:** Timing analysis and latency breakdowns become wrong.
+
+    - Distributed hosts have unsynchronised clocks.
+    - Timestamps from different hosts are compared.
+    - Analysis tools show impossible orderings.
+
+    **Root cause:** Clock skew in distributed tracing.
+
+    **Where it breaks:** Infrastructure and instrumentation.
+  diagram:
+    bad:
+    - Two DCs · Clock drift
+    - '!400 ms skew · Between hosts'
+    - Child first · Impossible
+    - '!Bad analysis · Latency'
+    bad_note: Unsynchronised host clocks
+    good:
+    - NTP/PTP · Synced
+    - +Monotonic · Durations
+    - +Skew fix · At collector
+    - Drift alert · Monitored
+    good_note: NTP sync, monotonic durations, skew correction
+  solution: |-
+    1. Sync clocks with NTP or PTP and monitor drift.
+    2. Measure durations with monotonic clocks.
+    3. Use collector-side skew correction where available.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Count of traces with negative child offsets.
+
+    **Same pattern elsewhere:** Telco: traces between a cloud bot and on-prem BSS show impossible timings due to drift on on-prem servers.
+  takeaway: Durations from monotonic clocks, timestamps from synced clocks.
+  related:
+  - tel-07
+  code: |
+    import time
+
+    def timed_step(fn):
+        t0 = time.monotonic()                        # durations from a monotonic clock
+        out = fn()
+        duration = time.monotonic() - t0
+        span.set_attribute("step.duration_ms", duration * 1000)
+        return out
+
+    # infra: chrony/NTP on all nodes; alert if node_timex_offset_seconds > 0.05
+  lang: python
+- id: tel-18
+  title: Telemetry is 40% of infrastructure cost
+  tags:
+  - Reliability
+  - Cost
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's AI platform logs every prompt, completion and tool payload at debug level in production, plus full traces at 100%. Telemetry becomes 40% of infrastructure cost. An audit shows 90% of it is never queried.
+  antipattern: |-
+    **Emitting everything at debug level in production.**
+
+    *Think of it this way:* Recording every conversation in the building forever, in case one matters.
+  fails: |-
+    **Mechanism:** Volume costs money and hides signal.
+
+    - Debug-level logging in production.
+    - No sampling or aggregation.
+    - Nobody measures what's used.
+
+    **Root cause:** Telemetry has no budget or value review.
+
+    **Where it breaks:** Telemetry governance.
+  diagram:
+    bad:
+    - Debug level · In production
+    - '!100% traces · Full payloads'
+    - 40% of infra · Cost
+    - '!90% unused · Never queried'
+    bad_note: Debug everything, keep everything
+    good:
+    - Usage review · What's queried
+    - +Tail sampling · Keep failures
+    - +Aggregate · At collector
+    - Budget · % of serving
+    good_note: Levels, sampling, aggregation and a budget
+  solution: |-
+    1. Review query usage, and drop or aggregate unused data.
+    2. Use log levels, tail sampling and collector-side aggregation.
+    3. Set a telemetry budget as a share of serving cost.
+  works: |-
+    **Trade-off to manage:** Cutting too much hurts debugging; keep high-value traces (errors, feedback) at 100%.
+
+    **How you prove it worked:**
+
+    - Telemetry cost per request; percentage of data queried.
+
+    **Same pattern elsewhere:** FinTech: a bank's AI observability bill exceeds its model bill.
+  takeaway: Telemetry has a cost-to-value ratio. Manage it.
+  related:
+  - tel-05
+  - tel-03
+  code: |
+    # collector: aggregate high-volume data, sample the rest
+    # processors: [filter/drop_debug_logs, tail_sampling, metricstransform/aggregate_by_route]
+
+    usage = telemetry_backend.query_usage(days=90)
+    unused = [ds for ds in usage.datasets if ds.queries == 0]
+    for ds in unused: telemetry_backend.set_retention(ds.name, days=7)
+
+    assert telemetry_cost() <= 0.10 * serving_cost(), "telemetry budget: 10% of serving cost"
+  lang: python
+- id: tel-19
+  title: Logs show the template, not the prompt the model saw
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A wealth assistant logs the prompt template id and variables. A complaint shows the model ignored the client's risk profile. The template looks correct. The bug is in context assembly: the risk-profile block was truncated when the portfolio was large. Nobody can see it, because the rendered prompt wasn't captured.
+  antipattern: |-
+    **Logging the template ID only.**
+
+    *Think of it this way:* Checking the recipe when the cook used a page with a corner torn off.
+  fails: |-
+    **Mechanism:** Bugs live in variable substitution, truncation, and context assembly.
+
+    - Templates are logged, but rendered messages are not.
+    - Bugs live in substitution, truncation and ordering.
+    - The template review gives false confidence.
+
+    **Root cause:** Missing capture of what the model actually received.
+
+    **Where it breaks:** Instrumentation of the LLM call.
+  diagram:
+    bad:
+    - Template · Looks right
+    - '!Risk block · Truncated'
+    - Not logged · Rendered prompt
+    - '!Ignored risk · Complaint'
+    bad_note: Log template id only
+    good:
+    - Rendered msgs · Captured
+    - +Tokens · Per component
+    - +Truncation · Event logged
+    - Diff · Across versions
+    good_note: Capture rendered messages and truncation events
+  solution: |-
+    1. Capture the final rendered messages and tool definitions per call (redacted, sampled as needed), with token counts per component.
+    2. Record truncation events explicitly.
+  works: |-
+    **Trade-off to manage:** Rendered prompts are large and sensitive; store them in the restricted content store.
+
+    **How you prove it worked:**
+
+    - Truncation rate per component; diff of rendered prompts across versions.
+
+    **Same pattern elsewhere:** Telco: a care bot ignores the customer's plan because the account-context block was dropped when history was long.
+  takeaway: Log what the model saw, not what you meant to send.
+  related:
+  - ctx-19
+  - ctx-08
+  code: |
+    def call_model(template, variables, tools):
+        messages = render(template, variables)
+        counts = {"system": tokens(messages[0]), "history": tokens(messages[1:-1]),
+                  "user": tokens(messages[-1]), "tools": tokens(tools)}
+        truncated = fit_to_window(messages)
+        span.set_attribute("prompt.rendered_ref", restricted_store.put(redact(messages)))   # what the model saw
+        span.set_attribute("prompt.tokens_by_component", json.dumps(counts))
+        if truncated.dropped:
+            span.add_event("context.truncated", {"dropped_tokens": truncated.dropped})
+        return llm(truncated.messages, tools=tools)
+  lang: python
+- id: tel-20
+  title: Bill explanations cut off mid-sentence for large accounts
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    Business customers with 40+ lines report that bill explanations stop mid-sentence. Engineers suspect the model. The response metadata, which wasn't recorded, would have shown finish_reason = max_tokens: the output limit was set to 500 tokens for all accounts.
+  antipattern: |-
+    **Ignoring response metadata.**
+
+    *Think of it this way:* A printer that stops mid-page because it ran out of paper, while you check the ink.
+  fails: |-
+    **Mechanism:** Stop reasons, safety flags, and cache hits explain many failures.
+
+    - Response metadata (stop reason, filter flags, cache hits) is discarded.
+    - Truncation looks like a model failure.
+    - One limit applied to every account size.
+
+    **Root cause:** Model-side metadata not recorded.
+
+    **Where it breaks:** LLM call instrumentation.
+  diagram:
+    bad:
+    - 40+ lines · Business bill
+    - '!Cut off · Mid-sentence'
+    - Blame model · Wrong guess
+    - '!max_tokens · Was the cause'
+    bad_note: Discard response metadata
+    good:
+    - Stop reason · Recorded
+    - +Params · Max tokens, temp
+    - +Spike alert · Truncation
+    - Size limits · By task
+    good_note: Record stop reason and parameters, alert on truncation
+  solution: |-
+    1. Record stop or finish reason, content-filter flags, cached-token counts and request parameters (temperature, max tokens).
+    2. Alert on spikes in truncation.
+    3. Size output limits by task (or summarise large accounts by group).
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Truncation rate by account size.
+
+    **Same pattern elsewhere:** FinTech: corporate-card statement summaries truncate for large companies with many cardholders.
+  takeaway: The stop reason is the first thing to check.
+  related:
+  - tel-19
+  code: |
+    resp = llm.generate(messages, max_tokens=limit_for(task="bill_explanation", n_lines=account.line_count))
+    span.set_attribute("gen_ai.response.finish_reasons", [resp.stop_reason])
+    span.set_attribute("gen_ai.request.max_tokens", resp.request.max_tokens)
+    span.set_attribute("gen_ai.usage.cached_tokens", resp.usage.cache_read_input_tokens)
+
+    if resp.stop_reason == "max_tokens":
+        metrics.inc("llm_truncated", task="bill_explanation")   # alert on spikes
+        resp = summarise_by_line_group(account)                    # large accounts: grouped summary
+  lang: python

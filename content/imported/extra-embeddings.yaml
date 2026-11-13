@@ -1,0 +1,323 @@
+source: leadership-guide, rag-scenarios
+section: embeddings
+patterns:
+  - id: query-index-encoding-mismatch
+    title: Index and query encoded differently (silent recall loss)
+    tags: [Quality, Reliability]
+    scenario: |
+      Retrieval recall was 0.84 in the notebook and 0.62 in production. Same embedding model, same data, no errors anywhere.
+    antipattern: |
+      **The ingestion job and the query service each embed text their own way.** One drops the model's required
+      query prefix, one normalizes vectors and the other doesn't, or they pin different model revisions or truncation lengths.
+    fails: |
+      - Small encoding mismatches don't throw errors; they quietly move query vectors away from the document vectors they should match.
+      - Typical causes: the `query:`/`passage:` prefix or query instruction dropped in one service; normalization at index time but not at query time (or a cosine index fed unnormalized vectors); a different tokenizer, model revision or truncation length.
+      - Teams blame "production data" and start tuning the wrong layer.
+    diagram:
+      bad: ["Ingestion job (own encoder)", "Query service (own encoder)", "!Prefix / normalization differ", "!Recall 0.84 → 0.62"]
+      bad_note: "Two services, two implicit contracts, no error raised"
+      good: ["+Shared Embedder library", "+Pinned revision + prefix rules", "+CI parity test", "+Canary recall monitor", "Consistent vectors"]
+      good_note: "One embedding contract used by both paths, tested in CI and watched in production"
+    solution: |
+      Treat embedding as a **contract between two services**, not a model detail:
+
+      1. Put embedding behind **one shared library or service** used by both indexing and querying, with a pinned model revision, prefix rules and normalization.
+      2. Add a **parity test** in CI that embeds fixed strings through both paths and asserts identical vectors.
+      3. Store the embedder version with every vector.
+      4. Monitor live recall on a **canary query set** hourly, so drift shows up within hours.
+    works: |
+      There is only one place where encoding rules live, so they can't diverge. The parity test catches regressions before
+      deployment, and the canary set catches anything that slips through (for example a dependency upgrade) in hours rather
+      than after users complain.
+    code: |
+      class Embedder:
+          """Single source of truth for both ingestion and query paths."""
+          def __init__(self, name="BAAI/bge-small-en-v1.5", revision="<pinned-commit>"):
+              self.m = SentenceTransformer(name, revision=revision)
+              self.q_prefix = "Represent this sentence for searching relevant passages: "
+              self.version = f"{name}@{revision}"
+          def docs(self, texts):  return self.m.encode(texts, normalize_embeddings=True)
+          def query(self, text):  return self.m.encode([self.q_prefix + text], normalize_embeddings=True)[0]
+
+      def test_parity(ingest_embedder, query_embedder):
+          for s in CANARY_STRINGS:
+              assert np.allclose(ingest_embedder.query(s), query_embedder.query(s), atol=1e-6)
+    takeaway: "A recall drop with no error is usually an encoding contract mismatch. Share one embedder, test parity in CI, and monitor canary recall."
+    followup: "Recall was 0.62 in production but 0.84 in the notebook. Same model, same data. What happened?"
+
+  - id: chunks-over-embedder-limit
+    title: Chunks longer than the embedder's input limit
+    tags: [Quality]
+    scenario: |
+      Long policy sections are never retrieved, even when the answer is in them. The team concludes "embeddings aren't good
+      with long text" and starts evaluating bigger models.
+    antipattern: |
+      **Chunk sizes are set without checking the embedding model's maximum input length.** Many models silently truncate beyond
+      their limit (often 512 tokens).
+    fails: |
+      - Everything after the cutoff is invisible to retrieval, and no error is raised.
+      - The failure looks like a model-quality problem, so money goes to a bigger model instead of a one-line fix.
+      - Character-based chunk sizes hide the problem further, because token counts vary by language and content.
+    diagram:
+      bad: ["1,400-token chunk", "!Embedder max 512", "!Tail silently truncated", "Answer never retrieved"]
+      bad_note: "Silent truncation looks like a weak model"
+      good: ["Chunk", "+Token-count gate", "+Re-split over-limit chunks", "+Over-limit % on dashboard", "Fully embedded chunks"]
+      good_note: "Data-quality gate at ingestion makes the failure visible and fixes it automatically"
+    solution: |
+      Add **data-quality gates** to ingestion:
+
+      1. Measure every chunk in **tokens** with the embedder's own tokenizer.
+      2. Reject or re-split any chunk over the model's limit (minus a small margin for prefixes).
+      3. Log and alert on the over-limit rate, and add a chunk-token distribution chart to the ingestion dashboard.
+    works: |
+      Content beyond the limit gets its own vectors, so it becomes retrievable. The over-limit metric turns a silent class of
+      failure into a visible one, and the fix costs nothing compared with switching models.
+    code: |
+      MAX_IN = embedder.m.max_seq_length            # e.g. 512 for many models
+
+      def validate(chunks, tokenizer=embedder.m.tokenizer):
+          over = [c for c in chunks if len(tokenizer.encode(c.text)) > MAX_IN]
+          metrics.gauge("ingest.chunks_over_limit_pct", 100 * len(over) / max(len(chunks), 1))
+          if over:
+              chunks = [x for c in chunks for x in (resplit(c, MAX_IN - 16) if c in over else [c])]
+          return chunks
+    takeaway: "Size chunks in tokens against the embedder's limit, and gate ingestion on it. Silent truncation is a data-quality bug, not a model problem."
+    followup: "Long sections never get retrieved, even when the answer is in them. Why?"
+
+  - id: vector-store-by-hype
+    title: Choosing the vector store by hype
+    tags: [Cost, Reliability]
+    scenario: |
+      The team wants to adopt a new dedicated vector database. The company already runs Postgres, has 3 million chunks,
+      and simple metadata filters.
+    antipattern: |
+      **The vector store is picked by popularity rather than requirements.** Either a new system is added that the team can't
+      operate, or a library such as FAISS is used as if it were a database.
+    fails: |
+      - Vector stores are long-lived infrastructure with operational cost, security reviews and migration pain.
+      - A new system adds on-call load, backups, access control and another vendor review.
+      - A bare library lacks persistence, filtering, replication and access control, which surface later as outages or leaks.
+    diagram:
+      bad: ["Trending vector DB", "!Adopted without requirements", "New system to operate", "Ops burden / migration later"]
+      bad_note: "Infrastructure chosen by hype"
+      good: ["+Requirements + capacity math", "+Two-week spike on real data", "pgvector (≤ ~10M, simple filters) | Dedicated store (scale, hybrid, tenancy)", "+ADR"]
+      good_note: "Decision recorded with evidence and re-evaluation triggers"
+    solution: |
+      Decide with **requirements and capacity math**, recorded in an architecture decision record (ADR):
+
+      - Requirements: corpus size and growth, write rate, metadata filtering (especially ACLs), hybrid search, latency SLO, multi-tenancy, availability, team skills, existing stack, cost.
+      - Rule of thumb: under roughly 5–10M vectors with simple filters, **Postgres + pgvector** is often enough and adds no new system. Dedicated stores earn their place with large scale, heavy filtering, hybrid search or multi-tenant isolation.
+      - Run a **two-week spike on real data** before committing.
+    works: |
+      The choice matches the workload and the team's operating capacity. Capacity math exposes when quantization or sharding
+      is needed, and the ADR makes the decision revisitable when scale changes, instead of being re-argued every quarter.
+    code: |
+      def vector_memory_gb(n_vectors, dims, bytes_per_dim=4, index_overhead=0.3, replicas=2):
+          raw = n_vectors * dims * bytes_per_dim / 1e9
+          return round(raw * (1 + index_overhead) * replicas, 1)
+
+      vector_memory_gb(5_000_000, 768)                    # ~40 GB   float32, HNSW, 2 replicas
+      vector_memory_gb(5_000_000, 768, bytes_per_dim=1)   # ~10 GB   with int8 quantization
+      vector_memory_gb(200_000_000, 1024)                 # ~2,130 GB -> needs sharding / quantization
+    takeaway: "Pick the vector store from requirements, capacity math and a spike on real data. Often the database you already run is enough."
+    followup: "Your team wants a new dedicated vector database. You already run Postgres. How do you decide?"
+
+  - id: ann-defaults-unmeasured
+    title: ANN index defaults never measured
+    tags: [Quality, Latency]
+    scenario: |
+      Search got faster after moving from exact search to HNSW, but answer quality dropped a little. Nobody can say why.
+    antipattern: |
+      **Approximate nearest-neighbour parameters (`M`, `ef_search`, `nprobe`) are left at library defaults**, and ANN recall is
+      never compared with exact search.
+    fails: |
+      - ANN parameters set a recall/latency trade-off, and defaults weren't chosen for this corpus or SLO.
+      - Without an exact-search baseline, the team trades quality for speed blindly.
+      - As the corpus grows, recall can degrade further with no alert.
+    diagram:
+      bad: ["Exact search (slow)", "!HNSW with defaults", "!ANN recall unknown", "Quietly worse answers"]
+      bad_note: "Speed gained, recall lost, nobody measured"
+      good: ["Query sample", "+Exact top-k baseline", "+ANN recall SLI (nightly)", "+Tune ef_search to latency SLO", "Known trade-off"]
+      good_note: "ANN recall is a tracked SLI with an alert threshold"
+    solution: |
+      Make **ANN recall** a tracked service-level indicator:
+
+      1. Nightly, sample around 1,000 queries and compare ANN top-k with exact top-k.
+      2. Alert if recall falls below an agreed level (for example 0.95).
+      3. Tune `ef_search` or `nprobe` to the latency SLO using the measured curve.
+      4. Re-check whenever the corpus grows significantly.
+    works: |
+      The speed/quality trade-off becomes an explicit, measured choice. The nightly SLI catches degradation as the index grows,
+      before users notice quality loss.
+    code: |
+      import faiss, numpy as np, time
+
+      def ann_recall(vectors, queries, k=10, ef_values=(16, 32, 64, 128)):
+          d = vectors.shape[1]
+          exact = faiss.IndexFlatIP(d); exact.add(vectors)
+          _, truth = exact.search(queries, k)
+          hnsw = faiss.IndexHNSWFlat(d, 32, faiss.METRIC_INNER_PRODUCT); hnsw.add(vectors)
+          for ef in ef_values:
+              hnsw.hnsw.efSearch = ef
+              t0 = time.perf_counter(); _, approx = hnsw.search(queries, k)
+              ms = (time.perf_counter() - t0) / len(queries) * 1000
+              rec = np.mean([len(set(a) & set(t)) / k for a, t in zip(approx, truth)])
+              print(f"ef_search={ef:>4}  recall@{k}={rec:.3f}  {ms:.2f} ms/query")
+    takeaway: "Approximate search is a trade-off you should measure. Track ANN recall against exact search and tune to the latency SLO."
+    followup: "Search got faster after moving to HNSW, but answer quality dropped. Nobody can say why. What do you do?"
+
+  - id: giant-in-memory-index
+    title: One giant in-memory HNSW index
+    tags: [Reliability, Cost, Scale]
+    scenario: |
+      The vector database node runs out of memory, index rebuilds take a day, and p99 latency spikes during compaction. The
+      corpus has grown to 200 million chunks.
+    antipattern: |
+      **200 million float32 vectors held in one in-memory index on one node**, as if it were a demo. 200M × 768 × 4 bytes is
+      about 615 GB before graph overhead, with a single failure domain.
+    fails: |
+      - Memory, rebuild time and compaction all scale with the whole corpus, so every operation is slow and risky.
+      - One node means one failure domain: any outage takes retrieval down entirely.
+      - Most queries only need a slice of the corpus but pay for searching all of it.
+    diagram:
+      bad: ["200M vectors", "!One in-memory HNSW node", "!615 GB+ RAM", "OOM / day-long rebuilds"]
+      bad_note: "Demo architecture at production scale"
+      good: ["200M vectors", "+Quantize (int8 / PQ) + rescore", "+Shard by tenant / region", "+Replicas per shard", "Bounded memory, fast rebuilds"]
+      good_note: "Shrink, split and replicate"
+    solution: |
+      **Shrink and split** the index:
+
+      - **Quantize:** int8 is about 4× smaller; binary or product quantization for candidates, then rescore the top few hundred with full-precision vectors.
+      - **Reduce dimensions** if the model supports it (Matryoshka-style truncation).
+      - **Shard by a natural key** (tenant, region, document type) so most queries hit one shard.
+      - Consider **disk-based ANN** for cold data, and **replicate** shards for availability.
+    works: |
+      Memory per node drops by an order of magnitude, rebuilds are per shard, and most queries touch one small shard.
+      Rescoring recovers most of the recall lost to quantization, and replicas remove the single failure domain.
+    code: |
+      def plan_index(n_vectors, dims, shards, bytes_per_dim=1, overhead=0.3, replicas=2):
+          per_shard_gb = n_vectors / shards * dims * bytes_per_dim * (1 + overhead) / 1e9
+          return {"per_shard_gb": round(per_shard_gb, 1), "total_gb": round(per_shard_gb * shards * replicas, 1)}
+
+      plan_index(200_000_000, 768, shards=16)          # int8: ~12.5 GB per shard
+
+      def search(q, tenant):
+          shard = router.shard_for(tenant)              # most queries hit one shard
+          cands = shard.search_quantized(embed(q), k=300)
+          return rescore_full_precision(q, cands)[:10]  # recover recall lost to quantization
+    takeaway: "At hundreds of millions of vectors, quantize, shard by a natural key and replicate. One giant in-memory index is a single point of failure."
+    followup: "How much memory do 200M 768-dimension vectors need, and how would you bring that down?"
+
+  - id: post-filter-selective-metadata
+    title: Post-filtering highly selective metadata filters
+    tags: [Quality, Security]
+    scenario: |
+      A user in a small department gets 0–2 results, or irrelevant ones, even though the answer exists in documents they're
+      allowed to see.
+    antipattern: |
+      **ANN search returns the top 100 across all 100M chunks, and only then drops what the user can't see** or what doesn't
+      match the filter.
+    fails: |
+      - If the filter keeps 0.01% of the corpus, almost all 100 candidates are discarded.
+      - Users with narrow permissions or rare filters systematically get worse answers.
+      - Raising k to compensate makes every query slower without fixing the root cause.
+    diagram:
+      bad: ["Query", "ANN top-100 (whole corpus)", "!Post-filter by ACL / dept", "!0–2 results left"]
+      bad_note: "Selective filters starve the candidate pool"
+      good: ["Query + filters", "+Filter-aware ANN (payload index)", "+Partition by tenant / region", "+Exact search on tiny subsets", "Full k results"]
+      good_note: "Filter during search, not after"
+    solution: |
+      **Filter during search:**
+
+      - Use a store with filter-aware ANN (filtered HNSW, payload indexes).
+      - Partition or shard on high-selectivity keys (tenant, region).
+      - For very selective filters, fall back to **exact search over the filtered subset**, which is small by definition.
+    works: |
+      Every user gets a full candidate set from the documents they can actually see. Exact search on small subsets is both
+      accurate and fast, and partitioning keeps large tenants from crowding out small ones.
+    code: |
+      def filtered_search(q, flt, k=10):
+          n = index.count(filter=flt)
+          if n < 20_000:
+              return exact_search(embed(q), ids=index.ids(filter=flt), k=k)   # tiny subset: exact is cheap
+          return index.search(embed(q), k=k, filter=flt)                       # filter-aware ANN
+
+      metrics.inc("results_below_k", filter=flt_name) if len(hits) < k else None   # catch it per filter
+    takeaway: "Post-filtering starves users with narrow permissions. Filter inside the search, partition on selective keys, and use exact search for tiny subsets."
+    followup: "Why is post-filtering top-k results by ACL both a quality and a security problem?"
+
+  - id: stale-acls-shared-cache
+    title: ACLs copied once at ingest, plus a shared answer cache
+    tags: [Security, Compliance]
+    scenario: |
+      An employee who moved out of Finance still gets answers from Finance documents. Worse, user B receives user A's cached
+      answer containing a salary figure.
+    antipattern: |
+      **Permissions are snapshotted at index time and never synced**, and a semantic or answer cache is keyed only on the
+      query text and shared across users with different access.
+    fails: |
+      - Revocations never reach the index, so former entitlements live on indefinitely.
+      - A shared cache bypasses retrieval-time security entirely: the first user's answer is served to everyone who asks a similar question.
+      - Storing per-user ACLs on chunks explodes index size, so teams avoid syncing at all.
+    diagram:
+      bad: ["Ingest (ACL snapshot)", "!Never re-synced", "!Cache keyed by query only", "Salary figure to wrong user"]
+      bad_note: "Stale permissions plus a cross-user cache"
+      good: ["Group ACLs on chunks", "+Resolve groups from IdP per request", "+Permission change stream", "+Cache key = tenant + perm hash + query", "Correct, isolated answers"]
+      good_note: "Permissions synced as events; caches scoped by permission set"
+    solution: |
+      - Store **group-level ACLs** on chunks (not individual users) and resolve the user's current groups from the identity provider **on every request**.
+      - Sync permission changes as **their own event stream**, which is far cheaper than re-embedding.
+      - Scope every cache key by **tenant and a hash of the permission set**, and invalidate on permission changes.
+      - For hard multi-tenant isolation, use a separate namespace or index per large tenant.
+    works: |
+      Revocations take effect within minutes, and no cached answer can cross a permission boundary. An automated access test
+      suite ("user X must never see doc Y") and a canary document per tenant prove it on every deploy.
+    code: |
+      def cache_key(q, user):
+          perm = sha256(",".join(sorted(user.groups)))[:16]
+          return f"{user.tenant}:{perm}:{normalize(q)}"
+
+      @idp.on("group_membership_changed")
+      def on_membership(evt):
+          cache.invalidate(prefix=f"{evt.tenant}:")             # permission-scoped invalidation
+
+      def test_access(user="finance-leaver", doc="FIN-SALARY-2026"):
+          assert doc not in [h.doc_id for h in secure_search("salary bands", token_for(user))]
+    takeaway: "Permissions change after ingestion and caches cross users. Sync ACLs as events, resolve groups per request, and scope every cache by permission set."
+    followup: "An employee changed departments last month and still sees the old department's documents. Where do you look?"
+
+  - id: noisy-neighbours-shared-cluster
+    title: Noisy neighbours in a shared retrieval cluster
+    tags: [Reliability, Latency, Scale]
+    scenario: |
+      One enterprise tenant starts a 30-million-document backfill, and every other tenant's retrieval latency triples.
+    antipattern: |
+      **Ingestion and queries share one compute pool with no isolation or quotas.**
+    fails: |
+      - Bulk ingestion competes with interactive queries for CPU, memory and I/O.
+      - One tenant's activity sets everyone else's latency, which breaks SLAs for all tenants.
+      - Without per-tenant metrics, the cause isn't visible.
+    diagram:
+      bad: ["Tenant A 30M backfill", "!Shared ingest + query pool", "!No quotas", "Everyone's p95 × 3"]
+      bad_note: "One tenant's load becomes everyone's outage"
+      good: ["Tenants", "+Separate ingest vs query compute", "+Per-tenant quotas / rate limits", "+Dedicated shards for largest tenants", "Isolated SLOs"]
+      good_note: "Isolation by workload and tenant"
+    solution: |
+      - Separate **ingestion and query compute**.
+      - Apply **per-tenant rate limits and quotas**.
+      - Give the largest tenants **dedicated shards or namespaces**.
+      - Schedule backfills **off-peak with throttling**, and autoscale query replicas on p95 latency.
+    works: |
+      Interactive latency no longer depends on other tenants' bulk work. Dedicated resources cost more and run at lower
+      utilization, which is the price of predictable SLOs. Per-tenant p95 and error-rate alerts make any remaining contention visible.
+    code: |
+      ingest_limiter = TokenBucket(rate_per_tenant={"default": 50, "enterprise-a": 200})   # docs/s
+
+      def submit_backfill(tenant, docs):
+          job = ingest_queue.enqueue(tenant, docs, window="off_peak", throttle=ingest_limiter.rate(tenant))
+          return job.id
+
+      # query pool autoscaling (KEDA): trigger on per-pool p95 latency, separate from ingestion workers
+      metrics.histogram("retrieval_p95_ms", labels={"tenant": tenant})   # alert per tenant
+    takeaway: "Isolate ingestion from queries and tenants from each other. Without quotas, one backfill sets everyone's latency."
+    followup: "How would you design multi-tenant retrieval so one large customer can't degrade the others?"

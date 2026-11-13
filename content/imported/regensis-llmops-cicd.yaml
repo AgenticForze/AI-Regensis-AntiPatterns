@@ -1,0 +1,2386 @@
+source: regensis
+section: llmops-cicd
+patterns:
+- id: ops-01
+  title: Last week's bad answer can't be reproduced
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A complaint arrives about a wrong answer the bank's assistant gave about early repayment charges eight days ago. Engineering tries to reproduce it. Since then, the prompt changed twice, the index was rebuilt, and the model was upgraded. Git has the code, but nothing records which prompt, index snapshot and model produced the answer.
+  antipattern: |-
+    **Git for code only.**
+
+    *Think of it this way:* Trying to bake the same cake again when the recipe, oven and flour have all changed and nobody wrote down which were used.
+  fails: |-
+    **Mechanism:** Behavior depends on prompt, model version, index snapshot, embeddings, and parameters.
+
+    - Behaviour depends on more than code.
+    - Prompts, indexes and models change on different schedules.
+    - No single record ties them together.
+
+    **Root cause:** Only code is versioned.
+
+    **Where it breaks:** Release engineering.
+  diagram:
+    bad:
+    - Complaint · 8 days ago
+    - '!Prompt x2 · Changed'
+    - Index + model · Changed
+    - '!Can''t replay · Unknown config'
+    bad_note: Git for code only
+    good:
+    - Version all · Prompt, model
+    - +Index snapshot · Retained
+    - +Manifest id · On traces
+    - Replay · Any release
+    good_note: Release manifest versions the whole bundle
+  solution: |-
+    1. Version every component (prompt, model id, index snapshot, embedding model, tool versions, guardrail config).
+    2. Record each production configuration as a release manifest with an id, stamped on every trace.
+    3. Keep index snapshots long enough to replay recent incidents.
+  works: |-
+    **Trade-off to manage:** Snapshots cost storage; keep them on a rolling window.
+
+    **How you prove it worked:**
+
+    - Ability to rebuild any release from its manifest, tested quarterly.
+
+    **Same pattern elsewhere:** Telco: a regulator asks a carrier to explain an AI answer about contract terms, and the configuration that produced it can't be reconstructed.
+  takeaway: Reproducibility needs the whole bundle versioned.
+  related:
+  - tel-10
+  - obs-11
+  - cicd-02
+  code: |
+    manifest = {
+        "release": "care-bot-2026.11.07",
+        "prompt": "care.main@31", "model": "provider/model-2026-08-14",
+        "index": "kb_2026_11_05_snapshot", "embedder": "bge-m3@rev3",
+        "tools": {"billing": "2.4.1", "orders": "1.9.0"}, "guardrails": "baseline@12",
+    }
+    release_store.save(manifest)
+    span.set_attribute("release.id", manifest["release"])           # stamped on every trace
+    # replay: load manifest by trace → same prompt/model/index snapshot
+  lang: python
+- id: ops-02
+  title: Intent model trained on clean text, served on raw transcripts
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier fine-tunes a small intent classifier on chat logs that were lowercased, had phone numbers masked and emojis removed. The serving service sends raw text. Offline accuracy is 94%; production is 78%, worst for messages with phone numbers, which are exactly the porting intents.
+  antipattern: |-
+    **Different text cleaning in training and serving code.**
+
+    *Think of it this way:* Training a sniffer dog on one brand of shampoo and then deploying it in a different building.
+  fails: |-
+    **Mechanism:** The model sees inputs in production that differ from training.
+
+    - Preprocessing differs between training and serving.
+    - The model sees unfamiliar inputs in production.
+    - Nobody tested parity.
+
+    **Root cause:** Separate preprocessing code paths.
+
+    **Where it breaks:** ML pipeline.
+  diagram:
+    bad:
+    - Training · Cleaned text
+    - '!Serving · Raw text'
+    - 94% offline · 78% prod
+    - '!Porting worst · Phone numbers'
+    bad_note: Separate preprocessing paths
+    good:
+    - Shared lib · Preprocess
+    - +Parity test · Same input
+    - +Log sample · In prod
+    - Gap alert · By intent
+    good_note: One shared transform plus a parity test
+  solution: |-
+    1. Share one preprocessing library between training and serving.
+    2. Add a parity test that runs the same raw input through both paths.
+    3. Log preprocessed inputs for a sample in production.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Offline vs production accuracy gap by intent.
+
+    **Same pattern elsewhere:** FinTech: a transaction-categorisation model trained on cleaned merchant names receives raw descriptors at serving time.
+  takeaway: Same transform in training and serving.
+  related:
+  - ops-11
+  code: |
+    # one shared package used by training and serving
+    from nlp_preprocess import normalize_transcript
+
+    def test_parity():
+        raw = load_fixture("raw_ivr_transcript.txt")
+        assert training_pipeline.preprocess(raw) == serving_service.preprocess(raw)
+
+    if random() < 0.01:
+        log.info("preprocessed_sample", raw_ref=store(raw), processed=normalize_transcript(raw))
+  lang: python
+- id: ops-03
+  title: Fine-tuning a model on monthly price plans
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier spends three months and $40k fine-tuning a model on its price plans and promotions so the bot "knows the catalog". The catalog changes monthly. Two weeks after deployment, the model confidently quotes last month's prices, and retraining each month is too slow and expensive.
+  antipattern: |-
+    **Fine-tuning for knowledge.**
+
+    *Think of it this way:* Tattooing the menu on the waiter's arm when the menu changes every month.
+  fails: |-
+    **Mechanism:** Fine-tuning is good for style, format, and behavior, but poor for fresh, factual knowledge. Retraining for each update is costly.
+
+    - Fine-tuning bakes knowledge into weights.
+    - Knowledge goes stale as soon as the catalog changes.
+    - The model can't cite where a price came from.
+
+    **Root cause:** Fine-tuning used for fresh, factual knowledge.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - Fine-tune · Price plans
+    - '!3 months · $40k'
+    - Catalog changes · Monthly
+    - '!Stale prices · Confidently'
+    bad_note: Fine-tune to teach the price list
+    good:
+    - Catalog tool · TMF620
+    - +RAG · Explanations
+    - +Fine-tune · Tone, format
+    - Fresh + cited · Prices
+    good_note: Catalog tool for facts, fine-tune for behaviour
+  solution: |-
+    1. Use a ladder (prompting, then RAG or tools for knowledge, then fine-tuning for behaviour, format or cost).
+    2. Get prices from the catalog (TMF620) as a tool.
+    3. Fine-tune only for stable behaviour (tone, format, classification) once evals and data exist.
+  works: |-
+    **Trade-off to manage:** Tools add latency, but prices are always current and citable.
+
+    **How you prove it worked:**
+
+    - Price accuracy against the live catalog.
+
+    **Same pattern elsewhere:** FinTech: a bank fine-tunes on its rate sheet, and the model quotes old mortgage rates after a rate change.
+  takeaway: RAG for knowledge, fine-tuning for behaviour.
+  related:
+  - ft-01
+  - rag-01
+  code: |
+    LADDER = ["prompting", "rag_or_tools", "fine_tune"]
+
+    @tool
+    def get_plan_price(offering_id: str) -> dict:
+        return tmf620.product_offering_price(offering_id)      # monthly prices from the catalog
+
+    # fine-tune only for stable behaviour (tone, format, classification), with evals + data in place
+  lang: python
+- id: ops-04
+  title: Collections model fine-tuned on raw call transcripts
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    A lender fine-tunes a model on 50,000 historical collections-call transcripts to sound like its best agents. The data includes calls where agents pressured customers and implied legal action without basis. The fine-tuned model reproduces these phrases, creating FDCPA risk.
+  antipattern: |-
+    **Training on raw historical transcripts.**
+
+    *Think of it this way:* Teaching an apprentice by having them shadow everyone, including the staff who were later disciplined.
+  fails: |-
+    **Mechanism:** The model learns everything in the data, including mistakes.
+
+    - The model learns everything in the data, including bad behaviour.
+    - Transcripts were never filtered by QA outcome.
+    - PII is also embedded in training data.
+
+    **Root cause:** Unvetted training data.
+
+    **Where it breaks:** Data curation.
+  diagram:
+    bad:
+    - 50k calls · Raw
+    - '!Bad agents · Included'
+    - Fine-tune · Learns it
+    - '!Pressure lines · FDCPA risk'
+    bad_note: Fine-tune on raw historical transcripts
+    good:
+    - QA filter · Compliant only
+    - +Remove PII · Dedupe
+    - +Label · Examples
+    - Compliance eval · Before deploy
+    good_note: Curated, compliant, de-identified training data
+  solution: |-
+    1. Filter training data by QA scores and compliance reviews; remove non-compliant calls.
+    2. Remove PII, deduplicate, and label examples.
+    3. Hold out a test set and run compliance evals on the fine-tuned model before deployment.
+    4. Track data lineage (which calls, which filters).
+  works: |-
+    **Trade-off to manage:** Filtering reduces data volume; quality matters more than quantity.
+
+    **How you prove it worked:**
+
+    - Compliance phrase scans of model outputs.
+
+    **Same pattern elsewhere:** Telco: a care model fine-tuned on old chats learns to quote retired policies and sarcastic replies.
+  takeaway: Fine-tuning amplifies your data, good and bad.
+  related:
+  - ft-05
+  - data-06
+  code: |
+    def build_training_set(calls):
+        ok = [c for c in calls if c.qa_score >= 4 and c.compliance_review == "pass"]
+        cleaned = [redact_pii(c.transcript) for c in ok]
+        deduped = dedupe(cleaned, threshold=0.9)
+        lineage.record(source="calls_2026_q3", filters=["qa>=4", "compliance=pass", "pii", "dedupe"], n=len(deduped))
+        return label(deduped)
+
+    train, test = split(build_training_set(calls), test_frac=0.15)
+    assert compliance_eval(finetuned_model, test).violations == 0
+  lang: python
+- id: ops-05
+  title: Nobody knows which data trained the credit-memo model
+  tags:
+  - Reliability
+  - Cost
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's model-risk team asks for documentation of a fine-tuned model that drafts credit memos: training data, code version, hyperparameters, evaluation results and approver. The model is a file in an S3 bucket named final_v3_new. The validation is failed and the model is suspended.
+  antipattern: |-
+    **Models stored as files in buckets.**
+
+    *Think of it this way:* A medicine on a shelf with no label, batch number or expiry date.
+  fails: |-
+    **Mechanism:** No audit trail, no rollback, no comparison.
+
+    - Models are stored as files with no metadata.
+    - No lineage to data and code.
+    - Validation can't be evidenced.
+
+    **Root cause:** No model registry.
+
+    **Where it breaks:** MLOps tooling.
+  diagram:
+    bad:
+    - final_v3_new · In S3
+    - '!No lineage · Data? Code?'
+    - Model risk · Asks
+    - '!Suspended · Failed validation'
+    bad_note: Models as files in a bucket
+    good:
+    - Registry · MLflow etc.
+    - +Lineage · Data + commit
+    - +Approval · Gate deploy
+    - Model card · Published
+    good_note: Registry with lineage, approval gate, model card
+  solution: |-
+    1. Use a model registry (MLflow, Weights and Biases, SageMaker or Vertex) with lineage (data version, code commit, evals, approver).
+    2. Gate production deployment on registry status (approved).
+    3. Produce model cards for every production model.
+  works: |-
+    **Trade-off to manage:** Registration adds process steps; automate them in the training pipeline.
+
+    **How you prove it worked:**
+
+    - Share of production models with complete registry records.
+
+    **Same pattern elsewhere:** Telco: a carrier can't show which data trained its churn-reason classifier during a privacy audit.
+  takeaway: Every production model should have a birth certificate.
+  related:
+  - gov-01
+  - ops-15
+  code: |
+    import mlflow
+
+    with mlflow.start_run():
+        mlflow.log_params({"data_version": DATA_V, "code_commit": GIT_SHA})
+        mlflow.log_metrics(eval_results)
+        mlflow.register_model(model_uri, "credit-memo-writer")
+
+    client.set_model_version_tag("credit-memo-writer", v, "approved_by", "mrm-lead")
+    def deploy(name, version):
+        assert client.get_model_version(name, version).tags.get("status") == "approved"   # gate on registry
+  lang: python
+- id: ops-06
+  title: All traffic switched to a new model at once
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier switches 100% of its care bot to a new model version on Monday morning. Offline evals passed. In production, the new model handles abbreviations and prepaid-brand slang differently, and transfers to agents rise 35% before the team rolls back two hours later.
+  antipattern: |-
+    **No gradual rollout.**
+
+    *Think of it this way:* Changing every traffic light in a city to a new system at once instead of testing one junction.
+  fails: |-
+    **Mechanism:** Offline evals don't catch everything.
+
+    - Offline evals don't catch everything.
+    - No gradual exposure.
+    - Rollback is manual and slow.
+
+    **Root cause:** Big-bang rollout.
+
+    **Where it breaks:** Deployment strategy.
+  diagram:
+    bad:
+    - New model · Evals passed
+    - '!100% traffic · Monday'
+    - Transfers +35% · Slang
+    - '!Manual rollback · 2 hours'
+    bad_note: 100% switch on Monday morning
+    good:
+    - Shadow · Compare silently
+    - +Canary 5% · Monitored
+    - +Ramp · Progressive
+    - Auto-rollback · On breach
+    good_note: Shadow, canary, ramp with auto-rollback
+  solution: |-
+    1. Shadow first (new model runs silently, outputs compared), then canary (1-5%), then progressive ramp.
+    2. Define automatic rollback triggers on key metrics (transfer rate, errors, quality score).
+    3. Avoid Monday peaks for changes.
+  works: |-
+    **Trade-off to manage:** Slower rollouts; far fewer incidents.
+
+    **How you prove it worked:**
+
+    - Canary vs control metric comparison.
+
+    **Same pattern elsewhere:** FinTech: a bank switches its fraud-alert explanations to a new model and complaint volume jumps.
+  takeaway: Shadow, canary, then ramp.
+  related:
+  - cicd-05
+  - cicd-06
+  code: |
+    ROLLOUT = [("shadow", 0), ("canary", 0.02), ("ramp", 0.25), ("ramp", 0.5), ("full", 1.0)]
+    ROLLBACK_IF = {"transfer_rate": +0.03, "error_rate": +0.01, "quality_score": -0.02}
+
+    for stage, pct in ROLLOUT:
+        gateway.set_traffic("new_model", pct, shadow=(stage == "shadow"))
+        wait(hours=24, avoid=["MON 08:00-12:00"])
+        if any(delta(m) * (1 if d > 0 else -1) > abs(d) for m, d in ROLLBACK_IF.items()):
+            gateway.set_traffic("new_model", 0); alert("auto-rollback"); break
+  lang: python
+- id: ops-07
+  title: Twelve teams call four providers directly
+  tags:
+  - Reliability
+  - Cost
+  - Security
+  - FinTech
+  scenario: |-
+    Across a bank, 12 teams call four model providers directly with their own API keys, retry logic and logging. Security can't see which data goes where, finance can't attribute cost, and a key leaked from one team's repository takes days to trace.
+  antipattern: |-
+    **Direct provider calls everywhere.**
+
+    *Think of it this way:* Every department running its own phone lines with no switchboard.
+  fails: |-
+    **Mechanism:** No central control of keys, quotas, fallbacks, caching, logging, or policy.
+
+    - No central control of keys, quotas, logging or policy.
+    - Inconsistent retries and fallbacks.
+    - No view of data flows to providers.
+
+    **Root cause:** No LLM gateway.
+
+    **Where it breaks:** Platform architecture.
+  diagram:
+    bad:
+    - 12 teams · Own keys
+    - '!4 providers · Direct calls'
+    - No visibility · Data, cost
+    - '!Leaked key · Days to trace'
+    bad_note: Direct provider calls from every team
+    good:
+    - Gateway · All traffic
+    - +Virtual keys · Per team
+    - +Policy · PII, routing
+    - Egress block · Direct calls
+    good_note: One LLM gateway with keys, policy, metering
+  solution: |-
+    1. Route all model access through a gateway (LiteLLM, Portkey or a cloud AI gateway) for auth, routing, rate limits, fallbacks, caching, metering and PII policy.
+    2. Issue per-team virtual keys with budgets.
+    3. Block direct provider egress at the network level.
+  works: |-
+    **Trade-off to manage:** The gateway becomes critical infrastructure; run it highly available.
+
+    **How you prove it worked:**
+
+    - Share of LLM traffic via the gateway; direct-egress alerts.
+
+    **Same pattern elsewhere:** Telco: business units in a carrier sign separate AI contracts and nobody can enforce CPNI rules on prompts.
+  takeaway: Centralise model access the way you centralise database access.
+  related:
+  - obs-05
+  - ops-19
+  code: |
+    # litellm proxy config.yaml (excerpt)
+    # model_list:
+    #   - model_name: mid-tier
+    #     litellm_params: {model: bedrock/<model-id>}
+    #   - model_name: mid-tier
+    #     litellm_params: {model: vertex_ai/<model-id>}       # fallback route
+    # router_settings: {routing_strategy: usage-based-routing, num_retries: 2}
+    # general_settings: {master_key: os.environ/LITELLM_MASTER_KEY}
+
+    key = gateway.keys.create(team="cards-ai", max_budget=5000, budget_duration="30d")   # per-team virtual key
+    # network: egress to provider endpoints allowed only from the gateway subnet
+  lang: python
+- id: ops-08
+  title: Self-hosted model runs out of GPU memory at 50 users
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    For data-sovereignty reasons, a European carrier self-hosts an open-weight model for its care agents. Single-request benchmarks look great. At 50 concurrent agents with long call transcripts, the server runs out of GPU memory and requests fail.
+  antipattern: |-
+    **Benchmarking single requests only.**
+
+    *Think of it this way:* Testing a restaurant kitchen with one order and opening on a Saturday night.
+  fails: |-
+    **Mechanism:** KV cache memory grows with concurrency and context length.
+
+    - KV-cache memory grows with concurrency times context length.
+    - Benchmarks used single short requests.
+    - No autoscaling or admission control.
+
+    **Root cause:** Capacity planning ignored realistic concurrency and context lengths.
+
+    **Where it breaks:** Serving infrastructure.
+  diagram:
+    bad:
+    - Self-hosted · Sovereignty
+    - '!1-request test · Fast'
+    - 50 agents · Long context
+    - '!GPU OOM · Failures'
+    bad_note: Benchmark single short requests
+    good:
+    - Load test · Real lengths
+    - +vLLM · Paged attention
+    - +Limits · Context, concur.
+    - Autoscale · Queue depth
+    good_note: Realistic load tests, batching, admission control
+  solution: |-
+    1. Load-test with realistic concurrency and lengths.
+    2. Use serving engines with continuous batching and paged attention (vLLM, TGI, TensorRT-LLM).
+    3. Set max context and concurrency limits, autoscale on queue depth, and shed load gracefully.
+  works: |-
+    **Trade-off to manage:** Headroom costs GPUs; size for peak with a buffer.
+
+    **How you prove it worked:**
+
+    - GPU memory, queue depth and rejection rates.
+
+    **Same pattern elsewhere:** FinTech: a bank's on-prem model for document review fails during month-end processing.
+  takeaway: Plan GPU capacity for concurrency times context length.
+  related:
+  - ops-17
+  - cost-03
+  code: |
+    # vllm serve <model> --max-model-len 8192 --max-num-seqs 64 --gpu-memory-utilization 0.9
+    #   (continuous batching + paged attention)
+
+    async def admit(req):
+        if queue.depth() > MAX_QUEUE:
+            raise HTTPException(503, "busy, retry shortly")                     # shed gracefully
+        return await queue.put(req)
+
+    # load test: locust -u 200 --spawn-rate 20 with realistic prompt/response lengths
+    # autoscale: KEDA on vllm_num_requests_waiting
+  lang: python
+- id: ops-09
+  title: Cost per call falls while cost per resolved dispute triples
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A card issuer moves its dispute assistant to a cheaper model to cut cost per call by 60%. The cheaper model resolves fewer disputes in one session, so customers return and escalate to agents. Cost per resolved dispute, including agent time, triples.
+  antipattern: |-
+    **Optimizing the wrong unit.**
+
+    *Think of it this way:* Buying cheaper tyres that wear out three times as fast.
+  fails: |-
+    **Mechanism:** Cheaper calls that fail more often cost more overall.
+
+    - The optimised unit (cost per call) wasn't the business unit.
+    - Failures shift cost elsewhere.
+    - Nobody measured end-to-end cost.
+
+    **Root cause:** Optimising the wrong unit.
+
+    **Where it breaks:** Cost management.
+  diagram:
+    bad:
+    - Cheaper model · -60% per call
+    - '!Fewer resolved · In session'
+    - Escalations · To agents
+    - '!Cost/outcome x3 · Total'
+    bad_note: Optimise cost per call
+    good:
+    - Outcome cost · Incl. humans
+    - +Repeat contact · Counted
+    - +Route + cache · Where safe
+    - Evals hold · Then switch
+    good_note: Optimise cost per resolved outcome
+  solution: |-
+    1. Measure cost per successful outcome (resolved dispute), including human time and repeat contacts.
+    2. Use caching, model routing and prompt compression only where evals show outcomes hold.
+  works: |-
+    **Trade-off to manage:** Outcome attribution needs cross-system data.
+
+    **How you prove it worked:**
+
+    - Cost per outcome dashboard by version.
+
+    **Same pattern elsewhere:** Telco: a cheaper model for plan changes lowers bot cost but raises store visits.
+  takeaway: Optimise cost per success, not cost per call.
+  related:
+  - cost-01
+  - eval-14
+  code: |
+    def cost_per_resolved_dispute(month):
+        llm = ledger.sum(use_case="disputes", month=month)
+        human = worklog.hours(queue="disputes", month=month) * LOADED_HOURLY_RATE
+        repeats = contacts.repeat_cost(intent="dispute", month=month)
+        resolved = disputes.count(status="resolved", month=month)
+        return (llm + human + repeats) / resolved
+  lang: python
+- id: ops-10
+  title: Thirty percent of questions are the same and all pay full price
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    On bill-run days, 30% of a carrier's chatbot questions are near-duplicates ("why is my bill higher this month", "what is this new fee"). Every one is answered from scratch, with retrieval and a full model call, and the 12k-token system prompt is re-processed each time.
+  antipattern: |-
+    **Every request hits the model.**
+
+    *Think of it this way:* A bakery that bakes each loaf to order even when everyone wants the same bread.
+  fails: |-
+    **Mechanism:** Repeated work wastes money and latency.
+
+    - No exact or semantic caching for general answers.
+    - No provider prompt caching for the stable prefix.
+    - Repeated work costs money and latency.
+
+    **Root cause:** No caching strategy.
+
+    **Where it breaks:** Serving architecture.
+  diagram:
+    bad:
+    - Bill-run day · Peak
+    - '!30% duplicates · Same Qs'
+    - Full pipeline · Every time
+    - '!Cost + latency · High'
+    bad_note: Every request hits the model
+    good:
+    - Prompt cache · Stable prefix
+    - +Answer cache · General only
+    - +TTL + purge · On change
+    - No personal · Caching
+    good_note: Prompt caching plus general-answer caches
+  solution: |-
+    1. Enable provider prompt caching for the stable prefix (see ctx-06).
+    2. Cache answers to general, non-personalised questions (exact and semantic) with TTLs and invalidation on content change.
+    3. Never cache personalised answers across users (see ctx-17).
+  works: |-
+    **Trade-off to manage:** Caches can serve stale content; invalidate on catalog and policy changes.
+
+    **How you prove it worked:**
+
+    - Cache hit rates and cost per conversation.
+
+    **Same pattern elsewhere:** FinTech: during a card outage, thousands ask "Is there a problem with cards?" and each triggers a full RAG pipeline.
+  takeaway: The cheapest token is the one you never generate.
+  related:
+  - ctx-06
+  - ctx-17
+  - cost-06
+  code: |
+    def answer(q, user):
+        if is_general(q):
+            if (hit := exact_cache.get(norm(q))) or (hit := semantic_cache.get(q, min_sim=0.95)):
+                return hit
+        resp = llm(system=[{"text": STABLE_PREFIX, "cache": True}], user=q)    # provider prompt caching
+        if is_general(q):
+            semantic_cache.put(q, resp, ttl=86400, source_docs=resp.doc_ids)   # invalidated on content change
+        return resp
+  lang: python
+- id: ops-11
+  title: Notebook works, the production rewrite doesn't
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    A data scientist builds a KYC document classifier in a notebook with 96% accuracy. Engineering rewrites it as a service. The service scores 88%: a different PDF library, an unpinned model version and a forgotten text-normalisation cell.
+  antipattern: |-
+    **Manual translation of experiments into services.**
+
+    *Think of it this way:* Copying a recipe by watching a video and missing the step the chef did off-camera.
+  fails: |-
+    **Mechanism:** Hidden state, untracked dependencies, and rewrite bugs.
+
+    - Hidden notebook state and cell order.
+    - Untracked dependencies.
+    - Manual translation introduces bugs.
+
+    **Root cause:** Notebooks handed over instead of artifacts.
+
+    **Where it breaks:** Development workflow.
+  diagram:
+    bad:
+    - Notebook · 96%
+    - '!Rewrite · As service'
+    - Missed cell · + new libs
+    - '!88% · In service'
+    bad_note: Rewrite the notebook by hand
+    good:
+    - Shared module · Tested
+    - +Pinned env · Container
+    - +Same evals · Both
+    - Parity · Checked
+    good_note: Shared modules, pinned env, same evals
+  solution: |-
+    1. Move logic into shared, tested modules used by both notebook and service.
+    2. Pin environments and containerise pipelines.
+    3. Run the same eval suite against both.
+  works: |-
+    **Trade-off to manage:** Less freedom in notebooks; much faster delivery.
+
+    **How you prove it worked:**
+
+    - Accuracy parity check between experiment and service.
+
+    **Same pattern elsewhere:** Telco: a churn-reason prototype in a notebook loses accuracy when rebuilt as a streaming job.
+  takeaway: Promote artifacts, not notebooks.
+  related:
+  - ops-02
+  code: |
+    # notebook and service import the same tested module
+    from care_ai.pipeline import build_pipeline          # src/care_ai/pipeline.py, unit-tested
+
+    pipe = build_pipeline(config="configs/prod.yaml")
+    # Dockerfile pins: python 3.12, requirements.lock
+    assert eval_suite.run(pipe).score == eval_suite.run(service_client).score   # same suite on both
+  lang: python
+- id: ops-12
+  title: A year of care-bot feedback never used
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier has collected a year of chatbot feedback, transfers and agent notes. None of it feeds back into prompts, retrieval content or evals. The same five failure types make up most transfers month after month.
+  antipattern: |-
+    **No data flywheel.**
+
+    *Think of it this way:* A restaurant that collects comment cards and throws them away unread.
+  fails: |-
+    **Mechanism:** The system never learns from real usage.
+
+    - No loop from feedback to improvement.
+    - No owner for triage.
+    - Content gaps stay open.
+
+    **Root cause:** No data flywheel process.
+
+    **Where it breaks:** Operating model.
+  diagram:
+    bad:
+    - Feedback · A year
+    - '!Transfers · Agent notes'
+    - Unused · No owner
+    - '!Same 5 issues · Monthly'
+    bad_note: Feedback collected, never used
+    good:
+    - Triage · Weekly
+    - +Eval cases · Added
+    - +Fix · Prompt, content
+    - Ship · Re-evaluated
+    good_note: Weekly flywheel from feedback to release
+  solution: |-
+    1. Run a weekly loop (collect, triage, label, add to evals, fix prompts, retrieval or content, re-evaluate, ship).
+    2. Assign owners for content gaps (knowledge team) and system fixes (AI team).
+    3. Track top failure types month over month.
+  works: |-
+    **Trade-off to manage:** Requires standing team time.
+
+    **How you prove it worked:**
+
+    - Recurrence rate of top failure types.
+
+    **Same pattern elsewhere:** FinTech: a bank's assistant keeps failing on the same mortgage questions because feedback goes nowhere.
+  takeaway: Close the loop from feedback to the next release.
+  related:
+  - obs-03
+  - eval-05
+  code: |
+    @schedule(cron="0 9 * * MON")
+    def feedback_loop():
+        batch = feedback.collect(days=7, rating="down")
+        triaged = triage(batch)                                           # content gap vs system fix
+        for item in triaged:
+            eval_set.add(label(item))
+            owner = "knowledge-team" if item.kind == "content_gap" else "ai-team"
+            backlog.create(item, owner=owner)
+        report.monthly_top_failures(taxonomy=FAILURE_TYPES)
+  lang: python
+- id: ops-13
+  title: Minor framework update changes default chunk size
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's policy assistant uses an LLM framework with unpinned versions. A minor release changes a default text-splitter setting and a retriever's default k. The next index rebuild produces different chunks, and answer quality drops without any code change by the team.
+  antipattern: |-
+    **Floating versions of LLM libraries.**
+
+    *Think of it this way:* A supplier quietly changing an ingredient in a recipe you depend on.
+  fails: |-
+    **Mechanism:** LLM frameworks change fast and defaults shift.
+
+    - Floating dependency versions.
+    - LLM libraries change fast, including defaults.
+    - No evals run on dependency updates.
+
+    **Root cause:** Unpinned dependencies.
+
+    **Where it breaks:** Dependency management.
+  diagram:
+    bad:
+    - Unpinned · Framework
+    - '!Minor release · New defaults'
+    - Rebuild index · New chunks
+    - '!Quality drop · No code change'
+    bad_note: Floating library versions
+    good:
+    - Lock file · Pinned
+    - +Explicit · Chunk size, k
+    - +Upgrade PR · Scheduled
+    - Full evals · On upgrade
+    good_note: Lock files, explicit params, eval-gated upgrades
+  solution: |-
+    1. Pin versions with lock files.
+    2. Upgrade on a schedule through a PR that runs the full eval suite.
+    3. Set important parameters explicitly instead of relying on defaults.
+  works: |-
+    **Trade-off to manage:** Pinned versions need deliberate upgrades for security patches.
+
+    **How you prove it worked:**
+
+    - Dependency-diff alerts in CI.
+
+    **Same pattern elsewhere:** Telco: an SDK update changes retry behaviour and doubles calls to a BSS API.
+  takeaway: Pin fast-moving libraries and upgrade on purpose.
+  related:
+  - cicd-07
+  - agf-09
+  code: |
+    # requirements.lock pins exact versions; renovate opens monthly upgrade PRs that run full evals
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800, chunk_overlap=120,               # explicit, never framework defaults
+        separators=["\n## ", "\n### ", "\n\n", "\n", " "])
+  lang: python
+- id: ops-14
+  title: Staging uses a small model and a tiny index
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    To save money, a carrier's staging environment uses a small model and a 2% sample of the knowledge base. Everything passes there. Production surprises are constant: different latency, different retrieval results and different tool timing.
+  antipattern: |-
+    **Cheap staging that doesn't resemble production.**
+
+    *Think of it this way:* Rehearsing a play in a living room and performing it in a stadium.
+  fails: |-
+    **Mechanism:** Behavior depends on model, data size, and latency characteristics.
+
+    - Behaviour depends on model, data size and latency.
+    - Staging differs in all three.
+    - Tests give false confidence.
+
+    **Root cause:** No environment parity.
+
+    **Where it breaks:** Environments.
+  diagram:
+    bad:
+    - Small model · In staging
+    - '!2% of KB · Index'
+    - All pass · Staging
+    - '!Prod surprises · Constant'
+    bad_note: Staging with different model and data
+    good:
+    - Same models · Staging
+    - +Rep. snapshot · Anonymised
+    - +Low volume · To save cost
+    - Perf tests · Prod-like
+    good_note: Same components, less volume
+  solution: |-
+    1. Use the same models in staging, and a representative data snapshot (anonymised or synthetic where needed).
+    2. Make staging cheaper by lower volume, not different components.
+    3. Run performance tests in a production-like environment.
+  works: |-
+    **Trade-off to manage:** Higher staging cost; lower incident cost.
+
+    **How you prove it worked:**
+
+    - Rate of issues found only in production.
+
+    **Same pattern elsewhere:** FinTech: a bank tests its assistant against a mock core-banking system that never returns delays or partial data.
+  takeaway: Staging should be cheaper, not different.
+  related:
+  - aev-05
+  code: |
+    STAGING = {
+        "model": PROD["model"],                             # same components as production
+        "index": "kb_snapshot_anonymised_2026_11",           # representative data
+        "replicas": 1, "rate_limit_rps": 5,                  # cheaper by volume only
+    }
+    assert STAGING["model"] == PROD["model"] and index_size(STAGING["index"]) > 0.8 * index_size(PROD["index"])
+  lang: python
+- id: ops-15
+  title: Compliance asks which systems use AI for credit decisions
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's compliance team must classify AI systems under the EU AI Act, where creditworthiness assessment of individuals is high-risk. Nobody can list which teams use which models with which data. Two teams are found using LLMs to summarise credit applications for underwriters without any risk review.
+  antipattern: |-
+    **Shadow AI across teams.**
+
+    *Think of it this way:* A building inspector asking where all the gas pipes are, and nobody has a plan.
+  fails: |-
+    **Mechanism:** Regulation (e.g., EU AI Act) and audits require documentation.
+
+    - No central inventory of AI use.
+    - Shadow AI across teams.
+    - Risk classification is impossible.
+
+    **Root cause:** No AI governance inventory.
+
+    **Where it breaks:** Governance.
+  diagram:
+    bad:
+    - AI Act · Classify systems
+    - '!No inventory · Who uses what?'
+    - Shadow use · Credit summaries
+    - '!No review · High-risk'
+    bad_note: Shadow AI with no inventory
+    good:
+    - Inventory · Use case, owner
+    - +Risk class · Per use
+    - +Gateway · Requires entry
+    - Model card · High-risk
+    good_note: Central inventory tied to gateway access
+  solution: |-
+    1. Maintain a central AI inventory (use case, owner, model, data sources, risk class, approvals).
+    2. Require registration before production access through the gateway.
+    3. Produce model cards and risk assessments for high-risk uses.
+  works: |-
+    **Trade-off to manage:** Process overhead; required by regulation for high-risk uses.
+
+    **How you prove it worked:**
+
+    - Gateway traffic not linked to an inventory entry.
+
+    **Same pattern elsewhere:** Telco: a carrier can't tell regulators which AI systems process CPNI.
+  takeaway: You can't govern what you haven't inventoried.
+  related:
+  - gov-01
+  - gov-10
+  - ops-05
+  code: |
+    class AIUseCase(BaseModel):
+        id: str; owner: str; purpose: str; model: str; data_sources: list[str]
+        risk_class: Literal["low", "medium", "high"]; approvals: list[str]; model_card_uri: str | None
+
+    @gateway.middleware
+    def require_registration(req, call_next):
+        uc = inventory.get(req.headers["x-use-case-id"])
+        if not uc or (uc.risk_class == "high" and not uc.model_card_uri):
+            raise PermissionError("register the use case before production access")
+        return call_next(req)
+  lang: python
+- id: ops-16
+  title: Model deprecation forces an emergency migration
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's care bot depends on a model version the provider announces will be retired in 60 days. The code is tightly coupled to that provider's API format, there is no second model tested, and prompts are tuned to that version. The migration becomes a fire drill.
+  antipattern: |-
+    **Code tightly coupled to one provider's API.**
+
+    *Think of it this way:* Building your shop on a rented plot with no plan for when the lease ends.
+  fails: |-
+    **Mechanism:** Models get deprecated on fixed schedules, and pricing changes.
+
+    - Models get deprecated on fixed schedules.
+    - No abstraction, portable evals or tested alternative.
+    - Deprecation dates weren't tracked.
+
+    **Root cause:** Single-provider dependency with no exit plan.
+
+    **Where it breaks:** Architecture and planning.
+  diagram:
+    bad:
+    - Deprecation · 60 days
+    - '!Tight coupling · Provider API'
+    - No backup · Tested
+    - '!Fire drill · Migration'
+    bad_note: One provider, no exit plan
+    good:
+    - Gateway · Abstraction
+    - +Portable evals · Any model
+    - +Backup model · Tested
+    - Calendar · Deprecations
+    good_note: Gateway, portable evals, tested backup model
+  solution: |-
+    1. Abstract model access via the gateway.
+    2. Keep portable evals and a tested secondary model.
+    3. Track deprecation dates and plan upgrades quarterly.
+  works: |-
+    **Trade-off to manage:** Maintaining a tested second model costs eval runs.
+
+    **How you prove it worked:**
+
+    - Days until deprecation for each model in use.
+
+    **Same pattern elsewhere:** FinTech: a bank's KYC extraction depends on a model being retired, with no re-validation plan for model risk.
+  takeaway: Always have a tested second model.
+  related:
+  - eval-19
+  - prm-09
+  - ops-07
+  code: |
+    MODELS = {"primary": "provider-a/model-2026-08", "secondary": "provider-b/model-equiv"}   # both eval-tested
+
+    deprecations = {m: provider_for(m).deprecation_date(m) for m in MODELS.values()}
+    for m, d in deprecations.items():
+        if d and d - today() < timedelta(days=120):
+            backlog.create(f"Plan migration off {m} (deprecates {d})", due=d - timedelta(days=60))
+  lang: python
+- id: ops-17
+  title: Tax-day traffic hits provider quotas
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A tax-filing fintech's assistant gets 12 times normal traffic on the filing deadline. The provider's tokens-per-minute quota is hit within an hour. Every request returns 429, and customers trying to file on deadline day can't get help.
+  antipattern: |-
+    **No capacity planning for provider quotas.**
+
+    *Think of it this way:* A toll road with one booth on the busiest day of the year.
+  fails: |-
+    **Mechanism:** Token-per-minute limits cap throughput.
+
+    - Throughput is capped by provider quotas.
+    - No forecast of peak tokens per minute.
+    - No queueing or load shedding.
+
+    **Root cause:** Provider quotas left out of capacity planning.
+
+    **Where it breaks:** Capacity planning.
+  diagram:
+    bad:
+    - Deadline day · 12x traffic
+    - '!TPM quota · Hit in 1 hour'
+    - All 429 · Errors
+    - '!No help · On deadline'
+    bad_note: Discover quotas in production
+    good:
+    - Forecast · Peak TPM
+    - +Reserve · Quota, throughput
+    - +Queue · Backpressure
+    - Shed · Low priority
+    good_note: Forecast TPM, reserve capacity, shed load
+  solution: |-
+    1. Forecast tokens per minute for peaks and request quota increases or provisioned throughput in advance.
+    2. Queue with backpressure and shed low-priority traffic (for example general FAQs) first.
+    3. Spread load across regions or providers via the gateway.
+  works: |-
+    **Trade-off to manage:** Provisioned throughput costs more; only for peak windows.
+
+    **How you prove it worked:**
+
+    - Headroom against quota during peaks.
+
+    **Same pattern elsewhere:** Telco: a launch-day surge for a new phone exhausts the carrier's quota.
+  takeaway: Provider quotas are part of capacity planning.
+  related:
+  - obs-12
+  - ops-08
+  code: |
+    forecast_tpm = peak_forecast(intent_mix, date="2027-04-15") * 1.3
+    if forecast_tpm > current_quota_tpm:
+        provider.request_quota_increase(tpm=forecast_tpm) or buy_provisioned(units=units_for(forecast_tpm))
+
+    async def submit(req):
+        if req.priority == "low" and gateway.headroom() < 0.15:
+            return {"status": "deferred"}                           # shed general FAQs first
+        return await gateway.route(req, spread=["us-east", "us-west", "provider-b"])
+  lang: python
+- id: ops-18
+  title: Re-embedding 50 million chunks by hand
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's knowledge platform must re-embed 50 million chunks after an embedding model upgrade. The original index was built by one-off scripts. The rebuild takes a week of manual work, fails twice midway, and requires downtime.
+  antipattern: |-
+    **No index build pipeline.**
+
+    *Think of it this way:* Rebuilding a library catalog by hand every time the filing system changes.
+  fails: |-
+    **Mechanism:** Embedding upgrades and schema changes are inevitable.
+
+    - No automated, resumable index-build pipeline.
+    - Builds can't run alongside production.
+    - Schema and model changes are inevitable.
+
+    **Root cause:** Index builds treated as projects, not pipelines.
+
+    **Where it breaks:** Data platform.
+  diagram:
+    bad:
+    - 50M chunks · Re-embed
+    - '!Manual scripts · One-off'
+    - Fails twice · Midway
+    - '!Downtime · A week'
+    bad_note: One-off scripts to rebuild the index
+    good:
+    - Pipeline · Resumable
+    - +Batch embed · Checkpoints
+    - +Parallel index · Built
+    - Alias switch · After evals
+    good_note: Resumable pipeline, parallel build, alias switch
+  solution: |-
+    1. Build automated, resumable indexing pipelines with checkpoints and batch embedding.
+    2. Build new indexes alongside the old one and switch with an alias.
+    3. Run retrieval evals before the switch.
+  works: |-
+    **Trade-off to manage:** Two indexes at once doubles storage temporarily.
+
+    **How you prove it worked:**
+
+    - Index-build duration and failure rate.
+
+    **Same pattern elsewhere:** FinTech: a bank's document index migration to a new vector database takes a month of manual effort.
+  takeaway: Index builds should be a pipeline, not a project.
+  related:
+  - rag-07
+  code: |
+    def reindex(new_embedder, run_id):
+        ckpt = checkpoints.get(run_id) or 0
+        for batch in chunk_store.iter_batches(start=ckpt, size=2000):      # resumable
+            vdb.upsert(f"kb_{new_embedder.slug}", embed_batch(batch, new_embedder))
+            checkpoints.set(run_id, batch.end)
+        assert retrieval_eval(f"kb_{new_embedder.slug}") >= retrieval_eval("kb_current") - 0.01
+        vdb.swap_alias("kb_current", f"kb_{new_embedder.slug}")
+  lang: python
+- id: ops-19
+  title: API key in a public notebook runs up the bill
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A fintech engineer publishes a demo notebook with a model API key hard-coded. Within hours, the key is scraped and used to generate content at scale. The bill reaches $28,000 before the provider flags it.
+  antipattern: |-
+    **Hard-coded provider keys.**
+
+    *Think of it this way:* Leaving your credit card on a park bench with the PIN written on it.
+  fails: |-
+    **Mechanism:** Keys leak, and LLM keys are monetizable.
+
+    - Keys are hard-coded in notebooks and repos.
+    - No secret scanning.
+    - Keys have no spend caps or scopes.
+
+    **Root cause:** LLM keys not managed as secrets.
+
+    **Where it breaks:** Secret management.
+  diagram:
+    bad:
+    - Notebook · Key inside
+    - '!Published · Public'
+    - Scraped · Within hours
+    - '!$28k bill · Abuse'
+    bad_note: Hard-coded API key in a notebook
+    good:
+    - Secret mgr · No keys in code
+    - +Scanning · CI + repo
+    - +Virtual keys · Spend caps
+    - Rotate · On exposure
+    good_note: Secret manager, scanning, capped virtual keys
+  solution: |-
+    1. Use a secret manager and short-lived credentials; never put keys in code.
+    2. Run secret scanning in CI and in repository settings.
+    3. Issue per-service keys with spend caps via the gateway, and rotate on exposure.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Secret-scanning alerts; spend anomalies per key.
+
+    **Same pattern elsewhere:** Telco: a test key with production access is committed to a public repository.
+  takeaway: LLM keys are credit cards. Protect them like credit cards.
+  related:
+  - ops-07
+  - cicd-14
+  code: |
+    client = OpenAI(api_key=secrets.get("llm/cards-service", ttl="1h"))   # secret manager, short-lived
+
+    # CI: gitleaks detect --redact ; GitHub secret scanning + push protection enabled
+    key = gateway.keys.create(service="cards-service", max_budget=2000)   # per-service spend cap
+
+    def on_secret_exposed(alert):
+        gateway.keys.revoke(alert.key_id); secrets.rotate(alert.secret_path)
+  lang: python
+- id: ops-20
+  title: Forty old prompts, nine indexes and three fine-tunes still billed
+  tags:
+  - Reliability
+  - Cost
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's AI platform audit finds 40 old prompt versions still callable, nine unused vector indexes, and three fine-tuned model endpoints deployed and billed hourly for pilots that ended a year ago.
+  antipattern: |-
+    **Never retiring artifacts.**
+
+    *Think of it this way:* Paying rent on storage units you forgot you had.
+  fails: |-
+    **Mechanism:** Cost, confusion, and security surface keep growing.
+
+    - Artifacts are never retired.
+    - No usage tracking per artifact.
+    - No owners.
+
+    **Root cause:** No lifecycle management.
+
+    **Where it breaks:** Platform governance.
+  diagram:
+    bad:
+    - 40 prompts · Callable
+    - '!9 indexes · Unused'
+    - 3 endpoints · Billed hourly
+    - '!Pilots ended · Year ago'
+    bad_note: Never retire artifacts
+    good:
+    - Lifecycle · Policy
+    - +Usage · Per artifact
+    - +Owners · Assigned
+    - Monthly · Cleanup
+    good_note: Lifecycle policy, usage tracking, owners
+  solution: |-
+    1. Set lifecycle policies (deprecate after N days without traffic, then delete).
+    2. Track usage per artifact and assign owners.
+    3. Review monthly, and remove retired artifacts from access as well as billing.
+  works: |-
+    **Trade-off to manage:** Deleting something still needed; use a deprecation period with alerts.
+
+    **How you prove it worked:**
+
+    - Idle-artifact report.
+
+    **Same pattern elsewhere:** FinTech: a bank keeps old fine-tuned models deployed, which also expands its security surface.
+  takeaway: Retire what you don't run.
+  related:
+  - ops-05
+  code: |
+    @schedule(cron="0 6 1 * *")
+    def lifecycle_review():
+        for art in registry.artifacts(types=["prompt", "index", "fine_tune"]):
+            idle = days_since(art.last_traffic)
+            if idle > 60 and art.state == "active":
+                art.deprecate(notify=art.owner)
+            elif art.state == "deprecated" and idle > 90:
+                art.revoke_access(); art.delete()            # removed from access and billing
+  lang: python
+- id: cicd-01
+  title: Pipeline runs unit tests but no evals
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's AI assistant repository has a mature CI pipeline: linting, unit tests and container scans. Evals are a separate notebook a data scientist runs before big releases. A refactor of the retrieval code passes all unit tests and ships, but cuts recall on mortgage questions by 20%.
+  antipattern: |-
+    **Unit tests only in CI.**
+
+    *Think of it this way:* A car factory that checks every bolt is tight but never test-drives the car.
+  fails: |-
+    - Unit tests check code behaviour, not answer quality.
+    - Evals sit outside the pipeline.
+    - Quality regressions pass every gate.
+
+    **Root cause:** Evals aren't a pipeline stage.
+
+    **Where it breaks:** CI pipeline.
+  diagram:
+    bad:
+    - Refactor · Retrieval
+    - '!Unit tests · All pass'
+    - No evals · In CI
+    - '!Recall -20% · Shipped'
+    bad_note: Unit tests only in CI
+    good:
+    - Unit tests · Code
+    - +Fast evals · Per PR
+    - +Full suite · On merge
+    - Gate · Thresholds
+    good_note: Blocking eval stage with PR diffs
+  solution: |-
+    1. Add an eval stage (fast subset per PR, full suite on merge and nightly) with thresholds that block.
+    2. Include retrieval metrics, task metrics, safety and format checks.
+    3. Post eval diffs to the PR.
+  works: |-
+    **Trade-off to manage:** PR evals cost a few dollars and minutes per change.
+
+    **How you prove it worked:**
+
+    - Count of releases without an eval record.
+
+    **Same pattern elsewhere:** Telco: a carrier's bot pipeline ships a tool-schema change that passes tests but breaks plan-change task completion.
+  takeaway: Evals are a pipeline stage, not a notebook.
+  related:
+  - eval-15
+  - cicd-04
+  code: |
+    # .github/workflows/ci.yml (excerpt)
+    evals-fast:
+      needs: unit-tests
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: python -m evals.run --suite pr --report eval-report.json
+        - run: python -m evals.gate --report eval-report.json --thresholds evals/thresholds.yaml
+  lang: yaml
+- id: cicd-02
+  title: Prompts edited live in a vendor console
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's care bot runs on a conversational-AI platform where business users can edit prompts in a web console, live. A marketing manager updates the greeting to promote a new plan and accidentally deletes the instruction to verify identity before discussing account details.
+  antipattern: |-
+    **Live prompt edits in a console.**
+
+    *Think of it this way:* Letting anyone edit the production database from a spreadsheet.
+  fails: |-
+    - Prompt changes bypass review, tests and evals.
+    - No history or rollback.
+    - Security instructions are editable by anyone.
+
+    **Root cause:** Prompts not managed as code.
+
+    **Where it breaks:** Change control.
+  diagram:
+    bad:
+    - Console edit · Live
+    - '!Promo update · Greeting'
+    - ID check gone · Deleted
+    - '!Account info · Unverified'
+    bad_note: Live prompt edits in a console
+    good:
+    - PR + review · For prompts
+    - +Evals · On change
+    - +Scoped rights · Promo vs safety
+    - Flow check · ID in code
+    good_note: Prompts as code, scoped edit rights
+  solution: |-
+    1. Manage prompts as code (pull requests, review, evals, deployment through the pipeline).
+    2. Separate business-editable content (greetings, promos) from safety-critical instructions, with different permissions.
+    3. Enforce identity verification in the flow, not only in the prompt.
+  works: |-
+    **Trade-off to manage:** Business users lose instant edits; give them a fast-track review path.
+
+    **How you prove it worked:**
+
+    - Audit of prompt changes not linked to a PR.
+
+    **Same pattern elsewhere:** FinTech: an operations user edits a bank bot's disclosure text directly in the console, removing a required APR statement.
+  takeaway: If it changes behaviour, it goes through the pipeline.
+  related:
+  - prm-01
+  - cicd-15
+  code: |
+    # CODEOWNERS
+    # prompts/care/safety/**     @ai-platform @security        ← safety-critical instructions
+    # prompts/care/content/**    @care-marketing               ← greetings, promos (business-editable)
+
+    def verify_then_respond(session, msg):
+        if not session.identity_verified:                       # enforced in the flow, not the prompt
+            return start_verification(session)
+        return assistant(msg, prompt=registry.get("care.main", label="prod"))
+  lang: python
+- id: cicd-03
+  title: Tool wrappers and templates have no unit tests
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A wealth platform's agent has 15 tools wrapping internal APIs and a dozen prompt templates. None has unit tests. A change to the portfolio tool's date handling ships with an off-by-one-month bug, and performance reports show the wrong quarter.
+  antipattern: |-
+    **No unit tests around the model.**
+
+    *Think of it this way:* Testing a car by driving it, but never checking the speedometer on a bench.
+  fails: |-
+    - Deterministic code around the model is untested.
+    - End-to-end evals are slow and noisy, so they miss small bugs.
+    - Bugs surface in production.
+
+    **Root cause:** Treating the whole system as "AI" and skipping normal testing.
+
+    **Where it breaks:** Test strategy.
+  diagram:
+    bad:
+    - 15 tools · Untested
+    - '!Date change · Off by month'
+    - Evals miss it · Noisy
+    - '!Wrong quarter · Reports'
+    bad_note: No unit tests around the model
+    good:
+    - Unit tests · Tools, parsers
+    - +Template tests · Rendering
+    - +Contract tests · API schemas
+    - Evals · Model behaviour
+    good_note: Unit and contract tests for tools and templates
+  solution: |-
+    1. Unit-test tools, parsers, validators and template rendering like any other code.
+    2. Use contract tests against API schemas.
+    3. Keep evals for model behaviour, and unit tests for everything deterministic.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Coverage of tool and template modules.
+
+    **Same pattern elsewhere:** Telco: an untested proration helper in a billing tool miscalculates partial months.
+  takeaway: Most of an agent is ordinary code. Test it like ordinary code.
+  related:
+  - prm-19
+  - cicd-18
+  code: |
+    def test_format_bill_tool_handles_proration():
+        out = format_bill(BILL_WITH_PRORATION)
+        assert out["prorated_amount"] == "12.40"
+
+    def test_template_renders_all_vars():
+        assert "{{" not in render("care.main", **SAMPLE_VARS)
+
+    def test_billing_api_contract():
+        jsonschema.validate(billing_client.get_bill("TEST-1"), BILLING_OPENAPI["Bill"])
+  lang: python
+- id: cicd-04
+  title: Two-hour eval suite on every PR gets skipped
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier runs its full 3,000-case eval suite, including long agent tasks, on every pull request. It takes two hours and costs $60. Engineers start adding [skip-evals] to commit messages, and soon most PRs ship untested.
+  antipattern: |-
+    **Full suite on every PR.**
+
+    *Think of it this way:* An airport security line so slow that staff open a side door.
+  fails: |-
+    - One suite for every purpose.
+    - Slow feedback leads to bypasses.
+    - Cost discourages running it.
+
+    **Root cause:** No tiered eval strategy.
+
+    **Where it breaks:** CI design.
+  diagram:
+    bad:
+    - 3,000 cases · Every PR
+    - '!2 hours · $60 each'
+    - '[skip-evals] · Added'
+    - '!Untested · Most PRs'
+    bad_note: Full suite on every PR
+    good:
+    - PR smoke · Under 5 min
+    - +Merge suite · Under 30 min
+    - +Nightly · Full + long
+    - By change · Selected
+    good_note: Tiered evals selected by change
+  solution: |-
+    1. Tier evals (PR smoke under 5 minutes, merge suite under 30 minutes, nightly full suite including long tasks).
+    2. Select PR evals by what changed (prompt for billing runs billing cases).
+    3. Disallow skip flags on protected branches.
+  works: |-
+    **Trade-off to manage:** Smaller PR suites can miss rare regressions; nightly runs catch them.
+
+    **How you prove it worked:**
+
+    - Share of merged PRs with eval results.
+
+    **Same pattern elsewhere:** FinTech: a bank's eval suite takes so long that releases are batched monthly, slowing every fix.
+  takeaway: Fast evals get run. Slow evals get skipped.
+  related:
+  - cicd-01
+  - cicd-10
+  code: |
+    TIERS = {"pr": {"max_minutes": 5, "suite": "smoke"},
+             "merge": {"max_minutes": 30, "suite": "standard"},
+             "nightly": {"suite": "full", "include": ["long_tasks"]}}
+
+    def pr_cases(changed_files):
+        areas = {AREA_OF[f] for f in changed_files if f in AREA_OF}          # prompts/billing → billing cases
+        return [c for c in SUITES["smoke"] if c.area in areas] or SUITES["smoke"]
+
+    # branch protection: required check "ai-evals/pr"; [skip evals] not honoured on main
+  lang: python
+- id: cicd-05
+  title: New prompt goes to all customers at once
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank deploys a new prompt for its card-services assistant to 100% of traffic after evals pass. A subtle change makes it ask for the full card number in some flows. Within an hour, thousands of customers have typed their card numbers into chat, creating a PCI incident.
+  antipattern: |-
+    **100% rollout after evals pass.**
+
+    *Think of it this way:* Launching a new recipe to every branch of a restaurant chain on the same day.
+  fails: |-
+    - Evals didn't cover that flow.
+    - No canary limited exposure.
+    - No automated guard on a critical metric.
+
+    **Root cause:** No progressive delivery for prompt changes.
+
+    **Where it breaks:** Deployment.
+  diagram:
+    bad:
+    - New prompt · Evals pass
+    - '!100% traffic · At once'
+    - Asks for PAN · Some flows
+    - '!PCI incident · 1 hour'
+    bad_note: 100% rollout after evals pass
+    good:
+    - Canary 2% · Behind flag
+    - +Guards · PAN, refusals
+    - +Auto-rollback · On breach
+    - Ramp · Then 100%
+    good_note: Canary with guard metrics and auto-rollback
+  solution: |-
+    1. Deploy prompt and model changes behind flags to a canary (1-5%), compare with control, then ramp.
+    2. Monitor critical guards (PAN patterns in input, refusal rate, escalations) with automatic rollback.
+    3. Add an input filter that blocks and masks card numbers.
+  works: |-
+    **Trade-off to manage:** Slower full rollout; much smaller blast radius.
+
+    **How you prove it worked:**
+
+    - Canary vs control comparison on guard metrics.
+
+    **Same pattern elsewhere:** Telco: a new prompt starts asking customers for their account PIN in chat, rolled out to everyone at once.
+  takeaway: Every change gets a canary.
+  related:
+  - ops-06
+  - cicd-16
+  code: |
+    flags.set("prompt.care_main", variants={"v31": 0.97, "v32": 0.03})      # canary 3%
+
+    PAN = re.compile(r"\b(?:\d[ -]?){15,19}\b")
+    def input_filter(text):
+        return PAN.sub(lambda m: mask(m.group()) if luhn_valid(m.group()) else m.group(), text)
+
+    @watch(window="15m")
+    def guard():
+        if delta("pan_in_input_rate", "v32", "v31") > 0 or delta("escalation_rate", "v32", "v31") > 0.02:
+            flags.set("prompt.care_main", variants={"v31": 1.0}); alert("auto-rollback v32")
+  lang: python
+- id: cicd-06
+  title: Model version bumped as a one-line config change
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    An engineer changes the model id in a carrier's config file to the provider's newer version, calling it a "config tweak". The change skips the eval stage because only code paths trigger evals. The new model formats plan comparisons differently and breaks the app's rendering.
+  antipattern: |-
+    **Model id change skips evals.**
+
+    *Think of it this way:* Swapping an aircraft engine and calling it a paint job.
+  fails: |-
+    - Model changes aren't recognised as behaviour changes.
+    - CI triggers only on code paths.
+    - Downstream consumers aren't tested.
+
+    **Root cause:** Model upgrades not treated as releases.
+
+    **Where it breaks:** CI triggers and change policy.
+  diagram:
+    bad:
+    - Model id · Config edit
+    - '!No eval run · Code-only rule'
+    - New format · Comparisons
+    - '!App breaks · Rendering'
+    bad_note: Model id change skips evals
+    good:
+    - Config paths · Trigger evals
+    - +Full suite · Model change
+    - +Contract test · App output
+    - Canary · Then ramp
+    good_note: Config paths trigger evals and canary
+  solution: |-
+    1. Treat model, prompt, index, tool and guardrail config files as eval-triggering paths.
+    2. Require full evals and a canary for model changes.
+    3. Add rendering and contract tests for structured outputs consumed by apps.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Config changes merged without eval runs.
+
+    **Same pattern elsewhere:** FinTech: a bank swaps the embedding model in config and retrieval quality collapses (see rag-07).
+  takeaway: The model is a dependency. Upgrades are releases.
+  related:
+  - eval-19
+  - ops-16
+  - rag-07
+  code: |
+    # .github/workflows/ai-evals.yml
+    # on:
+    #   pull_request:
+    #     paths: ["prompts/**", "config/models.yaml", "indexes/**", "tools/**", "guardrails/**"]
+    # jobs: full-evals → canary-plan
+
+    def test_quote_json_contract():
+        out = generate_quote(SAMPLE_REQUEST, model=CANDIDATE_MODEL)
+        QuoteResponse.model_validate_json(out)                               # consumers parse this
+  lang: python
+- id: cicd-07
+  title: Same commit builds two different agents
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A fintech's agent image is built with unpinned Python dependencies. Two builds of the same commit, a day apart, pull different versions of an LLM SDK. One build retries tool calls on 5xx; the other doesn't. A production incident can't be reproduced in staging.
+  antipattern: |-
+    **Rebuild per environment, unpinned.**
+
+    *Think of it this way:* Two cakes from the same recipe with ingredients from different suppliers.
+  fails: |-
+    - Floating dependencies change between builds.
+    - Behaviour depends on library defaults.
+    - Images aren't immutable artifacts.
+
+    **Root cause:** Non-reproducible builds.
+
+    **Where it breaks:** Build pipeline.
+  diagram:
+    bad:
+    - Same commit · Two builds
+    - '!Different SDK · Versions'
+    - Retry differs · Behaviour
+    - '!Can''t repro · Incident'
+    bad_note: Rebuild per environment, unpinned
+    good:
+    - Lock + hashes · Deps
+    - +Build once · Image
+    - +Promote · By digest
+    - Manifest · Records digest
+    good_note: Lock files, one image promoted by digest
+  solution: |-
+    1. Use lock files with hashes, and build once.
+    2. Promote the same immutable image (by digest) through environments.
+    3. Record the image digest in the release manifest.
+  works: |-
+    **Trade-off to manage:** Updates need deliberate PRs.
+
+    **How you prove it worked:**
+
+    - Diff of dependency versions between environments.
+
+    **Same pattern elsewhere:** Telco: staging and production run different SDK versions of the same agent build.
+  takeaway: Build once, promote the same artifact.
+  related:
+  - ops-13
+  - ops-01
+  code: |
+    # pip install --require-hashes -r requirements.lock
+    # docker build -t agent:$GIT_SHA . && docker push → digest sha256:ab12...
+
+    manifest["image"] = "registry.corp/agent@sha256:ab12..."                # immutable
+    for env in ["staging", "prod"]:
+        deploy(env, image=manifest["image"])                                 # promote the same digest
+  lang: python
+- id: cicd-08
+  title: CI agent evals call the production BSS
+  tags:
+  - Reliability
+  - Security
+  - Telco
+  - Critical
+  scenario: |-
+    A carrier's CI pipeline runs agent evals with credentials that can reach production BSS APIs "for realism". A test case for plan changes runs against a real employee's test line that was mapped to a real customer account after a data refresh. The customer's plan is changed.
+  antipattern: |-
+    **CI evals with production credentials.**
+
+    *Think of it this way:* A fire drill that sets off the sprinklers in the real data centre.
+  fails: |-
+    - CI credentials reach production write APIs.
+    - Test data mapping isn't controlled.
+    - Nothing prevents writes outside a sandbox.
+
+    **Root cause:** No isolation between CI evals and production systems.
+
+    **Where it breaks:** CI environment and credentials.
+  diagram:
+    bad:
+    - CI evals · Prod creds
+    - '!Test line · Mapped wrong'
+    - Plan change · Executed
+    - '!Real customer · Affected'
+    bad_note: CI evals with production credentials
+    good:
+    - Sandbox BSS · Or recordings
+    - +No prod creds · Network policy
+    - +Synthetic · Customers
+    - Reset · Per run
+    good_note: Sandbox BSS, no prod creds, synthetic data
+  solution: |-
+    1. Run agent evals against a sandbox BSS or recorded tool responses.
+    2. Give CI no credentials for production systems, enforced by network policy.
+    3. Seed synthetic customers and reset state per run.
+  works: |-
+    **Trade-off to manage:** Sandboxes drift; refresh them from recordings regularly.
+
+    **How you prove it worked:**
+
+    - Alerts on any production API call from CI identities.
+
+    **Same pattern elsewhere:** FinTech: a payments agent eval initiates a real ACH transfer from CI.
+  takeaway: CI should never be able to touch production.
+  related:
+  - aev-04
+  - aev-14
+  code: |
+    @pytest.fixture(scope="session")
+    def bss():
+        return BssSandbox(seed=synthetic_customers(200), replay="recordings/bss/*.jsonl")
+
+    def test_plan_change_agent(bss):
+        bss.reset()
+        run = agent.run("Move line 2 to Unlimited Plus", env=bss)
+        assert bss.subscription("SYN-002").plan == "Unlimited Plus"
+
+    # CI runners: no prod credentials; NetworkPolicy denies egress to prod BSS CIDRs
+  lang: python
+- id: cicd-09
+  title: Rollback restores the code but not the index
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank releases a new assistant version along with a rebuilt policy index. Quality drops, and the team rolls back the application. The rebuilt index stays in place because indexes aren't part of the release, so quality stays bad for another day.
+  antipattern: |-
+    **Rollback restores only code.**
+
+    *Think of it this way:* Undoing a bad recipe change but keeping the spoiled ingredients.
+  fails: |-
+    - Rollback covers code only.
+    - Prompts, indexes and configs have separate lifecycles.
+    - No single release unit.
+
+    **Root cause:** Non-code components lack rollback.
+
+    **Where it breaks:** Release and rollback design.
+  diagram:
+    bad:
+    - Release · Code + index
+    - '!Quality drop · Detected'
+    - Code rollback · Only
+    - '!Index stays · Still bad'
+    bad_note: Rollback restores only code
+    good:
+    - Manifest · Code, prompt
+    - +Index alias · Versioned
+    - +Rollback all · One action
+    - Drills · Rehearsed
+    good_note: One-click rollback of the whole manifest
+  solution: |-
+    1. Version indexes and prompts with aliases, and make them part of the release manifest.
+    2. Roll back the whole manifest (code, prompt, model, index alias) in one action.
+    3. Rehearse rollbacks.
+  works: |-
+    **Trade-off to manage:** Keeping old indexes costs storage for the rollback window.
+
+    **How you prove it worked:**
+
+    - Time to full rollback in drills.
+
+    **Same pattern elsewhere:** Telco: a carrier rolls back its bot code, but the new prompt version stays in the registry and remains live.
+  takeaway: Roll back the whole bundle, not just the code.
+  related:
+  - ops-01
+  - obs-19
+  code: |
+    def rollback(to_release):
+        m = release_store.get(to_release)
+        deploy(image=m["image"])
+        registry.set_label(m["prompt_id"], "prod", m["prompt_version"])
+        gateway.set_model(m["model"])
+        vdb.swap_alias("kb_current", m["index"])                       # index rolls back with the code
+        flags.restore(m["flags"])
+    # rehearsed quarterly in a game day
+  lang: python
+- id: cicd-10
+  title: Flaky evals fixed with retry until green
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's eval stage fails intermittently because LLM outputs vary. The team configures the CI job to retry up to three times until it passes. Real regressions now pass on the second or third attempt.
+  antipattern: |-
+    **Retry flaky evals until green.**
+
+    *Think of it this way:* Re-taking a blood test until the result looks normal.
+  fails: |-
+    - Nondeterminism is handled by retrying.
+    - Retries hide real regressions.
+    - Thresholds aren't statistical.
+
+    **Root cause:** Treating LLM eval variance as test flakiness.
+
+    **Where it breaks:** Eval gate design.
+  diagram:
+    bad:
+    - Evals flaky · Variance
+    - '!Retry x3 · Until pass'
+    - Regression · Passes on 2nd
+    - '!Shipped · Broken'
+    bad_note: Retry flaky evals until green
+    good:
+    - k trials · Per case
+    - +CI gate · Aggregate + CI
+    - +Hard checks · Always pass
+    - Low temp · Where fit
+    good_note: Repeated trials, statistical gates
+  solution: |-
+    1. Run multiple trials and gate on aggregate scores with confidence intervals.
+    2. Separate deterministic checks (schema, safety rules) that must always pass from statistical quality checks.
+    3. Lower variance with low temperature where appropriate.
+  works: |-
+    **Trade-off to manage:** More trials cost more; use them on the merge suite.
+
+    **How you prove it worked:**
+
+    - Variance of eval scores across runs; retry counts.
+
+    **Same pattern elsewhere:** FinTech: a bank re-runs its compliance eval until it passes, missing a disclosure regression.
+  takeaway: Don't retry until green. Measure the distribution.
+  related:
+  - eval-07
+  - cicd-04
+  code: |
+    def gate(candidate, baseline, trials=5):
+        det = deterministic_checks(candidate)                           # schema, safety: must be 100%
+        assert det.pass_rate == 1.0, det.failures
+        a = [run_quality(baseline) for _ in range(trials)]
+        b = [run_quality(candidate) for _ in range(trials)]
+        lo, hi = bootstrap_ci(np.array(b) - np.array(a))
+        assert hi > -0.01, f"quality regression (95% CI {lo:.3f}..{hi:.3f})"   # no retry-until-green
+  lang: python
+- id: cicd-11
+  title: Knowledge articles published straight into the live index
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's knowledge team publishes policy articles in the CMS, and a webhook indexes them immediately. One article has a typo in the wire cut-off time (3 am instead of 3 pm). Within minutes the assistant tells customers international wires sent after 3 am will go next day.
+  antipattern: |-
+    **CMS publishes straight to the live index.**
+
+    *Think of it this way:* A newspaper that prints readers' letters on the front page without an editor.
+  fails: |-
+    - Content changes bypass review and evals.
+    - The index is updated in place.
+    - Critical facts aren't validated.
+
+    **Root cause:** Content updates outside the delivery pipeline.
+
+    **Where it breaks:** Content and index pipeline.
+  diagram:
+    bad:
+    - 'CMS publish · Typo: 3 am'
+    - '!Webhook · Index now'
+    - Live index · Updated
+    - '!Wrong cut-off · To customers'
+    bad_note: CMS publishes straight to the live index
+    good:
+    - Review · Content PR
+    - +Fact check · Vs registry
+    - +Staging alias · Index first
+    - Evals pass · Promote
+    good_note: Review, fact checks, staging alias, then promote
+  solution: |-
+    1. Route content changes through review and an automatic eval of affected intents before indexing.
+    2. Validate critical facts (times, fees, rates) against systems of record or a facts registry.
+    3. Index to a staging alias first, then promote.
+  works: |-
+    **Trade-off to manage:** Slower publishing; use an expedited path for urgent fixes.
+
+    **How you prove it worked:**
+
+    - Diff of answers on golden questions after each content change.
+
+    **Same pattern elsewhere:** Telco: a care article with a wrong roaming price is indexed immediately and quoted to customers.
+  takeaway: Content is code for a RAG system.
+  related:
+  - rag-05
+  - data-03
+  code: |
+    def publish_article(article):
+        for fact in extract_facts(article):                             # times, fees, rates
+            truth = facts_registry.lookup(fact.key)
+            if truth and truth != fact.value:
+                raise ContentError(f"{fact.key}: article says {fact.value}, system says {truth}")
+        index_to("kb_staging", article)
+        if eval_intents(affected_intents(article), index="kb_staging").passed:
+            promote("kb_staging", "kb_current")
+  lang: python
+- id: cicd-12
+  title: Planner and executor agents never tested together
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's order-orchestration system has three agents (intake, planner, executor) each in a separate repository with its own CI. Each passes its evals. After independent releases, the planner emits a new step type the executor doesn't recognise, and orders stall.
+  antipattern: |-
+    **Each agent tested only in its own repo.**
+
+    *Think of it this way:* Three bands rehearsing separately and meeting for the first time on stage.
+  fails: |-
+    - Agents are tested in isolation.
+    - Interfaces between them aren't versioned.
+    - No integration stage.
+
+    **Root cause:** No system-level tests for multi-agent releases.
+
+    **Where it breaks:** CI for multi-agent systems.
+  diagram:
+    bad:
+    - 3 repos · 3 pipelines
+    - '!All pass · In isolation'
+    - New step type · From planner
+    - '!Orders stall · Executor'
+    bad_note: Each agent tested only in its own repo
+    good:
+    - Schemas · Versioned
+    - +Contract tests · Cross-repo
+    - +E2E suite · Any release
+    - Compatibility · Required
+    good_note: Versioned contracts and an end-to-end stage
+  solution: |-
+    1. Version handoff schemas and run contract tests across repositories.
+    2. Add an integration environment and end-to-end eval suite triggered by any agent release.
+    3. Coordinate releases or require backwards compatibility.
+  works: |-
+    **Trade-off to manage:** Cross-repo testing slows independent releases.
+
+    **How you prove it worked:**
+
+    - Schema validation errors between agents in production.
+
+    **Same pattern elsewhere:** FinTech: a bank's KYC agents (document, screening, decision) drift apart after separate releases.
+  takeaway: Test agents alone and together.
+  related:
+  - aev-18
+  - mas-03
+  code: |
+    # shared repo: contracts/handoff/v3/plan_step.schema.json (versioned)
+    def test_planner_output_matches_executor_contract():
+        for case in PLANNER_FIXTURES:
+            for step in planner.run(case).steps:
+                jsonschema.validate(step, load_schema("contracts/handoff/v3/plan_step.schema.json"))
+
+    # any agent release triggers: e2e-system-evals (integration environment)
+  lang: python
+- id: cicd-13
+  title: No red-team stage in the release pipeline
+  tags:
+  - Reliability
+  - Security
+  - FinTech
+  scenario: |-
+    A brokerage's agent passes functional evals and ships. A security researcher later shows that a crafted message makes it reveal other customers' order notes. The red-team tests that would have caught it existed, but were run manually once a year.
+  antipattern: |-
+    **Annual manual red teaming only.**
+
+    *Think of it this way:* Testing the bank vault's lock once a year while changing the vault weekly.
+  fails: |-
+    - Security testing isn't automated.
+    - New prompts and tools change the attack surface.
+    - Annual tests are stale.
+
+    **Root cause:** Red teaming outside the pipeline.
+
+    **Where it breaks:** CI security stage.
+  diagram:
+    bad:
+    - Functional · Evals pass
+    - '!Ships · Weekly'
+    - Red team · Once a year
+    - '!Data leak · Found later'
+    bad_note: Annual manual red teaming only
+    good:
+    - Attack suite · In pipeline
+    - +Injection · Exfiltration
+    - +Block · On critical
+    - Refresh · New attacks
+    good_note: Automated adversarial stage that blocks release
+  solution: |-
+    1. Add an automated adversarial suite (injection, jailbreaks, data exfiltration, tool misuse) to the merge pipeline.
+    2. Block release on critical failures.
+    3. Refresh attacks from research and incidents; keep annual manual red teaming too.
+  works: |-
+    **Trade-off to manage:** Adversarial suites need upkeep; share them across teams.
+
+    **How you prove it worked:**
+
+    - Attack success rate per release.
+
+    **Same pattern elsewhere:** Telco: a care agent change lets customers query other subscribers' details, and no automated test catches it.
+  takeaway: Every release gets attacked before customers attack it.
+  related:
+  - eval-10
+  - sec-09
+  code: |
+    ATTACKS = ["prompt_injection", "jailbreak", "data_exfiltration", "tool_misuse"]
+
+    def redteam_stage(build):
+        results = {a: pyrit_like.run(build.endpoint, attack_set=a, n=100) for a in ATTACKS}
+        critical = [r for rs in results.values() for r in rs if r.severity == "critical" and r.succeeded]
+        if critical:
+            sys.exit(f"release blocked: {len(critical)} critical red-team findings")
+  lang: python
+- id: cicd-14
+  title: Provider API key printed in CI logs
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's eval job prints the full request configuration for debugging, including the provider API key. CI logs are visible to all engineers and contractors. The key is used from outside the company within a week.
+  antipattern: |-
+    **Debug output prints the API key.**
+
+    *Think of it this way:* Reading the office alarm code over the public address system.
+  fails: |-
+    - Debug output includes secrets.
+    - CI logs are broadly accessible.
+    - Long-lived keys.
+
+    **Root cause:** Secrets not masked in CI.
+
+    **Where it breaks:** CI configuration.
+  diagram:
+    bad:
+    - Debug print · Full config
+    - '!Key in log · Visible'
+    - Contractors · Can read
+    - '!Key abused · Within a week'
+    bad_note: Debug output prints the API key
+    good:
+    - Secret store · Masked
+    - +Short-lived · OIDC creds
+    - +Virtual keys · Gateway
+    - Log scan · Rotate
+    good_note: Masked secrets, short-lived scoped creds
+  solution: |-
+    1. Use the CI system's secret store and masking; never print configs with credentials.
+    2. Use short-lived, scoped credentials (OIDC to the cloud, virtual keys at the gateway).
+    3. Scan logs and rotate any exposed key.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Secret-scanning on CI logs.
+
+    **Same pattern elsewhere:** FinTech: a bank's test job logs the credentials for its sandbox core-banking API, which also work in UAT.
+  takeaway: CI logs are public inside the company.
+  related:
+  - ops-19
+  code: |
+    # GitHub Actions: OIDC to the cloud, no long-lived keys
+    # permissions: {id-token: write}
+    # - uses: aws-actions/configure-aws-credentials@v4
+    #   with: {role-to-assume: arn:aws:iam::123:role/ci-evals, aws-region: us-east-1}
+
+    key = gateway.keys.create(scope="ci-evals", max_budget=200, ttl="2h")     # virtual, short-lived
+    print(mask(config))                                                        # never print raw config
+  lang: python
+- id: cicd-15
+  title: Regulated disclosure change shipped without sign-off
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's assistant explains credit-card APRs. A prompt change that rewords the APR explanation is merged after technical review only. Compliance later finds it no longer states that the penalty APR may apply indefinitely, a required disclosure.
+  antipattern: |-
+    **Technical review only for regulated text.**
+
+    *Think of it this way:* Changing the wording on a medicine label without the pharmacist's sign-off.
+  fails: |-
+    - Regulated content changed without a compliance gate.
+    - Evals didn't include disclosure checks.
+    - The pipeline had no approval step.
+
+    **Root cause:** No human sign-off for regulated changes.
+
+    **Where it breaks:** Release governance.
+  diagram:
+    bad:
+    - APR wording · Changed
+    - '!Tech review · Only'
+    - Disclosure gone · Penalty APR
+    - '!Compliance · Finding'
+    bad_note: Technical review only for regulated text
+    good:
+    - Tag intents · Regulated
+    - +CODEOWNERS · Compliance
+    - +Disclosure eval · Required facts
+    - Approval · In manifest
+    good_note: Compliance CODEOWNERS, disclosure checks, records
+  solution: |-
+    1. Tag regulated intents and prompts; changes to them require compliance approval in the PR (CODEOWNERS).
+    2. Add deterministic disclosure checks (required phrases or facts) to evals.
+    3. Keep an approval record linked to the release manifest.
+  works: |-
+    **Trade-off to manage:** Slower changes to regulated journeys; that's the point.
+
+    **How you prove it worked:**
+
+    - Regulated changes merged without approval.
+
+    **Same pattern elsewhere:** Telco: a carrier changes its bot's contract-cancellation wording without legal review, breaching consumer-protection rules on cancellation rights.
+  takeaway: Regulated changes need a named approver in the pipeline.
+  related:
+  - gov-03
+  - cicd-02
+  code: |
+    # CODEOWNERS
+    # prompts/regulated/**   @compliance-reviewers
+
+    REQUIRED_DISCLOSURES = {"apr_offer": ["Representative APR", "subject to status"]}
+
+    def check_disclosures(intent, reply):
+        missing = [p for p in REQUIRED_DISCLOSURES.get(intent, []) if p.lower() not in reply.lower()]
+        assert not missing, f"missing disclosures: {missing}"
+
+    manifest["approvals"] = github.pr_approvals(pr_number, team="compliance-reviewers")
+  lang: python
+- id: cicd-16
+  title: No way to switch off one agent capability
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's agent gains the ability to schedule technician visits. A bug double-books technicians. The only option is to roll back the whole release, removing three other improvements, because the capability isn't behind a flag.
+  antipattern: |-
+    **Capabilities coupled to the release.**
+
+    *Think of it this way:* A house where the only way to turn off one lamp is the main fuse.
+  fails: |-
+    - Capabilities ship coupled to the release.
+    - No independent switch per tool or intent.
+    - Rollback is all or nothing.
+
+    **Root cause:** No feature flags for agent capabilities.
+
+    **Where it breaks:** Release design.
+  diagram:
+    bad:
+    - New tool · Scheduling
+    - '!Bug · Double-books'
+    - No flag · Coupled
+    - '!Full rollback · 3 fixes lost'
+    bad_note: Capabilities coupled to the release
+    good:
+    - Flag · Per tool
+    - +Kill switch · On-call
+    - +Targeting · Segments
+    - Remove flags · After rollout
+    good_note: Flag per tool and intent, kill switches
+  solution: |-
+    1. Put new tools, intents and prompts behind feature flags, with per-segment targeting.
+    2. Build kill switches per tool and intent, usable by on-call.
+    3. Remove flags after full rollout to avoid flag debt.
+  works: |-
+    **Trade-off to manage:** Flag management overhead.
+
+    **How you prove it worked:**
+
+    - Share of new capabilities released behind flags.
+
+    **Same pattern elsewhere:** FinTech: a bank can't disable its new payment-scheduling tool without removing the whole assistant release.
+  takeaway: Ship capabilities behind switches.
+  related:
+  - obs-19
+  - cicd-05
+  code: |
+    def available_tools(session):
+        return [t for t in TOOLS if flags.enabled(f"tool.{t.name}", segment=session.segment)]
+
+    # on-call kill switch
+    # $ flagctl set tool.sim_swap=false --reason "INC-4821"
+
+    def stale_flags():
+        return [f for f in flags.all() if f.rollout == 1.0 and days_since(f.full_rollout_at) > 30]   # clean up
+  lang: python
+- id: cicd-17
+  title: Eval set changed and scores aren't comparable
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's eval dataset is a spreadsheet that analysts edit freely. Scores go from 84% to 90% between releases. Half the gain came from someone deleting hard cases they thought were mislabelled.
+  antipattern: |-
+    **Eval set in a freely edited spreadsheet.**
+
+    *Think of it this way:* Changing the exam questions and claiming the class got smarter.
+  fails: |-
+    - Eval data isn't versioned.
+    - Changes aren't reviewed.
+    - Scores across versions aren't comparable.
+
+    **Root cause:** Unversioned eval datasets.
+
+    **Where it breaks:** Eval data management.
+  diagram:
+    bad:
+    - Spreadsheet · Free edits
+    - '!Hard cases · Deleted'
+    - 84% to 90% · Scores
+    - '!False gain · Reported'
+    bad_note: Eval set in a freely edited spreadsheet
+    good:
+    - Repo dataset · Versioned
+    - +Review · Changes
+    - +Version tag · On results
+    - Frozen subset · Long-term
+    good_note: Versioned, reviewed datasets and frozen subset
+  solution: |-
+    1. Version eval datasets in the repository (or a dataset registry) with review for changes.
+    2. Report results with the dataset version, and re-baseline when the dataset changes.
+    3. Keep a frozen benchmark subset for long-term comparison.
+  works: |-
+    **Trade-off to manage:** Review slows dataset fixes slightly.
+
+    **How you prove it worked:**
+
+    - Dataset version recorded on every eval result.
+
+    **Same pattern elsewhere:** Telco: a carrier's care eval set is silently edited, hiding a regression in roaming answers.
+  takeaway: Version the test set like the code.
+  related:
+  - eval-17
+  - tel-16
+  code: |
+    EVAL = {"dataset": "care_eval", "version": "v9", "frozen_subset": "care_eval_frozen_v1"}
+
+    def report(results):
+        return {"dataset_version": EVAL["version"],
+                "score": results.score,
+                "frozen_subset_score": run(EVAL["frozen_subset"]).score}   # long-term comparability
+
+    if EVAL["version"] != last_baseline.dataset_version:
+        rebaseline(EVAL["version"])
+  lang: python
+- id: cicd-18
+  title: BSS API change breaks the agent's tools in production
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    The BSS team releases a new version of the customer-account API, renaming a field from accountStatus to status. The agent's tool parses accountStatus, gets null, and treats every account as inactive. The agent tells customers their accounts are suspended.
+  antipattern: |-
+    **Unguarded dependency on another team's API.**
+
+    *Think of it this way:* A supplier changing the shape of a part without telling the factory that uses it.
+  fails: |-
+    - The agent depends on an API it doesn't own.
+    - No contract tests between teams.
+    - Null was treated as a valid value.
+
+    **Root cause:** No consumer-driven contract tests for tool dependencies.
+
+    **Where it breaks:** Cross-team CI.
+  diagram:
+    bad:
+    - API v2 · Field renamed
+    - '!Tool parses · Old name'
+    - Null status · Inactive
+    - '!''Suspended'' · Told customers'
+    bad_note: Unguarded dependency on another team's API
+    good:
+    - Contract test · In BSS CI
+    - +Strict schema · Tool response
+    - +Missing = error · Not a value
+    - Pin version · TMF API
+    good_note: Contract tests and strict response validation
+  solution: |-
+    1. Add consumer-driven contract tests (for example Pact) that run in the BSS team's pipeline.
+    2. Validate tool responses strictly; treat missing required fields as errors, not values.
+    3. Subscribe to API change notices and pin API versions (TM Forum APIs are versioned).
+  works: |-
+    **Trade-off to manage:** Contract tests require cross-team agreement.
+
+    **How you prove it worked:**
+
+    - Tool response validation errors as a metric.
+
+    **Same pattern elsewhere:** FinTech: a core-banking upgrade changes a balance field's sign convention and the agent tells customers they're overdrawn.
+  takeaway: Tools are integrations. Test the contract.
+  related:
+  - tool-09
+  - cicd-03
+  code: |
+    # consumer contract (Pact) published by the agent team, verified in the BSS pipeline
+    pact.given("account ACC-1 exists").upon_receiving("get product inventory") \
+        .with_request("GET", "/tmf-api/productInventory/v5/product?relatedParty.id=ACC-1") \
+        .will_respond_with(200, body=EachLike({"id": Like("P1"), "status": Term("active|suspended", "active")}))
+
+    class InventoryItem(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+        id: str; status: str                                # missing required field → error, not a value
+  lang: python
+- id: cicd-19
+  title: Cost regression merged without anyone noticing
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A refactor of a bank's assistant adds the full account history to every prompt "for better context". Quality evals pass. Token usage per conversation triples, and the monthly bill rises by $40k before finance notices.
+  antipattern: |-
+    **CI checks quality, not cost.**
+
+    *Think of it this way:* Approving a building plan without checking the budget.
+  fails: |-
+    - CI measures quality but not cost.
+    - Token growth is invisible until the bill.
+    - No budget threshold per change.
+
+    **Root cause:** Cost not part of the release gate.
+
+    **Where it breaks:** CI eval stage.
+  diagram:
+    bad:
+    - Refactor · Full history
+    - '!Quality · Evals pass'
+    - Tokens x3 · Unseen
+    - '!+$40k · Monthly'
+    bad_note: CI checks quality, not cost
+    good:
+    - Tokens · Per eval case
+    - +Delta · Vs baseline
+    - +Threshold · Needs approval
+    - Trend · Per release
+    good_note: Cost and latency deltas gate the PR
+  solution: |-
+    1. Record tokens, cost and latency per eval case, and compare with the baseline in the PR.
+    2. Block or require approval when cost per task rises above a threshold.
+    3. Track cost per release over time.
+  works: |-
+    **Trade-off to manage:** Some legitimate improvements cost more; the gate asks for approval, not refusal.
+
+    **How you prove it worked:**
+
+    - Cost delta per PR.
+
+    **Same pattern elsewhere:** Telco: a prompt change adds the full product catalog to every call and doubles cost.
+  takeaway: Cost is a test result too.
+  related:
+  - eval-14
+  - cost-01
+  code: |
+    def cost_gate(candidate, baseline):
+        c, b = candidate.per_case, baseline.per_case
+        delta = (mean(x.cost for x in c) - mean(x.cost for x in b)) / mean(x.cost for x in b)
+        comment_on_pr(f"cost/task {delta:+.0%}, p95 latency {p95(c) - p95(b):+.2f}s")
+        if delta > 0.15:
+            require_approval("finops-owner")
+  lang: python
+- id: cicd-20
+  title: Deployment succeeds but the bot can't reach the catalog
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier deploys a new bot version. The deployment is marked successful because pods are healthy. A network-policy change blocks access to the product catalog API, so every plan question gets "I can't help with that right now." It takes 3 hours for someone to notice.
+  antipattern: |-
+    **Healthy pods means done.**
+
+    *Think of it this way:* A restaurant that opens because the lights are on, without checking the kitchen has gas.
+  fails: |-
+    - Health checks test the process, not the journeys.
+    - Dependencies aren't verified after deploy.
+    - No automatic rollback on journey failures.
+
+    **Root cause:** No post-deploy verification of key journeys.
+
+    **Where it breaks:** Deployment pipeline.
+  diagram:
+    bad:
+    - Deploy · Pods healthy
+    - '!Catalog API · Blocked'
+    - Plan Qs fail · Every one
+    - '!3 hours · To notice'
+    bad_note: Healthy pods means done
+    good:
+    - Smoke tests · Top journeys
+    - +Tool checks · Reachability
+    - +Auto-rollback · On failure
+    - Synthetic · Continuous
+    good_note: Post-deploy journey tests with auto-rollback
+  solution: |-
+    1. Run synthetic journey tests after deploy (top intents end to end, including tool calls).
+    2. Check dependency reachability in readiness probes for critical tools.
+    3. Roll back automatically if smoke tests fail.
+  works: |-
+    **Trade-off to manage:** Synthetic tests need test accounts in production systems, kept read-only.
+
+    **How you prove it worked:**
+
+    - Synthetic journey success rate, continuously.
+
+    **Same pattern elsewhere:** FinTech: a bank's assistant deploys fine but can't reach the card-status API due to an expired certificate.
+  takeaway: Deployed isn't done. Verify the journeys.
+  related:
+  - obs-20
+  - cicd-16
+  code: |
+    JOURNEYS = ["check_balance", "pay_bill", "plan_change_quote", "outage_status"]
+
+    def post_deploy_smoke(env):
+        failures = [j for j in JOURNEYS if not synthetic_journey(env, j).ok]   # end to end incl. tool calls
+        if failures:
+            rollback(env); page("deploy smoke failed", failures)
+
+    @app.get("/ready")
+    def ready():
+        return {"catalog": catalog.ping(), "billing": billing.ping()} if catalog.ping() else Response(status_code=503)
+  lang: python

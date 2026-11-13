@@ -1,0 +1,1146 @@
+source: regensis
+section: advanced-rag
+patterns:
+- id: ft-01
+  title: Fine-tuning a model to answer credit-card policy questions
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A card issuer fine-tunes a model on its policy manual so the assistant "knows" policies. It answers fluently, but can't cite sources, mixes old and new versions of policy, and every policy update requires a new fine-tuning run that takes weeks.
+  antipattern: |-
+    **Fine-tune the policy manual into the model.**
+
+    *Think of it this way:* Memorising the rulebook instead of keeping it on the desk and looking things up.
+  fails: |-
+    - Knowledge baked into weights can't be cited or updated quickly.
+    - Fine-tuning blends versions present in training data.
+    - Compliance requires traceable answers.
+
+    **Root cause:** Fine-tuning chosen for a knowledge problem.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - Policy manual · Fine-tuned
+    - '!Fluent · No citations'
+    - Versions mix · Old + new
+    - '!Weeks · Per update'
+    bad_note: Fine-tune the policy manual into the model
+    good:
+    - Error analysis · What fails?
+    - +RAG · Versioned docs
+    - +Citations · Traceable
+    - Prompt · Format, tone
+    good_note: RAG for policy with citations, prompts for format
+  solution: |-
+    1. Use RAG over versioned policy documents with citations for knowledge.
+    2. Use prompting for format and tone; consider fine-tuning only if behaviour still fails after that.
+    3. Run error analysis to decide what kind of problem you have.
+  works: |-
+    **Trade-off to manage:** RAG adds retrieval latency and index operations.
+
+    **How you prove it worked:**
+
+    - Answer staleness after policy updates; citation coverage.
+
+    **Same pattern elsewhere:** Telco: fine-tuning on the roaming guide produces answers that go stale with every tariff change (see ops-03).
+  takeaway: Fine-tune for how to say it. Retrieve what to say.
+  related:
+  - ops-03
+  - rag-15
+  code: |
+    def card_policy_answer(q, card_product):
+        hits = search(q, filter={"product": card_product, "status": "in_force"})   # versioned policy docs
+        return generate(q, hits, system=TONE_AND_FORMAT_PROMPT, require_citations=True)
+
+    def error_analysis(failures):
+        return Counter(label_failure(f) for f in failures)      # knowledge vs behaviour → RAG vs fine-tune
+  lang: python
+- id: ft-02
+  title: Adding more retrieval to fix the bot's tone
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's bot answers correctly but sounds robotic and off-brand. The team adds brand guidelines and example conversations to the retrieval index. Retrieval now sometimes returns style guides instead of product facts, and tone barely changes.
+  antipattern: |-
+    **Retrieve style guides to fix tone.**
+
+    *Think of it this way:* Buying more books to fix your handwriting.
+  fails: |-
+    - A behaviour problem treated as a knowledge problem.
+    - Style documents compete with facts in retrieval.
+    - Tone needs consistent instruction or training, not lookup.
+
+    **Root cause:** Approach chosen without diagnosing the failure type.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - Robotic tone · Problem
+    - '!Index guides · Style docs'
+    - Retrieval · Polluted
+    - '!Tone same · No change'
+    bad_note: Retrieve style guides to fix tone
+    good:
+    - Prompt · Tone + examples
+    - +Fine-tune · If needed
+    - +RAG · Facts only
+    - Brand judge · Measured
+    good_note: Tone in the prompt or a fine-tune; facts in RAG
+  solution: |-
+    1. Put tone and style in the system prompt with a few good examples.
+    2. If prompting isn't enough at scale, fine-tune on curated on-brand responses.
+    3. Keep retrieval for facts only.
+  works: |-
+    **Trade-off to manage:** Fine-tuning for tone needs curated data and evals.
+
+    **How you prove it worked:**
+
+    - Brand-voice judge scores; retrieval precision for factual queries.
+
+    **Same pattern elsewhere:** FinTech: a bank indexes its writing style guide to make letters sound warmer, and retrieval quality drops.
+  takeaway: Retrieval fixes what the model knows, not how it talks.
+  related:
+  - ft-01
+  code: |
+    SYSTEM = """Voice: warm, direct, no jargon. Use the customer's name once.
+    Examples:
+    - "Good news, Priya: your bill went down by $8 this month because the promo kicked in."
+    - "I'm sorry about the outage, Mark. Here's what's happening and when we expect it back."
+    """
+    reply = llm(system=SYSTEM, context=retrieve_facts(q), user=q)    # retrieval for facts only
+    # if prompting isn't enough at scale: fine-tune on curated on-brand responses
+  lang: python
+- id: ft-03
+  title: Prompt with 400 ticket categories for routing
+  tags:
+  - Quality
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier routes support tickets into 400 categories by putting all category descriptions into the prompt. The prompt is 25k tokens, accuracy is 71%, and cost is high. The company has three years of tickets labelled with the right queue.
+  antipattern: |-
+    **400 categories in one prompt.**
+
+    *Think of it this way:* Reading the whole phone directory before connecting each call.
+  fails: |-
+    - Huge label sets strain prompting.
+    - Labelled data exists but is unused.
+    - Cost and latency scale with prompt size.
+
+    **Root cause:** Prompting used where supervised learning fits.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - 400 classes · In prompt
+    - '!25k tokens · Per call'
+    - 71% accuracy · Costly
+    - '!Labels unused · 3 years'
+    bad_note: 400 categories in one prompt
+    good:
+    - Fine-tune · Small model
+    - +Hierarchy · Labels
+    - +LLM · Low confidence
+    - Same evals · Compare
+    good_note: Fine-tuned classifier, LLM for low confidence
+  solution: |-
+    1. Fine-tune a small model or train a classifier on labelled tickets (hierarchical labels help).
+    2. Use the LLM for low-confidence or new categories.
+    3. Evaluate both approaches on the same held-out set.
+  works: |-
+    **Trade-off to manage:** Fine-tuned classifiers need retraining when categories change.
+
+    **How you prove it worked:**
+
+    - Accuracy by category and confidence band.
+
+    **Same pattern elsewhere:** FinTech: a bank classifies complaints into 150 regulatory categories by prompt alone.
+  takeaway: Lots of labels plus lots of data means train, don't prompt.
+  related:
+  - cost-14
+  - prm-20
+  code: |
+    clf = train_hierarchical_classifier(labelled_tickets, levels=["domain", "category"])   # small model
+
+    def route(ticket):
+        pred = clf.predict(ticket.text)
+        if pred.confidence >= 0.85:
+            return pred.category
+        return llm.classify(ticket.text, candidates=pred.top_k(10))     # low-confidence / new categories
+
+    compare(clf, llm_prompted, heldout)                                 # same held-out set
+  lang: python
+- id: ft-04
+  title: Fine-tuned model shipped without a held-out evaluation
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank fine-tunes a model to extract fields from trade confirmations. Training loss looks great, and spot checks pass. There's no held-out test set and no comparison with the prompted baseline. In production, it's worse than the original prompted model on confirmations from smaller counterparties.
+  antipattern: |-
+    **Ship on training loss and spot checks.**
+
+    *Think of it this way:* Judging a new recipe by how good the dough looked, without tasting the bread.
+  fails: |-
+    - Training loss isn't task accuracy.
+    - No baseline comparison.
+    - Test data doesn't cover the long tail.
+
+    **Root cause:** Fine-tuning without rigorous evaluation.
+
+    **Where it breaks:** ML process.
+  diagram:
+    bad:
+    - Fine-tune · Trade confirms
+    - '!Loss good · Spot checks'
+    - No baseline · No held-out
+    - '!Worse · Small banks'
+    bad_note: Ship on training loss and spot checks
+    good:
+    - Held-out · Stratified
+    - +Baseline · Prompted model
+    - +Compare · By slice
+    - Ship if · Beats baseline
+    good_note: Stratified held-out set vs prompted baseline
+  solution: |-
+    1. Hold out a test set stratified by counterparty and document type.
+    2. Compare against the prompted baseline on the same set.
+    3. Ship only if the fine-tune beats the baseline on the slices that matter.
+  works: |-
+    **Trade-off to manage:** Smaller training set.
+
+    **How you prove it worked:**
+
+    - Field-level accuracy by slice, before and after.
+
+    **Same pattern elsewhere:** Telco: a fine-tuned intent model looks good in training and underperforms the prompted model on prepaid-brand slang.
+  takeaway: A fine-tune must beat the baseline on held-out data, or it doesn't ship.
+  related:
+  - eval-08
+  - ft-20
+  code: |
+    train, test = stratified_split(docs, by=["counterparty", "doc_type"], test_frac=0.2)
+    tuned = finetune(BASE, train)
+    results = {"prompted": evaluate(prompted_baseline, test), "tuned": evaluate(tuned, test)}
+    important = ["isda", "csa", "top_10_counterparties"]
+    ship = all(results["tuned"].slice(s) >= results["prompted"].slice(s) for s in important)
+  lang: python
+- id: ft-05
+  title: Fine-tuning on the bot's own past answers
+  tags:
+  - Quality
+  - Cost
+  - Latency
+  - Telco
+  scenario: |-
+    To save labelling cost, a carrier fine-tunes its next care model on transcripts of the current bot's answers that customers didn't complain about. The new model inherits the old one's mistakes, with more confidence, and quality slowly declines with each round.
+  antipattern: |-
+    **Train on the bot's unverified outputs.**
+
+    *Think of it this way:* Photocopying a photocopy; each generation gets blurrier.
+  fails: |-
+    - Model outputs used as training targets without verification.
+    - A lack of complaints isn't correctness.
+    - Errors are amplified.
+
+    **Root cause:** Self-generated training data without quality control.
+
+    **Where it breaks:** Data curation.
+  diagram:
+    bad:
+    - Bot answers · Past
+    - '!No complaint · = correct?'
+    - Fine-tune · On them
+    - '!Errors amplified · Each round'
+    bad_note: Train on the bot's unverified outputs
+    good:
+    - Verified data · Expert review
+    - +Confirmed · Outcomes
+    - +Filter · Synthetic
+    - Track · Across rounds
+    good_note: Verified, expert-reviewed training data
+  solution: |-
+    1. Use verified data (expert-reviewed answers, resolved cases with confirmed outcomes).
+    2. If using synthetic or model-generated data, filter with strong checks and mix with human data.
+    3. Track quality across generations.
+  works: |-
+    **Trade-off to manage:** Expert review costs.
+
+    **How you prove it worked:**
+
+    - Eval trend across successive fine-tunes.
+
+    **Same pattern elsewhere:** FinTech: a bank trains its document classifier on its own previous predictions.
+  takeaway: Don't teach a model its own mistakes.
+  related:
+  - ops-04
+  - sec-13
+  code: |
+    def training_examples():
+        expert = answers.where(reviewed_by_expert=True, verdict="correct")
+        resolved = cases.where(outcome_confirmed=True).answers()
+        synthetic = [s for s in generate_synthetic(n=2000) if strong_checks(s)]
+        data = expert + resolved + synthetic[: len(expert)]           # synthetic never dominates
+        lineage.record(sources={"expert": len(expert), "resolved": len(resolved), "synthetic": len(synthetic)})
+        return data
+  lang: python
+- id: ft-06
+  title: Fine-tune makes the model forget its refusals
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A wealth platform fine-tunes a model on advisor conversations to sound more like its advisors. After deployment, the model readily gives specific buy and sell recommendations to retail users, which the base model used to decline. The training data contained advisors giving recommendations to clients with whom they had a suitability relationship.
+  antipattern: |-
+    **No safety evals after fine-tuning.**
+
+    *Think of it this way:* Teaching someone a new accent and finding they've forgotten their manners.
+  fails: |-
+    - Fine-tuning shifts behaviour beyond the target.
+    - Safety and compliance behaviours regress.
+    - No safety evals after fine-tuning.
+
+    **Root cause:** No regression testing of safety behaviour after fine-tuning.
+
+    **Where it breaks:** Fine-tuning process.
+  diagram:
+    bad:
+    - Advisor chats · Training
+    - '!Fine-tune · Style'
+    - Refusals gone · Recommends
+    - '!Retail users · Unsuitable'
+    bad_note: No safety evals after fine-tuning
+    good:
+    - Safety suite · After tune
+    - +Boundary data · In training
+    - +Guardrails · Runtime
+    - Compare · Base vs tuned
+    good_note: Full safety suite and boundary examples in training
+  solution: |-
+    1. Run the full safety and compliance eval suite after every fine-tune.
+    2. Include refusal and boundary examples in training data.
+    3. Keep runtime guardrails independent of the model.
+  works: |-
+    **Trade-off to manage:** More training and eval effort.
+
+    **How you prove it worked:**
+
+    - Safety eval deltas between base and fine-tuned models.
+
+    **Same pattern elsewhere:** Telco: a fine-tuned care model starts revealing account details without verification because training chats came from already-verified sessions.
+  takeaway: Fine-tuning can unlearn safety. Re-test it every time.
+  related:
+  - eval-10
+  - ft-04
+  code: |
+    train_data = core_examples + refusal_and_boundary_examples       # keep refusals in the training mix
+    tuned = finetune(BASE, train_data)
+
+    safety = run_suite(tuned, suites=["safety", "compliance", "refusals"])
+    assert safety.critical_failures == 0, "fine-tune broke safety behaviour"
+    # runtime guardrails stay independent of the model:
+    reply = output_guard.check(tuned.generate(msg))
+  lang: python
+- id: ft-07
+  title: Fine-tuning teaches a confident tone, not correct answers
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier fine-tunes its troubleshooting bot on polished agent responses to reduce hedging. Customers like the confident tone, but the model now states guesses about network faults as facts, and wrong-diagnosis rates rise.
+  antipattern: |-
+    **Fine-tune away the hedging.**
+
+    *Think of it this way:* Training someone to speak confidently without teaching them anything new.
+  fails: |-
+    - Style training changes certainty, not knowledge.
+    - Hedging was a useful signal of uncertainty.
+    - No grounding or diagnostics behind answers.
+
+    **Root cause:** Fine-tuning used to fix a symptom (hedging) instead of the cause (missing data).
+
+    **Where it breaks:** Approach and data.
+  diagram:
+    bad:
+    - Hedging · Problem
+    - '!Fine-tune · Confident style'
+    - Guesses · As facts
+    - '!Wrong diagnosis · Up'
+    bad_note: Fine-tune away the hedging
+    good:
+    - Line tests · Tools
+    - +Outage data · Grounding
+    - +Calibrated · When unsure
+    - Evaluate · Correctness
+    good_note: Diagnostic tools for evidence, calibrated language
+  solution: |-
+    1. Give the bot diagnostic tools (line tests, outage data) so answers are grounded.
+    2. Keep calibrated uncertainty language when evidence is weak.
+    3. Evaluate correctness, not just tone.
+  works: |-
+    **Trade-off to manage:** Less confident tone where evidence is weak, which is honest.
+
+    **How you prove it worked:**
+
+    - Wrong-diagnosis rate before and after.
+
+    **Same pattern elsewhere:** FinTech: a fine-tuned bot sounds certain about fee outcomes it can't check.
+  takeaway: Confidence should come from evidence, not training.
+  related:
+  - rag-10
+  - ft-02
+  code: |
+    TOOLS = [run_line_test, check_outage, device_status]               # grounded diagnostics
+
+    SYSTEM = ("If the line test or outage data doesn't confirm the cause, say what you checked and "
+              "that the cause isn't confirmed yet.")
+
+    eval_metrics = ["diagnosis_correct", "resolution_correct", "calibrated_uncertainty"]   # not just tone
+  lang: python
+- id: ft-08
+  title: Fifty examples expected to teach a complex task
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank fine-tunes a model with 50 examples of commercial-loan covenant analysis, expecting it to learn the task. Results are worse than prompting with good instructions and three examples, because 50 examples can't cover the variety of covenant structures.
+  antipattern: |-
+    **Fine-tune on 50 examples.**
+
+    *Think of it this way:* Expecting someone to learn a language from fifty sentences.
+  fails: |-
+    - Too little data for a complex task.
+    - Fine-tuning chosen before prompting was optimised.
+    - No learning curve measured.
+
+    **Root cause:** Unrealistic expectations of fine-tuning.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - 50 examples · Covenants
+    - '!Fine-tune · Complex task'
+    - Worse · Than prompt
+    - '!Wasted · Weeks'
+    bad_note: Fine-tune on 50 examples
+    good:
+    - Prompt first · Optimised
+    - +Curve · 50, 200, 1k
+    - +Enough data? · Decide
+    - Then tune · If it pays
+    good_note: Optimise prompting, measure a learning curve
+  solution: |-
+    1. Optimise prompting and retrieval first.
+    2. Estimate data needs with a learning curve (train on 50, 200, 1,000 examples).
+    3. Use fine-tuning when you have enough diverse, high-quality data.
+  works: |-
+    **Trade-off to manage:** Collecting quality data takes time.
+
+    **How you prove it worked:**
+
+    - Learning curve and comparison with the prompted baseline.
+
+    **Same pattern elsewhere:** Telco: 40 examples of enterprise contract review are used to fine-tune a model.
+  takeaway: Fine-tuning needs data. Measure the learning curve first.
+  related:
+  - ft-04
+  code: |
+    def learning_curve(train_pool, sizes=(50, 200, 1000)):
+        return {n: evaluate(finetune(BASE, sample(train_pool, n)), heldout).score for n in sizes}
+
+    curve = learning_curve(pool)
+    # fine-tune only if the curve is still rising and enough diverse, high-quality data exists
+  lang: python
+- id: ft-09
+  title: Fine-tuned model's base version is being retired
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's fine-tuned intent model is built on a hosted base model the provider will retire in 90 days. The training data, scripts and evals are scattered in notebooks. Re-creating the fine-tune on a new base becomes a scramble.
+  antipattern: |-
+    **One-off fine-tune on a retiring base.**
+
+    *Think of it this way:* Customising a car model that's going out of production, without keeping the parts list.
+  fails: |-
+    - Fine-tunes are tied to specific base models.
+    - No reproducible training pipeline.
+    - Deprecation dates not tracked.
+
+    **Root cause:** Fine-tuning treated as a one-off.
+
+    **Where it breaks:** MLOps.
+  diagram:
+    bad:
+    - Fine-tune · Hosted base
+    - '!Base retired · 90 days'
+    - Scattered · Notebooks
+    - '!Scramble · Rebuild'
+    bad_note: One-off fine-tune on a retiring base
+    good:
+    - Pipeline · Reproducible
+    - +Versioned · Data, evals
+    - +Track dates · Deprecation
+    - Re-tune · Proactively
+    good_note: Reproducible tuning pipeline and deprecation tracking
+  solution: |-
+    1. Keep training data, configs and evals versioned in a reproducible pipeline.
+    2. Track base-model deprecation dates and re-tune proactively.
+    3. Re-validate fine-tunes on new bases with the same evals.
+  works: |-
+    **Trade-off to manage:** Pipeline maintenance effort.
+
+    **How you prove it worked:**
+
+    - Days to deprecation for each fine-tune's base.
+
+    **Same pattern elsewhere:** FinTech: a bank's fine-tuned KYC extractor must be revalidated by model risk after the base model is retired.
+  takeaway: A fine-tune is a pipeline, not an artifact.
+  related:
+  - ops-16
+  - ops-05
+  code: |
+    PIPELINE = {"data": "datasets/disputes@v7", "config": "configs/ft_disputes.yaml",
+                "evals": "evals/disputes_suite@v5", "base": "base-model-2025-06"}
+
+    def retune(new_base):
+        model = finetune(new_base, load(PIPELINE["data"]), config=load(PIPELINE["config"]))
+        assert evaluate(model, PIPELINE["evals"]) >= baseline_scores(PIPELINE["evals"]) - 0.01
+        return model
+
+    if provider.deprecation_date(PIPELINE["base"]) - today() < timedelta(days=120):
+        retune(provider.recommended_successor(PIPELINE["base"]))
+  lang: python
+- id: ft-10
+  title: Fine-tuned model repeats customers' account numbers
+  tags:
+  - Quality
+  - Security
+  - FinTech
+  - Critical
+  scenario: |-
+    A bank fine-tunes a model on raw customer-service emails without removing personal data. Testers find that prompts like "my account number is" sometimes complete with real account numbers from the training data.
+  antipattern: |-
+    **Raw PII in fine-tuning data.**
+
+    *Think of it this way:* A new hire who learned from real files and recites customers' details in front of strangers.
+  fails: |-
+    - Training data contains personal data.
+    - Models can memorise and reproduce rare strings.
+    - No memorisation testing.
+
+    **Root cause:** Personal data in fine-tuning data.
+
+    **Where it breaks:** Data preparation.
+  diagram:
+    bad:
+    - Raw emails · With PII
+    - '!Fine-tune · Memorises'
+    - '''Account is...'' · Prompt'
+    - '!Real numbers · Output'
+    bad_note: Raw PII in fine-tuning data
+    good:
+    - De-identify · Before training
+    - +Canary tests · Memorisation
+    - +Probes · Extraction
+    - Filter · Output patterns
+    good_note: De-identify, test memorisation, filter output
+  solution: |-
+    1. Remove or pseudonymise PII before training (account numbers, names, addresses).
+    2. Test for memorisation with canary strings and extraction probes.
+    3. Apply output filters for account-number patterns.
+  works: |-
+    **Trade-off to manage:** De-identification takes effort and may lose some context.
+
+    **How you prove it worked:**
+
+    - Extraction tests before release.
+
+    **Same pattern elsewhere:** Telco: a fine-tuned model reproduces phone numbers and addresses from care transcripts.
+  takeaway: Whatever goes into training can come out in answers.
+  related:
+  - gov-09
+  - ops-04
+  code: |
+    def prepare(rows):
+        return [pseudonymise(r, entities=["ACCOUNT_NUMBER", "PERSON", "ADDRESS"]) for r in rows]
+
+    CANARY = "ACC-CANARY-77319204"                                      # inserted once in training data
+    def memorisation_probe(model):
+        outs = [model.generate(p) for p in EXTRACTION_PROBES + [f"Account number {CANARY[:8]}"]]
+        return not any(CANARY in o for o in outs)
+
+    reply = re.sub(r"\b\d{8,12}\b", lambda m: "****" + m.group()[-4:], reply)   # output filter
+  lang: python
+- id: ft-11
+  title: Twenty thousand documents stuffed into long context
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier decides RAG is unnecessary because new models have huge context windows. Its knowledge base has 20,000 articles, far beyond any window. The team picks "the most important" 600 articles for every prompt, so questions about anything else fail.
+  antipattern: |-
+    **Replace RAG with a big context window.**
+
+    *Think of it this way:* Fitting the whole library in your backpack by only taking the books you think matter.
+  fails: |-
+    - Corpus size exceeds any context window.
+    - Manual selection leaves gaps.
+    - Every call pays for 600 articles.
+
+    **Root cause:** Long context treated as a replacement for retrieval at scale.
+
+    **Where it breaks:** Architecture choice.
+  diagram:
+    bad:
+    - 20k articles · Corpus
+    - '!Pick 600 · Manually'
+    - Every prompt · Costly
+    - '!Other topics · Fail'
+    bad_note: Replace RAG with a big context window
+    good:
+    - Retrieve · Whole corpus
+    - +Long context · For results
+    - +Cache core · Stable set
+    - Coverage · Evaluated
+    good_note: Retrieve from the corpus, long context for the result
+  solution: |-
+    1. Use retrieval for large corpora, and long context for the retrieved set or a single long document.
+    2. Combine with caching for a stable core set.
+    3. Evaluate coverage across the whole corpus.
+  works: |-
+    **Trade-off to manage:** Retrieval adds infrastructure.
+
+    **How you prove it worked:**
+
+    - Failure rate for questions on non-included articles.
+
+    **Same pattern elsewhere:** FinTech: a bank puts a selection of policies into every prompt instead of retrieving from its 8,000 policy documents.
+  takeaway: Long context complements retrieval. It doesn't replace it.
+  related:
+  - ctx-01
+  code: |
+    def answer(q):
+        hits = retrieve(q, k=40)                                  # retrieval over 20k documents
+        core = {"text": CORE_POLICY_SET, "cache": True}            # stable core cached
+        return llm.generate(system=[core], context=rerank(q, hits)[:12], user=q)
+
+    coverage = mean(any(d in retrieved_docs(q) for d in gold) for q, gold in coverage_eval)   # whole-corpus coverage
+  lang: python
+- id: ft-12
+  title: RAG over documents to trace beneficial ownership
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's KYC assistant tries to answer "Who are the ultimate beneficial owners of this company?" with RAG over registry filings. Ownership runs through four layers of holding companies with percentages. Retrieval finds some filings but the model can't reliably compute indirect ownership across layers.
+  antipattern: |-
+    **RAG over filings for ownership chains.**
+
+    *Think of it this way:* Tracing a family tree by searching for sentences that mention relatives.
+  fails: |-
+    - The question is about relationships and arithmetic across them.
+    - Text retrieval returns fragments.
+    - Indirect ownership needs graph traversal and multiplication.
+
+    **Root cause:** RAG used where a graph and computation are needed.
+
+    **Where it breaks:** Approach selection.
+  diagram:
+    bad:
+    - UBO question · 4 layers
+    - '!RAG · Filings'
+    - Fragments · Retrieved
+    - '!Wrong % · Indirect'
+    bad_note: RAG over filings for ownership chains
+    good:
+    - Graph · Entities, edges
+    - +Graph query · Compute %
+    - +LLM explains · With sources
+    - Verified · By analysts
+    good_note: Ownership graph, computed in code, explained by LLM
+  solution: |-
+    1. Build an ownership graph from registry data (entities, ownership edges with percentages).
+    2. Compute indirect ownership with graph queries in code, and let the LLM explain the result with sources.
+    3. Use GraphRAG patterns where narrative and relationships both matter.
+  works: |-
+    **Trade-off to manage:** Graph construction and maintenance effort.
+
+    **How you prove it worked:**
+
+    - Accuracy against analyst-verified UBO determinations.
+
+    **Same pattern elsewhere:** Telco: "Which enterprise sites depend on this aggregation router?" needs the network inventory graph, not document search.
+  takeaway: Relationships need a graph. Arithmetic needs code.
+  related:
+  - rag-17
+  - rag-12
+  code: |
+    import networkx as nx
+
+    G = nx.DiGraph()
+    for e in registry.ownership_edges():                          # entity → entity, pct
+        G.add_edge(e.owner, e.owned, pct=e.pct, source=e.filing_id)
+
+    def indirect_ownership(person, company):
+        total = sum(math.prod(G[u][v]["pct"] for u, v in zip(p, p[1:])) for p in nx.all_simple_paths(G, person, company))
+        return total, [G[u][v]["source"] for p in nx.all_simple_paths(G, person, company) for u, v in zip(p, p[1:])]
+    # LLM explains the computed result with the cited filings
+  lang: python
+- id: ft-13
+  title: Small model distilled from a provider's outputs against its terms
+  tags:
+  - Quality
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier generates a million responses from a commercial model and uses them to train its own smaller model for cost savings. Legal later points out that the provider's terms restrict using outputs to develop competing models, putting the project at risk.
+  antipattern: |-
+    **Distil without checking terms.**
+
+    *Think of it this way:* Copying a textbook to write your own without checking the copyright.
+  fails: |-
+    - Licensing and terms weren't checked.
+    - Distillation decisions made by engineering alone.
+    - Training data provenance not recorded.
+
+    **Root cause:** Legal and licensing review skipped for training data.
+
+    **Where it breaks:** Governance of training data.
+  diagram:
+    bad:
+    - 1M outputs · Commercial API
+    - '!Train small · Model'
+    - Terms · Restrict
+    - '!At risk · Project'
+    bad_note: Distil without checking terms
+    good:
+    - Terms review · Before
+    - +Permissive · Teacher
+    - +Provenance · Recorded
+    - Legal · Sign-off
+    good_note: Licence review, permissive teachers, provenance
+  solution: |-
+    1. Review provider terms and model licences before distillation or synthetic data use.
+    2. Prefer permissively licensed teacher models where terms allow.
+    3. Record provenance and licence of all training data.
+  works: |-
+    **Trade-off to manage:** Fewer teacher options.
+
+    **How you prove it worked:**
+
+    - Training datasets without licence records.
+
+    **Same pattern elsewhere:** FinTech: a bank trains on outputs of an AI vendor's API without checking contract restrictions.
+  takeaway: Check the licence before you distil.
+  related:
+  - gov-09
+  code: |
+    TEACHER_POLICY = {"provider-a": {"distillation_allowed": False}, "open-model-x": {"license": "apache-2.0"}}
+
+    def approve_synthetic_source(teacher):
+        p = TEACHER_POLICY[teacher]
+        if p.get("distillation_allowed") is False:
+            raise PermissionError(f"{teacher} terms prohibit training competing models on outputs")
+        provenance.record(teacher=teacher, license=p.get("license"), reviewed_by="legal")
+  lang: python
+- id: ft-14
+  title: Prompt change and fine-tune shipped together
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank ships a fine-tuned model together with a rewritten prompt and a new retrieval index. Quality improves on some intents and worsens on others. Nobody can tell which change caused what.
+  antipattern: |-
+    **Ship three changes at once.**
+
+    *Think of it this way:* Changing diet, exercise and sleep at once and not knowing which helped.
+  fails: |-
+    - Several changes released together.
+    - No ablation.
+    - Attribution impossible.
+
+    **Root cause:** Poor experiment design.
+
+    **Where it breaks:** Release process.
+  diagram:
+    bad:
+    - Fine-tune · New
+    - '!Prompt · Rewritten'
+    - Index · Rebuilt
+    - '!Mixed results · Unattributable'
+    bad_note: Ship three changes at once
+    good:
+    - Ablation · Prompt only
+    - +Ablation · Tune only
+    - +Both · Combined
+    - Decision log · Kept
+    good_note: Ablations or one change at a time
+  solution: |-
+    1. Change one major component at a time, or run ablations (prompt only, tune only, both).
+    2. Version each component and evaluate combinations.
+    3. Keep a decision log.
+  works: |-
+    **Trade-off to manage:** Slower releases.
+
+    **How you prove it worked:**
+
+    - Eval results per component combination.
+
+    **Same pattern elsewhere:** Telco: a carrier ships a new embedding model, chunking and prompt together, and can't explain a regression.
+  takeaway: Change one thing, or run the ablation.
+  related:
+  - obs-11
+  - ops-01
+  code: |
+    VARIANTS = {"baseline": (PROMPT_V1, BASE), "prompt_only": (PROMPT_V2, BASE),
+                "tune_only": (PROMPT_V1, TUNED), "both": (PROMPT_V2, TUNED)}
+
+    results = {name: evaluate(model, prompt=prompt) for name, (prompt, model) in VARIANTS.items()}
+    decision_log.append({"date": today(), "results": results, "chosen": max(results, key=results.get)})
+  lang: python
+- id: ft-15
+  title: Fine-tuning chosen because a competitor announced it
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    After a competitor announces a "custom telco LLM", a carrier's leadership mandates fine-tuning. Error analysis, done later, shows 70% of bot failures are retrieval gaps and missing tool integrations, which fine-tuning doesn't fix.
+  antipattern: |-
+    **Choose a technique from headlines.**
+
+    *Think of it this way:* Buying new running shoes when the problem is you haven't trained.
+  fails: |-
+    - Approach chosen by announcement, not analysis.
+    - Root causes unknown.
+    - Budget spent on the wrong fix.
+
+    **Root cause:** No error analysis before choosing.
+
+    **Where it breaks:** Decision process.
+  diagram:
+    bad:
+    - Competitor · Announces
+    - '!Mandate · Fine-tune'
+    - Failures · 70% retrieval
+    - '!Wrong fix · Budget spent'
+    bad_note: Choose a technique from headlines
+    good:
+    - Categorise · Failures
+    - +Map · To technique
+    - +Invest · Biggest share
+    - Measure · Impact
+    good_note: Error analysis maps failures to fixes
+  solution: |-
+    1. Categorise failures (retrieval, missing tools, reasoning, format, tone, knowledge).
+    2. Map each category to its fix (RAG, tools, prompting, fine-tuning).
+    3. Invest where most failures are.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Failure taxonomy shares.
+
+    **Same pattern elsewhere:** FinTech: a bank buys a "finance-tuned" model while its main failures are permissions and stale data.
+  takeaway: Let the error analysis pick the technique.
+  related:
+  - obs-17
+  - ft-01
+  code: |
+    FIX_FOR = {"retrieval_miss": "improve RAG", "missing_tool": "add tool", "reasoning": "model/effort",
+               "format": "prompting/structured output", "tone": "prompting → fine-tune", "knowledge": "RAG"}
+
+    failures = [label_failure(t) for t in sample_failed_traces(n=200)]
+    plan = Counter(FIX_FOR[f] for f in failures).most_common()     # invest where most failures are
+  lang: python
+- id: ft-16
+  title: Fine-tuned model can't show where its answers come from
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's compliance team requires the policy assistant to cite the exact policy section for every answer. The team fine-tuned a model on policies instead of using retrieval. It can't produce reliable citations, and invented section numbers appear.
+  antipattern: |-
+    **Fine-tuned knowledge where citations are required.**
+
+    *Think of it this way:* A witness who remembers the facts but can't say where they read them.
+  fails: |-
+    - Fine-tuned knowledge lacks source attribution.
+    - Compliance requires traceability.
+    - The model invents citations.
+
+    **Root cause:** Approach incompatible with a hard requirement.
+
+    **Where it breaks:** Requirements and design.
+  diagram:
+    bad:
+    - Requirement · Cite section
+    - '!Fine-tuned · On policies'
+    - No sources · Reliable
+    - '!Invented · Section numbers'
+    bad_note: Fine-tuned knowledge where citations are required
+    good:
+    - RAG · Policies
+    - +Verify · Citations
+    - +Tune · Format only
+    - Requirement · Upfront
+    good_note: Retrieval with verified citations, tune for format
+  solution: |-
+    1. Use retrieval with citation verification for anything needing sources.
+    2. Optionally fine-tune for format or domain language on top of RAG.
+    3. Make citation requirements explicit before choosing an approach.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Citation accuracy checks.
+
+    **Same pattern elsewhere:** Telco: a regulatory assistant fine-tuned on FCC rules can't cite the rule section.
+  takeaway: If you need sources, you need retrieval.
+  related:
+  - rag-15
+  - ft-01
+  code: |
+    def answer_with_sources(q):
+        hits = retrieve(q, k=8)
+        out = llm.generate(q, sources=hits, schema=list[Claim])           # optionally a format-tuned model
+        verified = [c for c in out if nli.entails(hits[c.source_id].text, c.claim) > 0.8]
+        return render(verified, citations=True)
+  lang: python
+- id: ft-17
+  title: Generic embeddings don't understand telco jargon
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's retrieval uses a general embedding model. Queries with jargon (MSISDN, ICCID, ONT, VoLTE, APN) retrieve poorly, because the model treats them as rare tokens. The team keeps tuning prompts, but retrieval recall for technical questions stays at 55%.
+  antipattern: |-
+    **Generic embeddings for domain jargon.**
+
+    *Think of it this way:* A librarian who doesn't know the trade vocabulary of the books.
+  fails: |-
+    - Embeddings don't capture domain terms.
+    - Prompt tuning can't fix retrieval.
+    - Labelled query-document pairs exist in search logs.
+
+    **Root cause:** The embedding model wasn't adapted to the domain.
+
+    **Where it breaks:** Retrieval model.
+  diagram:
+    bad:
+    - Jargon · MSISDN, APN
+    - '!Generic · Embeddings'
+    - Recall 55% · Technical
+    - '!Prompt tuning · No effect'
+    bad_note: Generic embeddings for domain jargon
+    good:
+    - Pairs · From search logs
+    - +Fine-tune · Embeddings
+    - +Hybrid · Keyword
+    - Glossary · Expansion
+    good_note: Fine-tune embeddings/reranker, hybrid search
+  solution: |-
+    1. Fine-tune the embedding model (or reranker) on domain query-document pairs from search logs and expert labels.
+    2. Add hybrid keyword search for exact terms.
+    3. Add a glossary-based query expansion.
+  works: |-
+    **Trade-off to manage:** Re-indexing after embedding changes (see rag-07).
+
+    **How you prove it worked:**
+
+    - Recall@k on technical queries before and after.
+
+    **Same pattern elsewhere:** FinTech: general embeddings handle terms like SOFR, CUSIP and LEI poorly in a research assistant.
+  takeaway: Sometimes the thing to fine-tune is the retriever.
+  related:
+  - rag-02
+  - rag-07
+  code: |
+    from sentence_transformers import SentenceTransformer, losses, InputExample
+
+    pairs = [InputExample(texts=[q, d]) for q, d in search_log_clicks() + expert_pairs()]
+    model = SentenceTransformer("base-embedder")
+    model.fit([(DataLoader(pairs, batch_size=64, shuffle=True), losses.MultipleNegativesRankingLoss(model))], epochs=2)
+
+    GLOSSARY = {"ONT": "optical network terminal", "LOS": "loss of signal", "PON": "passive optical network"}
+    def expand(q): return q + " " + " ".join(v for k, v in GLOSSARY.items() if re.search(rf"\b{k}\b", q))
+  lang: python
+- id: ft-18
+  title: Fine-tuned on synthetic disputes, fails on real ones
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank generates 20,000 synthetic dispute conversations with an LLM to fine-tune its dispute assistant. Synthetic customers are articulate and organised. Real customers are angry, vague and mix several issues. The fine-tuned model underperforms on real traffic.
+  antipattern: |-
+    **Train on clean synthetic conversations.**
+
+    *Think of it this way:* Practising self-defence only against a polite sparring partner.
+  fails: |-
+    - Synthetic data doesn't match real distribution.
+    - No real-data validation.
+    - Overfitting to synthetic style.
+
+    **Root cause:** Synthetic data used without grounding in real data.
+
+    **Where it breaks:** Data strategy.
+  diagram:
+    bad:
+    - 20k synthetic · Disputes
+    - '!Articulate · Customers'
+    - Fine-tune · On them
+    - '!Real traffic · Underperforms'
+    bad_note: Train on clean synthetic conversations
+    good:
+    - Seed · Real chats
+    - +Mix · Real + synthetic
+    - +Validate · Real held-out
+    - Gap metrics · Distribution
+    good_note: Seed from real data, validate on real held-out
+  solution: |-
+    1. Seed synthetic generation from real (de-identified) conversations, including messy ones.
+    2. Mix synthetic with real data, and validate only on real held-out data.
+    3. Measure the distribution gap (length, intent mix, sentiment).
+  works: |-
+    **Trade-off to manage:** Real data needs de-identification and review.
+
+    **How you prove it worked:**
+
+    - Performance gap between synthetic and real test sets.
+
+    **Same pattern elsewhere:** Telco: a care model trained on synthetic chats fails on real customers' typos and slang.
+  takeaway: Synthetic data must look like the real world, and be tested on it.
+  related:
+  - ft-04
+  - eval-06
+  code: |
+    seeds = sample(deidentified_real_disputes, n=300, include_messy=True)
+    synthetic = [generate_variant(s) for s in seeds for _ in range(5)]
+    train = real_train + synthetic                                 # mixed
+    report = evaluate(finetune(BASE, train), real_heldout)          # validated on real data only
+
+    gap = {"length": ks_stat(lengths(synthetic), lengths(real_train)),
+           "intent_mix": js_divergence(intents(synthetic), intents(real_train))}
+  lang: python
+- id: ft-19
+  title: Fine-tune saves on tokens, costs more to host
+  tags:
+  - Quality
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier fine-tunes a model to shorten prompts, cutting tokens per call by 60%. The fine-tuned model requires a dedicated hosted endpoint billed hourly. At the carrier's traffic levels, total cost rises.
+  antipattern: |-
+    **Count only per-token savings.**
+
+    *Think of it this way:* Buying a van to save on courier fees when you only send three parcels a week.
+  fails: |-
+    - Only per-token savings were considered.
+    - Hosting and minimum commitments ignored.
+    - Traffic profile not modelled.
+
+    **Root cause:** Incomplete cost model.
+
+    **Where it breaks:** Business case.
+  diagram:
+    bad:
+    - Fine-tune · Shorter prompts
+    - '!-60% tokens · Per call'
+    - Dedicated · Endpoint hourly
+    - '!Total cost · Up'
+    bad_note: Count only per-token savings
+    good:
+    - TCO model · All costs
+    - +Traffic · Modelled
+    - +Alternatives · Caching, routing
+    - Revisit · As traffic shifts
+    good_note: Total cost of ownership against real traffic
+  solution: |-
+    1. Model total cost of ownership (hosting, training, evaluation, retraining, ops) against traffic.
+    2. Compare with prompt caching, routing and smaller hosted models.
+    3. Revisit as traffic changes.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Cost per thousand requests including hosting.
+
+    **Same pattern elsewhere:** FinTech: a bank's fine-tuned model sits on a dedicated endpoint for a low-volume internal tool.
+  takeaway: Count the whole cost, not just the tokens.
+  related:
+  - cost-18
+  - cost-01
+  code: |
+    def monthly_tco(option, traffic_tokens_m):
+        if option == "self_hosted_finetune":
+            return gpu_hours(traffic_tokens_m) * GPU_RATE + TRAINING_AMORTISED + EVAL_OPS + RETRAIN_AMORTISED
+        if option == "hosted_small_cached":
+            return traffic_tokens_m * SMALL_PRICE * (1 - CACHE_HIT * 0.9)
+        return traffic_tokens_m * LARGE_PRICE
+
+    best = min(["self_hosted_finetune", "hosted_small_cached", "hosted_large"], key=lambda o: monthly_tco(o, T))
+  lang: python
+- id: ft-20
+  title: Fine-tuned model never A/B tested against the old one
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank replaces its prompted model with a fine-tuned one after offline evals show a small gain. No online test is run. Three months later, complaint rates are slightly higher, but nobody can tell whether the fine-tune is responsible.
+  antipattern: |-
+    **Replace the model after offline evals only.**
+
+    *Think of it this way:* Changing a medicine without a control group.
+  fails: |-
+    - No online comparison.
+    - Small offline gains may not translate.
+    - Later attribution is impossible.
+
+    **Root cause:** No online experiment for a model change.
+
+    **Where it breaks:** Release process.
+  diagram:
+    bad:
+    - Offline gain · Small
+    - '!Replaced · No A/B'
+    - Complaints · Slightly up
+    - '!Unknown cause · 3 months'
+    bad_note: Replace the model after offline evals only
+    good:
+    - A/B test · Old vs new
+    - +Business KPIs · Resolution
+    - +Thresholds · Pre-agreed
+    - Rollback · Ready
+    good_note: Online A/B with business metrics and rollback
+  solution: |-
+    1. Run an A/B test or canary against the existing model with business metrics (resolution, complaints, escalations).
+    2. Decide based on online results with pre-agreed thresholds.
+    3. Keep the old model available for rollback.
+  works: |-
+    **Trade-off to manage:** A/B tests take time and traffic.
+
+    **How you prove it worked:**
+
+    - Online metric differences by arm.
+
+    **Same pattern elsewhere:** Telco: a carrier swaps in a fine-tuned care model and can't later tell whether it changed repeat-contact rates.
+  takeaway: A model change is an experiment. Run it like one.
+  related:
+  - ops-06
+  - eval-11
+  code: |
+    exp = experiment("disputes_model", arms={"control": OLD_MODEL, "treatment": TUNED_MODEL}, split=0.1)
+    THRESHOLDS = {"resolution_rate": +0.01, "complaints_rate": 0.0, "escalation_rate": 0.0}   # pre-agreed
+
+    def decide(results):
+        ok = all(results.delta(m) >= t if t > 0 else results.delta(m) <= t for m, t in THRESHOLDS.items())
+        return "ramp" if ok else "rollback_to_control"           # old model kept for rollback
+  lang: python

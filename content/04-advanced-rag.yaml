@@ -1,7 +1,7 @@
 id: advanced-rag
 num: 4
 short: Advanced RAG
-title: Advanced RAG
+title: Advanced RAG & Fine-tuning vs RAG
 summary: GraphRAG, agentic retrieval and citation verification solve real problems, but only when chosen for the right reason and verified in production.
 patterns:
   - id: overengineered-rag

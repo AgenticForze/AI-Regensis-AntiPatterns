@@ -1,0 +1,1181 @@
+source: regensis
+section: ingestion
+patterns:
+- id: data-01
+  title: CRM export column renamed, plan names vanish from the index
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's knowledge pipeline ingests a nightly CRM export to build customer-context documents for agent assist. The CRM team renames plan_name to product_offering_name. The pipeline doesn't fail; it fills the field with blanks. For two weeks, agent assist shows customers with no plan, and suggestions are generic.
+  antipattern: |-
+    **No contract with the upstream export.**
+
+    *Think of it this way:* A supplier changing the label on a box, and your warehouse quietly filing it as empty.
+  fails: |-
+    - No contract between producer and consumer.
+    - Missing fields default to blank instead of failing.
+    - No data-quality checks on outputs.
+
+    **Root cause:** No data contracts or schema validation.
+
+    **Where it breaks:** Ingestion pipeline.
+  diagram:
+    bad:
+    - Field renamed · CRM export
+    - '!Pipeline · Fills blanks'
+    - No plan · In context
+    - '!2 weeks · Generic help'
+    bad_note: No contract with the upstream export
+    good:
+    - Contract · Schema + owner
+    - +Producer CI · Tests it
+    - +Validate · Fail loudly
+    - Null alerts · Per field
+    good_note: Data contract, schema validation, quality alerts
+  solution: |-
+    1. Define data contracts (schema, required fields, semantics, owner) with upstream teams, and test them in the producer's CI.
+    2. Validate schemas at ingestion and fail loudly on missing required fields.
+    3. Add quality checks (null rates, distributions) with alerts.
+  works: |-
+    **Trade-off to manage:** Contracts need cross-team agreement.
+
+    **How you prove it worked:**
+
+    - Null-rate alerts per field.
+
+    **Same pattern elsewhere:** FinTech: a core-banking extract renames a balance field, and the assistant shows zero balances.
+  takeaway: Data you depend on needs a contract.
+  related:
+  - cicd-18
+  - data-11
+  code: |
+    class CrmPlanRecord(BaseModel):          # data contract with the CRM team
+        account_id: str; plan_code: str; plan_name: constr(min_length=1); effective_from: date
+
+    def ingest(batch):
+        try:
+            rows = [CrmPlanRecord.model_validate(r) for r in batch]
+        except ValidationError as e:
+            raise IngestionHalted(f"contract violation: {e.errors()[:3]}")      # fail loudly
+        if null_rate(batch, "plan_name") > 0.01: alert("plan_name null rate spike")
+        return rows
+  lang: python
+- id: data-02
+  title: OCR misreads income documents with no confidence check
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A mortgage lender's pipeline OCRs payslips and bank statements for an underwriting assistant. Low-quality phone photos produce digit errors (8 read as 3). The pipeline passes all text on, and the assistant summarises incomes that are off by thousands.
+  antipattern: |-
+    **Pass all OCR text downstream.**
+
+    *Think of it this way:* Copying numbers from a smudged fax without saying it was smudged.
+  fails: |-
+    - OCR confidence is ignored.
+    - No validation against document totals.
+    - Low-quality inputs flow downstream silently.
+
+    **Root cause:** No quality gates on extracted data.
+
+    **Where it breaks:** Document ingestion.
+  diagram:
+    bad:
+    - Phone photo · Payslip
+    - '!OCR errors · 8 as 3'
+    - Passed on · No checks
+    - '!Wrong income · Summarised'
+    bad_note: Pass all OCR text downstream
+    good:
+    - Confidence · Per field
+    - +Cross-check · Totals
+    - +Low score · Human verify
+    - Mark · Confidence
+    good_note: Confidence gates and arithmetic cross-checks
+  solution: |-
+    1. Capture OCR confidence per field and route low-confidence fields to human verification or re-upload requests.
+    2. Cross-check totals (gross minus deductions equals net) and year-to-date figures.
+    3. Mark extracted values with confidence in downstream context.
+  works: |-
+    **Trade-off to manage:** More manual verification for bad images.
+
+    **How you prove it worked:**
+
+    - Share of low-confidence fields; underwriting corrections.
+
+    **Same pattern elsewhere:** Telco: OCR on ID documents for postpaid sign-up misreads dates of birth.
+  takeaway: Extracted data needs a confidence score and a cross-check.
+  related:
+  - rag-09
+  - prm-15
+  code: |
+    def extract_income(doc):
+        fields = ocr.extract(doc, fields=["gross", "deductions", "net", "ytd_gross"])
+        low = [f for f in fields.values() if f.confidence < 0.9]
+        if low:
+            return request_verification(doc, fields=[f.name for f in low])
+        if abs(fields["gross"].value - fields["deductions"].value - fields["net"].value) > 1:
+            return request_reupload(doc, reason="totals don't reconcile")
+        return {k: {"value": f.value, "confidence": f.confidence} for k, f in fields.items()}
+  lang: python
+- id: data-03
+  title: No freshness SLO for promotion pages
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's marketing team updates promotion pages daily. The knowledge pipeline crawls the website weekly. The bot regularly quotes expired promotions, and store staff have to honour or explain them.
+  antipattern: |-
+    **Weekly crawl for daily-changing content.**
+
+    *Think of it this way:* A newspaper delivered once a week for a market that changes daily.
+  fails: |-
+    - Update frequency of sources isn't matched by the pipeline.
+    - No freshness targets per source.
+    - Expired content isn't removed promptly.
+
+    **Root cause:** No freshness SLOs.
+
+    **Where it breaks:** Knowledge pipeline.
+  diagram:
+    bad:
+    - Promos · Daily changes
+    - '!Crawl · Weekly'
+    - Expired promos · Quoted
+    - '!Stores · Honour them'
+    bad_note: Weekly crawl for daily-changing content
+    good:
+    - SLO · Hours for promos
+    - +CMS events · Update
+    - +Expiry · Enforced
+    - Lag · Monitored
+    good_note: Freshness SLO per source, events, expiry dates
+  solution: |-
+    1. Set freshness SLOs per source based on change frequency and risk (promotions within hours).
+    2. Use CMS events to update, and expiry dates on promotional content that the index enforces.
+    3. Monitor lag per source.
+  works: |-
+    **Trade-off to manage:** Event-driven ingestion is more complex.
+
+    **How you prove it worked:**
+
+    - Lag between source publish and index update.
+
+    **Same pattern elsewhere:** FinTech: a bank's rate pages update instantly but the assistant's index refreshes weekly (see rag-05).
+  takeaway: Every source needs a freshness target.
+  related:
+  - rag-05
+  - cicd-11
+  code: |
+    FRESHNESS_SLO = {"promotions": timedelta(hours=2), "help_articles": timedelta(days=1), "legal": timedelta(days=1)}
+
+    @cms.webhook
+    def on_publish(evt):
+        index.upsert(evt.doc, meta={"expires_at": evt.doc.promo_end, "source": evt.source})
+
+    def search(q):
+        return index.search(q, filter={"$or": [{"expires_at": None}, {"expires_at": {"$gt": now()}}]})
+
+    for src, slo in FRESHNESS_SLO.items():
+        if index_lag(src) > slo: alert(f"{src} freshness SLO breached")
+  lang: python
+- id: data-04
+  title: After a bank merger, customer ids collide across systems
+  tags:
+  - Quality
+  - FinTech
+  - Critical
+  scenario: |-
+    After a merger, a bank's assistant combines data from both banks' systems. Customer ids overlap, and the integration layer joins on id alone. Some customers see another person's accounts in the assistant's summary.
+  antipattern: |-
+    **Join merged systems on overlapping ids.**
+
+    *Think of it this way:* Two schools merging and seating students by roll number, so two different "number 14"s share a desk.
+  fails: |-
+    - Identifiers aren't globally unique across sources.
+    - No master data management or entity resolution.
+    - Joins aren't validated.
+
+    **Root cause:** Missing master data management.
+
+    **Where it breaks:** Data integration.
+  diagram:
+    bad:
+    - Two banks · Merged
+    - '!Same ids · Different people'
+    - Join on id · Only
+    - '!Wrong accounts · Shown'
+    bad_note: Join merged systems on overlapping ids
+    good:
+    - Master index · Global ids
+    - +Mappings · Per source
+    - +Validate · Name, DOB
+    - Quarantine · Conflicts
+    good_note: Master customer index and validated joins
+  solution: |-
+    1. Use a master customer index with globally unique ids and source-system mappings.
+    2. Validate joins (name, date of birth, address) and quarantine conflicts.
+    3. Test data integration with known collision cases before exposing it to AI.
+  works: |-
+    **Trade-off to manage:** MDM is a substantial programme.
+
+    **How you prove it worked:**
+
+    - Join conflict rates; customer reports of unknown accounts.
+
+    **Same pattern elsewhere:** Telco: after acquiring a regional carrier, account numbers overlap and the bot shows the wrong bills.
+  takeaway: Join on identity you can trust, not on ids that happen to match.
+  related:
+  - rag-13
+  - ctx-17
+  code: |
+    def resolve_customer(source_system, source_id):
+        gid = mci.lookup(source_system, source_id)            # master customer index, globally unique id
+        if gid: return gid
+        candidates = mci.match(name=..., dob=..., address=...)
+        if len(candidates) != 1:
+            quarantine.put(source_system, source_id, candidates)   # conflicts never reach the AI
+            return None
+        return mci.link(candidates[0], source_system, source_id)
+  lang: python
+- id: data-05
+  title: Can't tell which version of a document produced an answer
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A customer disputes a bot answer about device trade-in terms from last month. The knowledge base article has since been edited twice. The vector store keeps only the latest chunks with no version info, so the carrier can't show what the bot actually relied on.
+  antipattern: |-
+    **Chunks without versions.**
+
+    *Think of it this way:* A contract where pages get replaced and no one keeps the old ones.
+  fails: |-
+    - Chunks have no document version.
+    - Old versions aren't retained.
+    - Traces store chunk ids without versions.
+
+    **Root cause:** No lineage from answer to source version.
+
+    **Where it breaks:** Ingestion and tracing.
+  diagram:
+    bad:
+    - Dispute · Trade-in terms
+    - '!Article · Edited twice'
+    - Latest only · No version
+    - '!Can''t show · What was used'
+    bad_note: Chunks without versions
+    good:
+    - Version + hash · On chunks
+    - +Traces · Record version
+    - +History · Content store
+    - Lookup · For complaints
+    good_note: Version and hash on chunks and traces, history kept
+  solution: |-
+    1. Store document id, version and content hash on every chunk, and record them in traces.
+    2. Retain historical versions in the content store (not necessarily in the live index).
+    3. Make "what did the bot rely on" a supported query for complaints teams.
+  works: |-
+    **Trade-off to manage:** Storage for history.
+
+    **How you prove it worked:**
+
+    - Traces with complete source versions.
+
+    **Same pattern elsewhere:** FinTech: a bank can't prove which fee schedule version its assistant quoted.
+  takeaway: Every answer should point to a version, not just a document.
+  related:
+  - ops-01
+  - rag-15
+  code: |
+    def chunk_meta(doc, i, text):
+        return {"doc_id": doc.id, "version": doc.version, "content_hash": sha256(text), "chunk_index": i}
+
+    span.set_attribute("retrieval.sources", [f"{h.meta['doc_id']}@{h.meta['version']}" for h in hits])
+
+    def what_did_the_bot_rely_on(trace_id):          # supported query for complaints teams
+        refs = traces.get(trace_id).attr("retrieval.sources")
+        return [content_store.get_version(*r.split("@")) for r in refs]
+  lang: python
+- id: data-06
+  title: Intent labels from three vendors disagree
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier outsources intent labelling to three vendors. Each interprets "billing dispute" versus "billing question" differently. The trained router is inconsistent, and evals built on the labels can't be trusted.
+  antipattern: |-
+    **Labels without shared guidelines.**
+
+    *Think of it this way:* Three referees using slightly different rulebooks.
+  fails: |-
+    - No shared labelling guidelines.
+    - Inter-annotator agreement not measured.
+    - Label quality not audited.
+
+    **Root cause:** Uncontrolled labelling process.
+
+    **Where it breaks:** Labelling operations.
+  diagram:
+    bad:
+    - 3 vendors · Labelling
+    - '!Own rules · Each'
+    - Disagree · Dispute vs Q
+    - '!Bad router · Bad evals'
+    bad_note: Labels without shared guidelines
+    good:
+    - Guidelines · Edge cases
+    - +Gold items · Calibrate
+    - +Agreement · Measured
+    - Audits · Continuous
+    good_note: Guidelines, agreement checks, gold items, audits
+  solution: |-
+    1. Write guidelines with definitions, edge cases and examples, owned by the business.
+    2. Measure inter-annotator agreement and calibrate vendors with gold-standard items.
+    3. Audit samples continuously and re-label disputed classes.
+  works: |-
+    **Trade-off to manage:** Guidelines and audits cost time.
+
+    **How you prove it worked:**
+
+    - Agreement scores per class and vendor.
+
+    **Same pattern elsewhere:** FinTech: complaint-category labels differ between internal teams, confusing the classifier.
+  takeaway: Labels need a rulebook and a referee.
+  related:
+  - eval-16
+  - ft-03
+  code: |
+    GUIDELINES = "labeling/intent_guidelines_v3.md"       # owned by the business
+
+    def calibrate(vendor):
+        gold = gold_items(n=100)
+        acc = mean(vendor.label(i) == i.gold for i in gold)
+        if acc < 0.9: retrain_vendor(vendor, GUIDELINES)
+
+    kappa = fleiss_kappa(labels_by_vendor(sample=500))
+    disputed = [c for c, k in per_class_kappa().items() if k < 0.6]
+    relabel(classes=disputed, by="senior_annotators")
+  lang: python
+- id: data-07
+  title: HR and legal files indexed into the employee assistant
+  tags:
+  - Quality
+  - FinTech
+  - Critical
+  scenario: |-
+    A bank's internal assistant indexes "all SharePoint sites" to help employees. The crawl includes HR investigations, salary reviews and legal privileged documents, which become searchable by anyone who asks the right question.
+  antipattern: |-
+    **Index everything the crawler can reach.**
+
+    *Think of it this way:* Moving every filing cabinet into the open-plan office because people need documents.
+  fails: |-
+    - Indexing scope defined by location, not classification.
+    - Sensitive documents lack labels.
+    - Permissions not carried into the index.
+
+    **Root cause:** No data classification gate for AI ingestion.
+
+    **Where it breaks:** Ingestion scope and governance.
+  diagram:
+    bad:
+    - All sites · Crawled
+    - '!HR, legal · Included'
+    - Searchable · By anyone
+    - '!Exposure · Privileged'
+    bad_note: Index everything the crawler can reach
+    good:
+    - Approved · Sources only
+    - +Labels · Classification
+    - +Exclude · Restricted
+    - Owner review · Before index
+    good_note: Approved sources, classification, permission-aware retrieval
+  solution: |-
+    1. Ingest only sources approved for the use case, with classification labels on documents.
+    2. Exclude restricted classifications by default, and carry permissions into retrieval (see rag-06).
+    3. Review sources with data owners before indexing.
+  works: |-
+    **Trade-off to manage:** Smaller corpus.
+
+    **How you prove it worked:**
+
+    - Classification audits of indexed content.
+
+    **Same pattern elsewhere:** Telco: an employee assistant indexes network security designs and lawful-intercept procedures.
+  takeaway: Index by permission and classification, not by location.
+  related:
+  - rag-06
+  - sec-06
+  code: |
+    APPROVED_SOURCES = {"employee_assistant": ["it_kb", "benefits_public", "travel_policy"]}
+    EXCLUDED_CLASSIFICATIONS = {"restricted", "legal_privileged", "hr_confidential"}
+
+    def ingest(doc, use_case):
+        if doc.source not in APPROVED_SOURCES[use_case]:
+            return "skipped: source not approved"
+        if doc.classification in EXCLUDED_CLASSIFICATIONS:
+            return "skipped: restricted classification"
+        index.add(doc, acl=doc.permissions)                  # permissions carried into retrieval
+  lang: python
+- id: data-08
+  title: Usage events arrive late and the bill-shock alert is wrong
+  tags:
+  - Quality
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's agent sends proactive alerts when roaming usage passes thresholds. Roaming usage records (TAP files from partner networks) arrive hours or days late. The agent tells customers they've used 200 MB when they've already used 2 GB, and they keep using data.
+  antipattern: |-
+    **Late data presented as current.**
+
+    *Think of it this way:* A fuel gauge that updates a day after you've driven.
+  fails: |-
+    - Event time and processing time are confused.
+    - Late data isn't accounted for.
+    - Alerts present stale data as current.
+
+    **Root cause:** Pipeline ignores data latency and completeness.
+
+    **Where it breaks:** Streaming design and messaging.
+  diagram:
+    bad:
+    - Roaming · TAP files
+    - '!Arrive late · Hours/days'
+    - '''200 MB'' · Alert'
+    - '!Really 2 GB · Bill shock'
+    bad_note: Late data presented as current
+    good:
+    - Event time · Tracked
+    - +'As of' · Shown
+    - +Delay notice · Messaging
+    - Real-time · OCS source
+    good_note: Event time, 'as of', real-time sources
+  solution: |-
+    1. Track event time, arrival time and completeness per source; show "as of" times.
+    2. Adjust messaging for known delays ("roaming usage can take up to 48 hours to appear").
+    3. Use real-time sources (online charging) for thresholds where available.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Lag distributions per source.
+
+    **Same pattern elsewhere:** FinTech: card transactions post late and the spending assistant tells customers they are under budget.
+  takeaway: Show when the data is from, not just what it says.
+  related:
+  - rag-01
+  - data-03
+  code: |
+    def usage_status(subscription_id):
+        u = usage.latest(subscription_id)
+        completeness = usage.completeness(subscription_id, source="roaming_tap")   # late roaming records
+        return {"used_gb": u.gb, "as_of": u.event_time_max,
+                "note": "Roaming usage can take up to 48 hours to appear." if completeness < 1 else None}
+
+    def bill_shock_check(sub):
+        return ocs.realtime_balance(sub) if ocs.available() else usage_status(sub)   # online charging first
+  lang: python
+- id: data-09
+  title: Backfill job duplicates every chunk in the vector store
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank re-runs its document ingestion to backfill missing metadata. The job inserts new chunks instead of updating existing ones. Every document now appears twice, and retrieval returns duplicates that crowd out other results.
+  antipattern: |-
+    **Re-run inserts duplicates.**
+
+    *Think of it this way:* Re-shelving books without checking whether they're already on the shelf.
+  fails: |-
+    - Ingestion isn't idempotent.
+    - Chunk ids aren't deterministic.
+    - No duplicate checks after jobs.
+
+    **Root cause:** Non-idempotent pipelines.
+
+    **Where it breaks:** Ingestion design.
+  diagram:
+    bad:
+    - Backfill · Re-run
+    - '!Insert · Not upsert'
+    - 2x chunks · Every doc
+    - '!Duplicates · In results'
+    bad_note: Re-run inserts duplicates
+    good:
+    - Stable ids · Doc+ver+idx
+    - +Upsert · Idempotent
+    - +Count check · After job
+    - New version · If risky
+    good_note: Deterministic ids, upserts, post-job checks
+  solution: |-
+    1. Use deterministic chunk ids (document id, version, chunk index) and upsert.
+    2. Make backfills idempotent and run them against a new index version when risky.
+    3. Check counts and duplicates after every job.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Duplicate rate and chunk count per document.
+
+    **Same pattern elsewhere:** Telco: a re-index of device manuals doubles chunks and halves retrieval diversity.
+  takeaway: Every pipeline run should be safe to repeat.
+  related:
+  - rag-13
+  - ops-18
+  code: |
+    def chunk_id(doc_id, version, i): return f"{doc_id}:{version}:{i}"     # deterministic
+
+    def backfill(docs, index_name):
+        for d in docs:
+            for i, c in enumerate(chunk(d)):
+                vdb.upsert(index_name, id=chunk_id(d.id, d.version, i), vector=embed(c.text))   # upsert, never insert
+        dupes = vdb.count_duplicates(index_name, by="content_hash")
+        assert dupes == 0 and vdb.count(index_name) == expected_chunks(docs)
+  lang: python
+- id: data-10
+  title: Production call records copied unmasked into dev
+  tags:
+  - Quality
+  - Compliance
+  - Telco
+  - Critical
+  scenario: |-
+    To make agent testing realistic, engineers copy a month of production call-detail records and customer profiles into the development environment. Dev has weaker access controls, and contractors can query the data. A privacy audit flags a CPNI breach.
+  antipattern: |-
+    **Production data copied into dev.**
+
+    *Think of it this way:* Taking real patient files home to practise filling in forms.
+  fails: |-
+    - Production data in non-production environments.
+    - No masking or synthetic alternatives.
+    - Weaker controls in dev.
+
+    **Root cause:** No test-data management.
+
+    **Where it breaks:** Environments and data management.
+  diagram:
+    bad:
+    - Prod CDRs · A month
+    - '!Copied · To dev'
+    - Contractors · Can query
+    - '!CPNI breach · Audit'
+    bad_note: Production data copied into dev
+    good:
+    - Masked · Tokenised
+    - +Synthetic · Realistic
+    - +Block copies · Technical
+    - Scan dev · Identifiers
+    good_note: Masked or synthetic test data, copies blocked
+  solution: |-
+    1. Use masked, tokenised or synthetic data in non-production, generated by an approved pipeline.
+    2. Preserve realistic distributions and edge cases in synthetic data.
+    3. Block production data copies to lower environments technically.
+  works: |-
+    **Trade-off to manage:** Synthetic data may miss rare real patterns; seed it carefully.
+
+    **How you prove it worked:**
+
+    - Scans for production identifiers in dev.
+
+    **Same pattern elsewhere:** FinTech: a bank copies real transaction data into a test vector store for an AI prototype.
+  takeaway: Realistic test data doesn't mean real customer data.
+  related:
+  - cicd-08
+  - aev-04
+  code: |
+    def build_dev_dataset():
+        prod_sample = synthetic_pipeline.sample_schema_and_distributions(source="call_records")
+        return synthetic_pipeline.generate(prod_sample, n=100_000, preserve=["edge_cases", "distributions"],
+                                           pii="tokenised")         # approved pipeline only
+
+    # IAM: deny s3:GetObject on prod buckets for dev roles; DLP blocks prod data copies to lower envs
+  lang: python
+- id: data-11
+  title: Null APR in the rates table becomes a 0% quote
+  tags:
+  - Quality
+  - FinTech
+  - Critical
+  scenario: |-
+    A bank's rates table, used by the assistant's pricing tool, has a null APR for a new credit-card product after a botched load. The tool returns null, the template renders 0.00%, and the assistant tells customers the card has 0% APR.
+  antipattern: |-
+    **Nulls flow through as zeros.**
+
+    *Think of it this way:* A price tag that fell off, so the till rings up zero.
+  fails: |-
+    - No quality checks on reference data.
+    - Nulls coerced to zero.
+    - The tool doesn't reject incomplete records.
+
+    **Root cause:** Missing data-quality validation on data behind tools.
+
+    **Where it breaks:** Data pipeline and tool validation.
+  diagram:
+    bad:
+    - Bad load · Rates table
+    - '!APR null · New card'
+    - Renders 0.00% · Template
+    - '!''0% APR'' · Told customers'
+    bad_note: Nulls flow through as zeros
+    good:
+    - Validate · On load
+    - +Block · If checks fail
+    - +Null = error · In tool
+    - Reconcile · With system
+    good_note: Quality checks on load, nulls as errors
+  solution: |-
+    1. Validate reference data on load (required fields, ranges, allowed values) and block publication if checks fail.
+    2. Treat nulls as errors in tools, never as zero.
+    3. Reconcile rates against the product system of record.
+  works: |-
+    **Trade-off to manage:** Failed checks delay product launches until fixed.
+
+    **How you prove it worked:**
+
+    - Data-quality checks with alerts on failure.
+
+    **Same pattern elsewhere:** Telco: a missing price in the catalog feed shows a new phone plan as $0.
+  takeaway: Missing is not zero.
+  related:
+  - tool-14
+  - data-01
+  code: |
+    class RateRow(BaseModel):
+        product_id: str
+        apr: condecimal(gt=0, lt=Decimal("40"))           # null or 0 fails validation
+        effective_from: date
+
+    def load_rates(rows):
+        valid = [RateRow.model_validate(r) for r in rows]    # block publication on failure
+        mismatches = [r for r in valid if r.apr != product_system.apr(r.product_id)]
+        if mismatches: raise PublishBlocked(mismatches)
+
+    @tool
+    def get_apr(product_id):
+        r = rates.get(product_id)
+        if r is None or r.apr is None: return {"status": "ERROR", "why": "rate unavailable"}   # never 0
+  lang: python
+- id: data-12
+  title: Agents compute active subscribers three different ways
+  tags:
+  - Quality
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier gives analytics agents SQL access to its warehouse. Asked "How many active subscribers do we have in Texas?", three agents return three numbers, because each defines "active" differently (any usage in 30 days, billing status, or not suspended). Executives lose trust in the AI answers.
+  antipattern: |-
+    **Agents define metrics in their own SQL.**
+
+    *Think of it this way:* Three accountants each using their own definition of revenue.
+  fails: |-
+    - No shared metric definitions.
+    - Agents write their own SQL.
+    - Results aren't reconcilable.
+
+    **Root cause:** No semantic layer for agents.
+
+    **Where it breaks:** Data architecture.
+  diagram:
+    bad:
+    - '''Active subs?'' · Texas'
+    - '!3 agents · 3 queries'
+    - 3 numbers · 3 definitions
+    - '!Trust lost · Executives'
+    bad_note: Agents define metrics in their own SQL
+    good:
+    - Semantic layer · Certified
+    - +Definitions · Shared
+    - +Query metrics · Not tables
+    - Show definition · In answer
+    good_note: Certified metrics via a semantic layer
+  solution: |-
+    1. Provide a semantic layer or metrics store with certified definitions (active subscriber, ARPU, churn).
+    2. Agents query metrics through it, not raw tables.
+    3. Show the definition with every answer.
+  works: |-
+    **Trade-off to manage:** Semantic layers need governance and upkeep.
+
+    **How you prove it worked:**
+
+    - Divergent answers for the same metric question.
+
+    **Same pattern elsewhere:** FinTech: agents compute "net new deposits" differently from finance's official figure.
+  takeaway: Agents should use the same metric definitions as finance.
+  related:
+  - rag-12
+  - tool-01
+  code: |
+    @tool
+    def get_metric(name: Literal["active_subscribers", "arpu", "churn_rate"], period: str, segment: str = "all"):
+        m = metrics_store.query(name, period=period, segment=segment)     # certified definitions
+        return {"value": m.value, "definition": m.definition, "certified_by": m.owner}
+
+    # agents have no access to raw subscriber tables
+  lang: python
+- id: data-13
+  title: CMS overwrites documents with no version history
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank's policy team edits documents in place in a file share. When the assistant's answer about a lending policy is challenged, nobody can produce the version that was in force on the date of the answer.
+  antipattern: |-
+    **Policies edited in place.**
+
+    *Think of it this way:* A rulebook rewritten with an eraser.
+  fails: |-
+    - Source content has no versioning.
+    - Effective dates aren't recorded.
+    - History can't be reconstructed.
+
+    **Root cause:** Source content management without versioning.
+
+    **Where it breaks:** Content governance.
+  diagram:
+    bad:
+    - File share · Edit in place
+    - '!Answer · Challenged'
+    - Old version · Gone
+    - '!Can''t defend · Policy'
+    bad_note: Policies edited in place
+    good:
+    - Versioned · Content system
+    - +Effective dates · Recorded
+    - +Approvals · Workflow
+    - History · Retained
+    good_note: Versioned content with effective dates
+  solution: |-
+    1. Manage policies in a system with version history, approval workflow and effective dates.
+    2. Ingest versions with their effective dates.
+    3. Keep superseded versions for audit.
+  works: |-
+    **Trade-off to manage:** Migration to a proper content system.
+
+    **How you prove it worked:**
+
+    - Share of indexed documents with version metadata.
+
+    **Same pattern elsewhere:** Telco: care knowledge articles are overwritten, and the carrier can't show which roaming policy applied in a dispute.
+  takeaway: If the source isn't versioned, your answers can't be defended.
+  related:
+  - data-05
+  - rag-14
+  code: |
+    def ingest_policy_versions(policy_id):
+        for v in policy_repo.versions(policy_id):               # version history + approvals + effective dates
+            index.upsert(f"{policy_id}@{v.version}", embed(v.text),
+                         meta={"effective_from": v.effective_from, "effective_to": v.effective_to,
+                               "approved_by": v.approver, "status": v.status})
+    # superseded versions retained for audit; retrieval filters to in-force by default
+  lang: python
+- id: data-14
+  title: Ingestion copies EU customer data into a US vector database
+  tags:
+  - Quality
+  - Compliance
+  - Telco
+  scenario: |-
+    A multinational carrier builds one global vector database for its care assistant in a US region. The ingestion pipeline copies EU customers' support tickets into it, creating an unassessed international transfer.
+  antipattern: |-
+    **One global vector store for personal data.**
+
+    *Think of it this way:* Shipping the European office's files to a US warehouse because it was easier.
+  fails: |-
+    - Pipelines ignore data residency.
+    - One global store for convenience.
+    - No transfer assessment.
+
+    **Root cause:** Residency not designed into AI data pipelines.
+
+    **Where it breaks:** Data architecture.
+  diagram:
+    bad:
+    - EU tickets · Ingested
+    - '!US region · Vector DB'
+    - Transfer · Unassessed
+    - '!Privacy risk · Flagged'
+    bad_note: One global vector store for personal data
+    good:
+    - Regional · Stores
+    - +Route · By residency
+    - +Global · Non-personal
+    - Review · Before build
+    good_note: Regional stores, routed by residency
+  solution: |-
+    1. Partition stores by region and route data by customer residency.
+    2. Keep non-personal knowledge global and personal data regional.
+    3. Review cross-border flows with privacy before build.
+  works: |-
+    **Trade-off to manage:** More infrastructure to run.
+
+    **How you prove it worked:**
+
+    - Region checks on stored records.
+
+    **Same pattern elsewhere:** FinTech: a bank's global document index stores customer files outside required jurisdictions.
+  takeaway: Personal data stays where it's allowed to live, embeddings included.
+  related:
+  - sec-06
+  - sec-16
+  code: |
+    STORES = {"eu": VectorDB(region="eu-west-1"), "us": VectorDB(region="us-east-1"), "global": VectorDB(region="us-east-1")}
+
+    def ingest(record):
+        if record.contains_personal_data:
+            store = STORES[residency_of(record.customer_id)]      # personal data stays regional
+        else:
+            store = STORES["global"]                              # non-personal knowledge is global
+        store.upsert(record.id, embed(record.text), meta=record.meta)
+  lang: python
+- id: data-15
+  title: SharePoint permission changes take a week to reach the index
+  tags:
+  - Quality
+  - Security
+  - FinTech
+  scenario: |-
+    A bank removes a departing team's access to a deal folder. The assistant's index syncs permissions weekly, so for a week, former team members can still ask the assistant about the confidential deal.
+  antipattern: |-
+    **Weekly permission sync.**
+
+    *Think of it this way:* Changing the locks but letting the old keys work for another week.
+  fails: |-
+    - Content and permissions sync on different schedules.
+    - Permission changes aren't event-driven.
+    - Confidential data exposed during the lag.
+
+    **Root cause:** Permission sync lag.
+
+    **Where it breaks:** Ingestion and access control.
+  diagram:
+    bad:
+    - Access removed · Deal folder
+    - '!Index sync · Weekly'
+    - Still queryable · A week
+    - '!Exposure · Confidential'
+    bad_note: Weekly permission sync
+    good:
+    - Events · Permission changes
+    - +Sync fast · Separately
+    - +Query-time · Sensitive
+    - Lag metric · Monitored
+    good_note: Event-driven permission sync, query-time checks
+  solution: |-
+    1. Sync permission changes on events (near real time), separately from content.
+    2. Check source permissions at query time for sensitive collections.
+    3. Monitor permission sync lag.
+  works: |-
+    **Trade-off to manage:** Query-time checks add latency.
+
+    **How you prove it worked:**
+
+    - Lag between permission change and index update.
+
+    **Same pattern elsewhere:** Telco: an employee moved off an enterprise account can still query its contracts via the assistant for days.
+  takeaway: Revoked access must be revoked everywhere, fast.
+  related:
+  - rag-06
+  - data-07
+  code: |
+    @graph.subscribe("permissions_changed")                         # near-real-time permission sync
+    def on_perm_change(evt):
+        index.update_metadata(filter={"source_item_id": evt.item_id}, acl_groups=evt.new_groups)
+        metrics.observe("permission_sync_lag_s", now() - evt.changed_at)
+
+    def search_sensitive(q, user):
+        hits = index.search(q, filter={"acl_groups": {"$in": user.groups}})
+        return [h for h in hits if sharepoint.user_can_read(user.id, h.meta["source_item_id"])]   # live check
+  lang: python
+- id: data-16
+  title: Chunks without product, region or date metadata
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier operates in several countries with different plans. Its knowledge chunks carry no country, brand or effective-date metadata, so questions from Mexican customers retrieve US plan details, and the bot can't filter.
+  antipattern: |-
+    **Chunks without market metadata.**
+
+    *Think of it this way:* A shop that mixes stock for different countries on the same shelf without labels.
+  fails: |-
+    - Ingestion drops metadata available in the source.
+    - Retrieval can't filter by context.
+    - Wrong-market answers.
+
+    **Root cause:** Metadata not treated as a first-class part of ingestion.
+
+    **Where it breaks:** Ingestion pipeline.
+  diagram:
+    bad:
+    - Many markets · Plans differ
+    - '!No metadata · On chunks'
+    - Mexico Q · US answer
+    - '!Can''t filter · Retrieval'
+    bad_note: Chunks without market metadata
+    good:
+    - Schema · Market, brand
+    - +From source · Populated
+    - +Validate · At ingest
+    - Filter · By customer
+    good_note: Required metadata schema, validated, used in filters
+  solution: |-
+    1. Define a required metadata schema (market, brand, product, segment, effective dates, channel, language).
+    2. Populate it from the source system and validate at ingestion.
+    3. Filter retrieval by the customer's context.
+  works: |-
+    **Trade-off to manage:** Upfront schema work.
+
+    **How you prove it worked:**
+
+    - Chunks missing required metadata; wrong-market answers.
+
+    **Same pattern elsewhere:** FinTech: a bank's content lacks jurisdiction metadata and the assistant gives UK rules to US customers.
+  takeaway: Metadata is what lets retrieval ask "which one?"
+  related:
+  - rag-01
+  - rag-11
+  code: |
+    class ChunkMeta(BaseModel):
+        market: str; brand: str; product: str; segment: Literal["consumer", "business"]
+        effective_from: date; effective_to: date | None; channel: str; language: str
+
+    def ingest(chunk, source_record):
+        meta = ChunkMeta(**source_record.metadata())                # populated from the source system
+        index.upsert(chunk.id, embed(chunk.text), meta=meta.model_dump())
+
+    hits = index.search(q, filter={"market": cust.market, "product": cust.product, "language": cust.lang})
+  lang: python
+- id: data-17
+  title: Scraped competitor rates ingested without validation
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank's product team scrapes competitors' savings rates into the assistant's knowledge so advisers can compare. A scraper bug picks up a promotional "up to 12%" headline as a standard rate, and advisers quote it to clients in comparisons.
+  antipattern: |-
+    **External data ingested as authoritative.**
+
+    *Think of it this way:* Pinning newspaper ads to the notice board as official information.
+  fails: |-
+    - External data enters without validation.
+    - Provenance and dates aren't shown.
+    - Advisers treat it as authoritative.
+
+    **Root cause:** Untrusted external data treated like internal data.
+
+    **Where it breaks:** Ingestion governance.
+  diagram:
+    bad:
+    - Scraper · Competitor rates
+    - '!Bug · ''Up to 12%'''
+    - Ingested · Unchecked
+    - '!Quoted · To clients'
+    bad_note: External data ingested as authoritative
+    good:
+    - Validate · Ranges
+    - +Outliers · Human review
+    - +Label · Source + date
+    - Separate · From internal
+    good_note: Validate, label source and date, keep separate
+  solution: |-
+    1. Validate external data (ranges, anomaly checks, human review for outliers).
+    2. Label it as external with source and date in every answer.
+    3. Keep it separate from authoritative internal content.
+  works: |-
+    **Trade-off to manage:** Review effort.
+
+    **How you prove it worked:**
+
+    - Anomaly alerts on external data.
+
+    **Same pattern elsewhere:** Telco: scraped competitor plan prices are wrong and the retention bot quotes them.
+  takeaway: External data needs a label and a sanity check.
+  related:
+  - sec-02
+  - ctx-14
+  code: |
+    def ingest_competitor_rate(row):
+        if not (0 < row.apr < 40) or zscore(row.apr, history(row.competitor)) > 3:
+            return review_queue.put(row)                         # outliers to human review
+        external_index.upsert(row.id, embed(row.text),
+                              meta={"source": row.url, "scraped_at": row.ts, "authority": "external"})
+
+    SYSTEM = "Label external competitor data with its source and date. Never present it as our rate."
+  lang: python
+- id: data-18
+  title: Ingestion job failing silently for three weeks
+  tags:
+  - Quality
+  - Security
+  - Telco
+  scenario: |-
+    A carrier's nightly ingestion of device-support content fails after a credential expires. The job logs an error but nobody is alerted. For three weeks, new device launches have no knowledge content, and the bot can't help with them.
+  antipattern: |-
+    **Pipeline failures only in logs.**
+
+    *Think of it this way:* A delivery van that broke down and nobody noticed the shelves emptying.
+  fails: |-
+    - Pipeline failures don't alert.
+    - Credentials expire without monitoring.
+    - Freshness isn't checked from the consumer side.
+
+    **Root cause:** Unmonitored data pipelines.
+
+    **Where it breaks:** Data operations.
+  diagram:
+    bad:
+    - Credential · Expired
+    - '!Job fails · Logged only'
+    - 3 weeks · No alert
+    - '!New devices · No content'
+    bad_note: Pipeline failures only in logs
+    good:
+    - Failure alert · Immediate
+    - +Dead-man switch · Missing runs
+    - +Cred expiry · Monitored
+    - Freshness · Index side
+    good_note: Failure and missing-run alerts, credential monitoring
+  solution: |-
+    1. Alert on job failures and on missing successful runs (dead man's switch).
+    2. Monitor credential expiry.
+    3. Check freshness and volume from the index side.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Time since last successful run per source.
+
+    **Same pattern elsewhere:** FinTech: a bank's policy ingestion stops for a month after a SharePoint API change.
+  takeaway: A pipeline that can fail silently will.
+  related:
+  - data-03
+  - obs-09
+  code: |
+    @schedule(cron="0 * * * *")
+    def ingestion_watchdog():
+        last_ok = runs.last_success("kb_ingestion")
+        if now() - last_ok > timedelta(hours=26):
+            page("kb_ingestion: no successful run in 26h")        # dead man's switch
+        if creds.expires_in("sharepoint_connector") < timedelta(days=14):
+            alert("connector credential expiring")
+        if index.newest_doc_age("kb") > timedelta(days=2) or index.count("kb") < 0.95 * expected():
+            alert("index freshness/volume check failed")
+  lang: python
+- id: data-19
+  title: Deletion job removes AI logs under legal hold
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's privacy-driven deletion job removes assistant conversations after 90 days. Some conversations relate to a customer lawsuit and are under legal hold. The job deletes them anyway, creating a spoliation risk.
+  antipattern: |-
+    **Deletion ignores legal holds.**
+
+    *Think of it this way:* Shredding files the court asked you to keep.
+  fails: |-
+    - Deletion jobs don't check legal holds.
+    - AI data isn't integrated with records management.
+    - Retention and preservation conflict without rules.
+
+    **Root cause:** AI data outside records management.
+
+    **Where it breaks:** Data governance.
+  diagram:
+    bad:
+    - 90-day delete · Job
+    - '!Lawsuit · Legal hold'
+    - Deleted anyway · Conversations
+    - '!Spoliation · Risk'
+    bad_note: Deletion ignores legal holds
+    good:
+    - Records mgmt · Integrated
+    - +Hold check · Before delete
+    - +Schedule · Documented
+    - Audit · Zero violations
+    good_note: Records management and hold checks before deletion
+  solution: |-
+    1. Integrate AI conversation stores with records management and legal-hold systems.
+    2. Check holds before deletion.
+    3. Document retention schedules for AI data.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Deletions of records under hold (should be zero).
+
+    **Same pattern elsewhere:** Telco: a carrier deletes chatbot logs needed for a regulatory investigation.
+  takeaway: Retention must respect holds, not just deadlines.
+  related:
+  - tel-09
+  - gov-07
+  code: |
+    def retention_job():
+        for convo in ai_conversations.older_than(days=RETENTION_DAYS):
+            if legal_hold.applies(customer_id=convo.customer_id, matter_types=["litigation", "regulatory"]):
+                continue                                         # holds checked before deletion
+            ai_conversations.delete(convo.id)
+            records_mgmt.log_disposition(convo.id, schedule="AI-CONV-90D")
+  lang: python
+- id: data-20
+  title: Knowledge articles with no owner go stale
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's knowledge base has 18,000 articles. A third have no owner because teams reorganised. Outdated articles about retired plans and old router models keep being retrieved, and nobody is responsible for fixing them.
+  antipattern: |-
+    **Unowned knowledge content.**
+
+    *Think of it this way:* A garden with no gardener.
+  fails: |-
+    - No stewardship model for content.
+    - No review cycles or expiry.
+    - Bot quality depends on unowned content.
+
+    **Root cause:** Content governance missing.
+
+    **Where it breaks:** Knowledge management.
+  diagram:
+    bad:
+    - 18k articles · Knowledge
+    - '!1/3 no owner · Reorg'
+    - Stale content · Retrieved
+    - '!No one fixes · Bot quality'
+    bad_note: Unowned knowledge content
+    good:
+    - Owner · Per article
+    - +Review date · Scheduled
+    - +Overdue · Down-ranked
+    - Prioritise · From failures
+    good_note: Owners, review dates, ranking penalties
+  solution: |-
+    1. Assign an owner to every article (by product area), with review dates.
+    2. Auto-flag articles past review date and reduce their ranking until reviewed.
+    3. Use bot failure data to prioritise content fixes.
+  works: |-
+    **Trade-off to manage:** Content teams need capacity.
+
+    **How you prove it worked:**
+
+    - Share of articles without owner or past review date.
+
+    **Same pattern elsewhere:** FinTech: a bank's policy library has hundreds of documents whose owners have left.
+  takeaway: Every piece of knowledge needs a gardener.
+  related:
+  - ops-12
+  - data-13
+  code: |
+    def rank_adjust(hit):
+        art = kb.get(hit.doc_id)
+        if art.review_due < today():
+            hit.score *= 0.6                                     # stale content down-ranked until reviewed
+            tasks.ensure(owner=art.owner, title=f"Review '{art.title}' (due {art.review_due})")
+        return hit
+
+    priorities = Counter(t.top_doc_id for t in failed_traces(days=30)).most_common(20)   # bot failures drive fixes
+  lang: python

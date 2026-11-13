@@ -1,0 +1,1259 @@
+source: regensis
+section: agents
+patterns:
+- id: agf-01
+  title: Port-in processing built as a free-roaming agent
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier builds a ReAct agent to process mobile number port-in requests: validate the account number and PIN from the losing carrier, check the number is portable, submit the port request, schedule activation and notify the customer. The steps never change, yet the agent takes 9-14 LLM calls per request, sometimes skips the portability check, and 1 in 10 ports fails or is delayed.
+  antipattern: |-
+    **A fully autonomous ReAct loop for a fixed process.**
+
+    *Think of it this way:* Hiring a creative chef to run a vending machine. The job is the same every time, and creativity only adds ways to get it wrong.
+  fails: |-
+    **Mechanism:** Each LLM decision adds latency, cost, and a chance of error. Errors compound: 95% reliability per step over 10 steps gives about 60% success.
+
+    - Every step is an LLM decision, so each one adds latency, cost and a chance of error.
+    - Errors compound; 95% reliability per step over 10 steps gives about 60% end-to-end success.
+    - The model sometimes reorders or skips steps that the process requires.
+
+    **Root cause:** An autonomous loop was used for a fixed, well-understood business process.
+
+    **Where it breaks:** Orchestration design.
+  diagram:
+    bad:
+    - Port-in request · Fixed steps
+    - '!ReAct loop · 9-14 LLM calls'
+    - Skips a check · Portability
+    - '!1 in 10 fails · Delayed ports'
+    bad_note: ReAct loop for a fixed port-in process
+    good:
+    - Workflow · State machine
+    - +Coded checks · Each step
+    - +LLM step · Parse rejection
+    - Exceptions · To agent/human
+    good_note: Deterministic workflow, LLM only for judgement
+  solution: |-
+    1. Model the port-in as a deterministic workflow (state machine or durable workflow engine) with explicit steps and retries.
+    2. Use the LLM only where judgement is needed, such as interpreting a free-text rejection reason from the losing carrier or drafting the customer message.
+    3. Validate each step's output in code before moving on.
+  works: |-
+    **Trade-off to manage:** Workflows are less flexible for unexpected cases; add an "exception" branch that hands off to an agent or a human.
+
+    **How you prove it worked:**
+
+    - Step-completion and skip rates per run, and port success rate by version.
+
+    **Same pattern elsewhere:** FinTech: account-opening checks (ID verification, sanctions screening, credit pull, account creation) run as an agent and occasionally skip sanctions screening.
+  takeaway: Autonomy is a cost, so spend it only where the path is unknown.
+  related:
+  - agf-07
+  - agf-13
+  - mas-08
+  code: |
+    port_in = StateMachine(steps=[
+        Step("validate_request", validate_port_request),          # deterministic
+        Step("submit_to_npac", submit_port, retries=3),
+        Step("await_losing_carrier", wait_for_response, timeout="48h"),
+        Step("interpret_rejection", llm_interpret_rejection, when=lambda s: s.rejected),  # LLM judgement
+        Step("draft_customer_msg", llm_draft_message),
+        Step("activate", activate_number),
+    ])
+    for step in port_in:
+        out = step.run(state)
+        step.schema.model_validate(out)                            # validate before moving on
+  lang: python
+- id: agf-02
+  title: Reconciliation agent loops all night on one break
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A payments company runs a reconciliation agent that investigates unmatched transactions between the ledger and bank statements. One break involves a transaction split across two settlement files. The agent keeps re-querying the same files with slightly different filters for 6 hours, making 2,400 LLM calls and costing $310, then produces nothing.
+  antipattern: |-
+    **`while not done:` with no ceiling.**
+
+    *Think of it this way:* A dishwasher with no timer that keeps rinsing the same plate because a spot won't come off.
+  fails: |-
+    **Mechanism:** Models can repeat the same failing tool call or never decide they are done.
+
+    - The loop has no ceiling on steps, tokens, time or money.
+    - The model doesn't recognise that it is repeating itself.
+    - No partial result or escalation path exists.
+
+    **Root cause:** An unbounded agent loop with no circuit breaker.
+
+    **Where it breaks:** Agent runtime.
+  diagram:
+    bad:
+    - Recon break · Split settlement
+    - '!Agent loop · No limit'
+    - Same queries · 2,400 calls
+    - '!$310 spent · Nothing found'
+    bad_note: While not done, with no ceiling
+    good:
+    - Caps · Steps, time, $
+    - +Loop detector · Same tool+args
+    - +Partial result · What was tried
+    - Human queue · Escalated
+    good_note: Step, time and money caps plus loop detection
+  solution: |-
+    1. Cap steps, tokens, wall-clock time and dollars per run, with per-tenant budgets.
+    2. Detect loops (same tool and arguments, or no new information after N steps) and stop.
+    3. On a cap, return a partial result with what was tried, and route to a human queue.
+  works: |-
+    **Trade-off to manage:** Caps can stop legitimately long investigations; set them per task type and allow a human to extend.
+
+    **How you prove it worked:**
+
+    - Alerts on steps per run, run duration and cost outliers.
+
+    **Same pattern elsewhere:** Telco: a network-diagnosis agent keeps re-running the same ping and traceroute on a dead site overnight.
+  takeaway: Every loop needs a circuit breaker.
+  related:
+  - obs-15
+  - cost-07
+  code: |
+    for step in range(MAX_STEPS):                       # hard ceiling
+        if budget.spent_usd > MAX_USD or clock() > deadline:
+            return escalate(state, reason="budget")
+        call = agent.next_action(state)
+        sig = (call.tool, canonical_json(call.args))
+        if seen[sig] >= 2:                              # loop detector
+            return escalate(state, reason="repeating")
+        seen[sig] += 1
+        state = state.with_result(run_tool(call))
+    return escalate(state, reason="max_steps")
+  lang: python
+- id: agf-03
+  title: Care agent exposed to 60 BSS APIs
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier gives its care agent every BSS API as a tool: 60 tools across CRM, billing, ordering, inventory, payments and loyalty. Tool definitions take 22k tokens per call. The agent picks the wrong tool 25% of the time, for example calling get_invoice instead of get_bill_explanation, or update_product instead of add_addon.
+  antipattern: |-
+    **Exposing every API as a tool to a single agent.**
+
+    *Think of it this way:* Giving a new hire a 60-button remote control on day one and asking them to change the channel.
+  fails: |-
+    **Mechanism:** Tool definitions consume context, and similar tools confuse selection.
+
+    - Similar tools confuse selection.
+    - Tool definitions consume context and money on every call.
+    - Accuracy degrades as the toolbox grows.
+
+    **Root cause:** APIs were exposed one-to-one as tools, with no grouping or routing.
+
+    **Where it breaks:** Tool design and agent architecture.
+  diagram:
+    bad:
+    - 60 tools · All BSS APIs
+    - '!22k tokens · Per call'
+    - Similar names · Confusion
+    - '!25% wrong · Tool picked'
+    bad_note: Every BSS API as a tool
+    good:
+    - Intent router · Billing, orders
+    - +Domain tools · 10-20 visible
+    - +Task-shaped · Wrap APIs
+    - Tool search · Long tail
+    good_note: Route by intent, load a small task-shaped toolset
+  solution: |-
+    1. Route by intent first (billing, orders, tech support), then load only that domain's tools.
+    2. Design fewer task-shaped tools that wrap several APIs, instead of one tool per endpoint.
+    3. Keep about 10-20 tools visible at a time; use tool search for the long tail.
+  works: |-
+    **Trade-off to manage:** Routing adds a classification step and can misroute; keep a fallback that loads more tools.
+
+    **How you prove it worked:**
+
+    - Tool-selection accuracy on a labelled eval set; tool-call error rates.
+
+    **Same pattern elsewhere:** FinTech: a banking agent with 45 core-banking tools confuses transfer_internal with transfer_external.
+  takeaway: Tool choice degrades as the toolbox grows.
+  related:
+  - tool-03
+  - ctx-11
+  code: |
+    DOMAIN_TOOLS = {
+        "billing":  [explain_bill, apply_payment_arrangement, get_balance],
+        "orders":   [track_order, change_delivery],
+        "tech":     [run_line_test, check_outage, reset_router],
+    }
+
+    def tools_for(msg):
+        intent = router.classify(msg)                              # route first
+        tools = DOMAIN_TOOLS[intent.domain]
+        if len(tools) < 10:
+            tools += tool_search(msg, k=5)                         # long tail on demand
+        return tools[:20]
+  lang: python
+- id: agf-04
+  title: Payment tool amount in cents read as dollars
+  tags:
+  - Reliability
+  - FinTech
+  - Critical
+  scenario: |-
+    A small-business banking agent can schedule supplier payments. The tool parameter is amount: integer, documented only as "payment amount". The API expects minor units (cents). A user asks to pay an invoice of $4,500. The agent passes 4500, and $45.00 is sent. Another time it passes 450000 for $45, sending $4,500, which is only caught by an approval limit.
+  antipattern: |-
+    **One-line tool descriptions and free-text parameters.**
+
+    *Think of it this way:* A form field labelled "amount" with no currency or units. Half the people write dollars, half write cents.
+  fails: |-
+    **Mechanism:** The tool description is the model's only documentation. Ambiguity becomes wrong calls.
+
+    - The tool description doesn't state units, format or limits.
+    - The model guesses the convention, inconsistently.
+    - The API accepts any positive integer.
+
+    **Root cause:** Tool schemas were written like internal API signatures, not like documentation for a new user.
+
+    **Where it breaks:** Tool definition and validation.
+  diagram:
+    bad:
+    - Pay $4,500 · Invoice
+    - '!amount: int · Units unclear'
+    - Sends 4500 · Read as cents
+    - '!$45.00 paid · Supplier short'
+    bad_note: '''amount: integer'', no units'
+    good:
+    - Decimal + ISO · Major units
+    - +Doc for humans · Examples, limits
+    - +Check invoice · Inside tool
+    - Confirm · Before execute
+    good_note: Typed units, in-tool validation, confirmation
+  solution: |-
+    1. Use explicit, typed parameters (amount as a decimal string plus an ISO 4217 currency code) and convert to minor units inside the tool.
+    2. Write the description as for a new hire (when to use it, examples, units, limits, what not to do).
+    3. Validate inside the tool (amount equals the invoice amount on file, within limits) and return an actionable error.
+    4. Echo back a human-readable confirmation for approval before execution.
+  works: |-
+    **Trade-off to manage:** Stricter schemas reject some legitimate free-form requests; respond with a clarifying question instead.
+
+    **How you prove it worked:**
+
+    - Mismatch alerts between payment amount and invoice amount; distribution of amounts per payee.
+
+    **Same pattern elsewhere:** Telco: a data-add-on tool takes size as an integer and the agent mixes MB and GB, selling 1 MB packs instead of 1 GB.
+  takeaway: Tool descriptions are prompts, so engineer them.
+  related:
+  - tool-02
+  - agf-11
+  code: |
+    class SchedulePayment(BaseModel):
+        """Schedule a supplier payment. Amount is in MAJOR units (e.g. "4500.00" = $4,500).
+        Use only after the user confirmed payee and amount. Never infer the amount."""
+        payee_id: str
+        amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+        currency: Literal["USD", "EUR", "GBP"]
+        invoice_id: str          # tool checks amount == invoice.amount_due
+  lang: python
+- id: agf-05
+  title: Care agent issues a $400 goodwill credit on its own
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's care agent has a tool to apply bill credits. A frustrated customer claims three outages and demands compensation. The agent, aiming to be helpful, applies a $400 credit. Similar patterns spread on a forum, and goodwill credits triple in a month.
+  antipattern: |-
+    **Write and irreversible tools called autonomously.**
+
+    *Think of it this way:* Giving a new receptionist the company credit card with no spending limit and asking them to keep customers happy.
+  fails: |-
+    **Mechanism:** The model can be wrong or manipulated, and some actions can't be undone.
+
+    - A write tool with financial impact runs autonomously.
+    - The limit is in the prompt ("don't give more than $50"), which the model can be talked out of.
+    - No check against actual outage records.
+
+    **Root cause:** Business limits and approvals are enforced by instructions instead of by the tool and a human gate.
+
+    **Where it breaks:** Tool layer and approval workflow.
+  diagram:
+    bad:
+    - Angry customer · Claims outages
+    - '!Credit tool · No hard limit'
+    - $400 credit · Applied
+    - '!Credits x3 · Pattern spreads'
+    bad_note: Autonomous credit tool, limit in prompt
+    good:
+    - Outage check · OSS records
+    - +Tool limit · Small auto cap
+    - +Approval · Above cap
+    - Credit audit · Per reason
+    good_note: Limits in the tool, outage check, approval
+  solution: |-
+    1. Classify tools by risk; credits above a small limit require human approval with the conversation and evidence attached.
+    2. Enforce the limit inside the tool and the billing system, not in the prompt.
+    3. Check outage claims against network incident records (OSS) before offering anything.
+  works: |-
+    **Trade-off to manage:** Approvals slow resolution; keep small credits automatic and fast.
+
+    **How you prove it worked:**
+
+    - Credits per agent version, per customer and per reason; spike alerts.
+
+    **Same pattern elsewhere:** FinTech: a bank agent reverses a $300 overdraft fee for every customer who says they are a student.
+  takeaway: Put the guardrail in the tool, not the prompt.
+  related:
+  - gov-02
+  - prm-16
+  - sec-05
+  code: |
+    @tool(risk="write")
+    def issue_goodwill_credit(account_id: str, amount: Decimal, reason: str, ctx: Session):
+        outage = oss.incidents.affecting(account_id, window=days(7))   # verify the claim first
+        if reason == "outage" and not outage:
+            return {"status": "REFUSED", "why": "no outage recorded for this service"}
+        if amount > AUTO_CREDIT_LIMIT:                                  # enforced in the tool, not the prompt
+            return approvals.request(account_id, amount, evidence=[ctx.transcript_id, outage.id if outage else None])
+        return billing.credit(account_id, amount, idempotency_key=f"gw:{ctx.case_id}")
+  lang: python
+- id: agf-06
+  title: Retry after timeout sends a wire twice
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  - Critical
+  scenario: |-
+    A treasury agent initiates a $250,000 vendor wire. The payment gateway processes it but the response times out. The framework's automatic retry calls initiate_wire again, and a second wire is sent. Recovering it takes nine days and a recall request through the correspondent bank.
+  antipattern: |-
+    **Retrying side-effecting calls with no idempotency key.**
+
+    *Think of it this way:* Pressing the lift button again because the light was slow. For lifts it's harmless. For money, it orders a second lift.
+  fails: |-
+    **Mechanism:** The first call succeeded but the response was lost.
+
+    - The first call succeeded, but the response was lost.
+    - Generic retry logic treats all tools as safe to repeat.
+    - The API has no idempotency key.
+
+    **Root cause:** Side-effecting tool calls are retried without idempotency.
+
+    **Where it breaks:** Tool layer and payment API contract.
+  diagram:
+    bad:
+    - Wire $250k · Initiated
+    - '!Timeout · Response lost'
+    - Auto-retry · Same call
+    - '!Two wires · 9-day recall'
+    bad_note: Auto-retry a payment call
+    good:
+    - Idem key · Instruction id
+    - +Status check · Before retry
+    - +Writes marked · No auto-retry
+    - Durable flow · Exactly once
+    good_note: Idempotency key, status check, no auto-retry on writes
+  solution: |-
+    1. Send an idempotency key derived from the business request (payment instruction id) on every write call.
+    2. Before retrying, query the status of the original request.
+    3. Mark tools as read or write; the framework never auto-retries writes.
+    4. Run payment execution in a durable workflow with exactly-once semantics at the business level.
+  works: |-
+    **Trade-off to manage:** Status checks add latency to error paths only, which is acceptable for payments.
+
+    **How you prove it worked:**
+
+    - Duplicate detection on (beneficiary, amount, date) within a window; reconciliation alerts.
+
+    **Same pattern elsewhere:** Telco: a retry on a timed-out SIM activation creates two orders and two ICCIDs bound to the same number.
+  takeaway: Assume every tool call might run twice.
+  related:
+  - tool-05
+  - agf-07
+  code: |
+    @tool(kind="write", auto_retry=False)                         # framework never retries writes
+    def send_wire(instr: WireInstruction):
+        key = f"wire:{instr.instruction_id}"                       # from the business request
+        try:
+            return payments.send(instr, idempotency_key=key, timeout=10)
+        except Timeout:
+            status = payments.status(idempotency_key=key)          # check before any retry
+            if status in ("ACCEPTED", "SETTLED"):
+                return {"status": status}
+            return payments.send(instr, idempotency_key=key)       # safe: same key
+  lang: python
+- id: agf-07
+  title: B2B order agent loses state on a pod restart
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    An enterprise ordering agent coordinates a 40-site SD-WAN order over several hours: site surveys, feasibility, pricing approvals and order creation. A Kubernetes pod is rescheduled during a deploy. The agent's in-memory state is lost, and it restarts from scratch, re-requesting surveys and creating duplicate draft orders.
+  antipattern: |-
+    **Agent state held only in process memory.**
+
+    *Think of it this way:* Writing a long report without saving. When the laptop restarts, you start over.
+  fails: |-
+    **Mechanism:** Long-running agents outlive containers, deploys, and network blips.
+
+    - State lives only in process memory.
+    - Long-running work outlives containers, deploys and network blips.
+    - Restarting re-executes side effects.
+
+    **Root cause:** No durable execution or checkpointing.
+
+    **Where it breaks:** Agent runtime.
+  diagram:
+    bad:
+    - 40-site order · Hours long
+    - '!Pod restart · During deploy'
+    - State lost · In memory
+    - '!Starts over · Duplicates'
+    bad_note: Agent state only in memory
+    good:
+    - Checkpoint · After each step
+    - +Durable store · DB or Temporal
+    - +Resume · Skip done steps
+    - Idempotent · Safe replay
+    good_note: Checkpoint every step and resume
+  solution: |-
+    1. Checkpoint state after every step to a durable store (LangGraph checkpointers, Temporal, a database).
+    2. Resume from the last checkpoint after a restart, skipping completed side effects.
+    3. Combine checkpointing with idempotent tools so replays are safe.
+  works: |-
+    **Trade-off to manage:** Checkpointing adds write latency and storage; it is small relative to multi-hour tasks.
+
+    **How you prove it worked:**
+
+    - Count of runs restarted from step 1; duplicate draft orders per order id.
+
+    **Same pattern elsewhere:** FinTech: a commercial loan document-collection agent loses progress overnight and re-emails the borrower for documents already received.
+  takeaway: Long-running agents need durable execution.
+  related:
+  - agf-06
+  - agf-15
+  code: |
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    graph = builder.compile(checkpointer=PostgresSaver.from_conn_string(DB_URL))
+    cfg = {"configurable": {"thread_id": f"b2b-order-{order_id}"}}
+
+    # after a pod restart, invoking with the same thread_id resumes from the last checkpoint
+    graph.invoke(None if graph.get_state(cfg).values else {"order": order}, cfg)
+
+    # side-effect nodes check completion markers + idempotency keys, so replay is safe
+  lang: python
+- id: agf-08
+  title: Five agents for a loan pre-qualification
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A lender builds loan pre-qualification as five agents: intake, income analyst, credit analyst, risk reviewer and writer. It costs 8 times more per application and takes 40 seconds. A single agent with three tools (income verification, credit pull, pricing rules) matches its accuracy in 6 seconds.
+  antipattern: |-
+    **Adding agents because it looks sophisticated.**
+
+    *Think of it this way:* Five people passing a form around an office when one person with the right tools could fill it in.
+  fails: |-
+    **Mechanism:** Each handoff loses context and adds coordination failure modes.
+
+    - Each handoff loses context and adds failure modes.
+    - Coordination overhead dominates the actual work.
+    - Nobody measured whether more agents helped.
+
+    **Root cause:** Multi-agent design chosen for appearance, not because of a measured need.
+
+    **Where it breaks:** Architecture decision.
+  diagram:
+    bad:
+    - 5 agents · Intake to writer
+    - '!Handoffs · Context lost'
+    - 8x cost · 40 seconds
+    - '!Same accuracy · As one agent'
+    bad_note: Five agents for one task
+    good:
+    - One agent · 3 tools
+    - +Measure · Q, latency, $
+    - +Split if · Need is proven
+    - Ablation · Evals
+    good_note: One agent with tools, split only on evidence
+  solution: |-
+    1. Start with one agent and good tools.
+    2. Split only for a measured reason (context overflow, real parallelism, different permissions or a separate review step).
+    3. Prove each added agent with evals on quality, latency and cost.
+  works: |-
+    **Trade-off to manage:** Single agents can get overloaded on very broad tasks; that is when to split.
+
+    **How you prove it worked:**
+
+    - Ablation evals that remove or merge agents.
+
+    **Same pattern elsewhere:** Telco: a plan-change flow with planner, eligibility, pricing and confirmation agents that one agent with a catalog tool handles better.
+  takeaway: Add agents to solve a measured problem, not for the diagram.
+  related:
+  - mas-01
+  - mas-02
+  code: |
+    baseline = Agent(model=MID, tools=[credit_bureau, income_verify, affordability_calc, policy_search])
+
+    def justify_split(candidate_design):
+        a, b = run_evals(baseline), run_evals(candidate_design)
+        return (b.quality - a.quality > 0.03 and b.p95_latency < SLO and b.cost < a.cost * 1.5,
+                {"quality": (a.quality, b.quality), "latency": (a.p95_latency, b.p95_latency),
+                 "cost": (a.cost, b.cost)})
+  lang: python
+- id: agf-09
+  title: Framework default prompt overrides the brand voice
+  tags:
+  - Reliability
+  - Cost
+  - Security
+  - Telco
+  scenario: |-
+    A carrier builds its care agent on a high-level framework. Responses start with "As an AI assistant, I can help you with that!" and occasionally mention tools by internal names. The team spends days searching their own prompts before finding a default system prompt and output parser injected by the framework three layers down.
+  antipattern: |-
+    **Adopting a heavy framework without understanding what it sends to the model.**
+
+    *Think of it this way:* Renting a furnished flat and not knowing what's in the locked cupboard until it starts leaking.
+  fails: |-
+    **Mechanism:** Hidden default prompts and retry logic make behavior hard to control and upgrade.
+
+    - The framework adds hidden prompts, retries and parsing.
+    - Developers never see the final request sent to the model.
+    - Framework upgrades change behaviour silently.
+
+    **Root cause:** A heavy abstraction adopted without visibility into what it sends.
+
+    **Where it breaks:** Framework choice and tracing.
+  diagram:
+    bad:
+    - Framework · High level
+    - '!Hidden prompt · 3 layers down'
+    - Off-brand · 'As an AI...'
+    - '!Days lost · Searching'
+    bad_note: Hidden framework prompts and parsers
+    good:
+    - Trace request · Exact messages
+    - +Own prompts · Override defaults
+    - +Pin version · Upgrade evals
+    - Diff in CI · Rendered calls
+    good_note: Trace the final request, own critical prompts
+  solution: |-
+    1. Trace and inspect the exact final messages and tool definitions sent to the model.
+    2. Own critical prompts in your code; override or remove framework defaults.
+    3. Prefer thin abstractions, and pin framework versions with upgrade evals.
+  works: |-
+    **Trade-off to manage:** Thinner abstractions mean more code to own; for critical paths that's worth it.
+
+    **How you prove it worked:**
+
+    - Diff the rendered request across framework versions in CI.
+
+    **Same pattern elsewhere:** FinTech: a framework's default retry parser silently "fixes" malformed amounts in payment JSON by dropping fields.
+  takeaway: Always know exactly what goes to the model.
+  related:
+  - tel-19
+  - ctx-19
+  code: |
+    agent = Agent(
+        model=MODEL,
+        system_prompt=load_prompt("brand_voice@v7"),              # ours, not the framework default
+        tools=TOOLS,
+        default_prompts=None,                                      # remove hidden scaffolding where supported
+    )
+
+    @tracer.hook("before_model_call")
+    def capture(request):
+        log.debug("final_messages", messages=request.messages, tools=request.tools)   # inspect what is really sent
+    # requirements.txt pins the framework; upgrades run the eval suite first
+  lang: python
+- id: agf-10
+  title: 80 KB of usage records dumped into the agent context
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A billing agent calls get_usage_records to explain a high bill. The tool returns the raw rated usage (TMF635) for the cycle, 80 KB of JSON with 1,900 records. The agent loses track of the customer's question, mentions irrelevant SMS records, and each turn costs 25k tokens.
+  antipattern: |-
+    **Passing full tool responses back to the model.**
+
+    *Think of it this way:* Asking an accountant why the bill is high and getting the whole ledger dropped on your desk.
+  fails: |-
+    **Mechanism:** Noise floods the context window and buries the instructions.
+
+    - Tools return everything the API returns.
+    - Noise buries the user's question and the instructions.
+    - Cost and latency rise with every turn.
+
+    **Root cause:** Tool outputs are designed for machines, not for the model's limited attention.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - High bill? · Customer asks
+    - '!get_usage · 1,900 records'
+    - 80 KB JSON · In context
+    - '!Lost focus · 25k tokens'
+    bad_note: Raw tool output into context
+    good:
+    - Aggregate · By type, day
+    - +Top drivers · Anomalies
+    - +Drill-down · One category
+    - Reference id · Raw kept aside
+    good_note: Task-shaped summaries plus drill-down
+  solution: |-
+    1. Shape tool output for the task (aggregate by usage type and day, top drivers, anomalies).
+    2. Paginate or let the agent request details for one category.
+    3. Store large raw results outside the context and pass a reference id.
+  works: |-
+    **Trade-off to manage:** Pre-aggregation can hide a detail the agent needed; offer a drill-down tool.
+
+    **How you prove it worked:**
+
+    - Tokens per tool result; answer quality against tool output size.
+
+    **Same pattern elsewhere:** FinTech: a spending-insights agent receives a full year of card transactions as raw JSON instead of category totals.
+  takeaway: Tools should return answers, not data dumps.
+  related:
+  - tool-04
+  - ctx-13
+  code: |
+    @tool
+    def usage_summary(account_id: str, period: str) -> dict:
+        rows = usage_store.records(account_id, period)             # 80 KB raw
+        ref = scratch.put(rows)                                     # raw stays outside the context
+        by_type = aggregate(rows, by=["usage_type", "day"])
+        return {"totals": by_type.totals(), "top_drivers": by_type.top(5),
+                "anomalies": detect_spikes(by_type), "detail_ref": ref,
+                "hint": "call usage_detail(detail_ref, usage_type) for one category"}
+  lang: python
+- id: agf-11
+  title: Agent retries an opaque KYC vendor error ten times
+  tags:
+  - Reliability
+  - Compliance
+  - FinTech
+  scenario: |-
+    An onboarding agent calls an identity-verification vendor. The vendor returns HTTP 422 with body "Error". The agent retries the same call 10 times, then tells the customer verification succeeded. The vendor's actual problem was an expired date of birth format.
+  antipattern: |-
+    **Unhelpful error messages to the model.**
+
+    *Think of it this way:* A satnav that only says "error" when you take a wrong turn. You keep driving in circles.
+  fails: |-
+    **Mechanism:** The model can't recover from errors it can't understand.
+
+    - Errors reach the model as stack traces or bare codes.
+    - The model can't tell retryable from fatal errors.
+    - The model fills the gap with an invented outcome.
+
+    **Root cause:** Tool errors are not designed as instructions for the next step.
+
+    **Where it breaks:** Tool layer.
+  diagram:
+    bad:
+    - KYC call · Vendor API
+    - '!422 ''Error'' · No detail'
+    - 10 retries · Same call
+    - '!Claims success · Invented'
+    bad_note: Opaque errors back to the model
+    good:
+    - Map errors · Field + reason
+    - +Classify · Retry, fix, fatal
+    - +Status enum · VERIFIED only
+    - Fix and retry · Once
+    good_note: Structured, actionable, classified errors
+  solution: |-
+    1. Translate errors into structured, actionable messages ("date_of_birth must be YYYY-MM-DD; received 07/03/1990").
+    2. Classify errors as retryable, fixable by the agent, or fatal, and say which.
+    3. Return explicit status values (VERIFIED, FAILED, PENDING) and forbid success claims without VERIFIED.
+  works: |-
+    **Trade-off to manage:** Mapping vendor errors takes effort; start with the top 10 by frequency.
+
+    **How you prove it worked:**
+
+    - Same-error repeat counts; claimed outcomes compared with tool results.
+
+    **Same pattern elsewhere:** Telco: a serviceability check returns "500" and the agent tells the customer fiber is available at their address.
+  takeaway: Error messages are instructions for the next step.
+  related:
+  - agf-04
+  - aev-12
+  - tool-06
+  code: |
+    class ToolError(BaseModel):
+        status: Literal["RETRYABLE", "FIXABLE", "FATAL"]; message: str; field: str | None = None
+
+    def verify_identity(dob: str, **kw):
+        try:
+            r = kyc_vendor.verify(dob=dob, **kw)
+        except VendorError as e:
+            if e.code == "E107":
+                return ToolError(status="FIXABLE", field="date_of_birth",
+                                 message=f"date_of_birth must be YYYY-MM-DD; received {dob}")
+            return ToolError(status="RETRYABLE" if e.transient else "FATAL", message=e.public_text)
+        return {"status": r.status}                                # VERIFIED | FAILED | PENDING only
+  lang: python
+- id: agf-12
+  title: Care agent runs with an admin BSS service account
+  tags:
+  - Reliability
+  - Security
+  - Telco
+  - Critical
+  scenario: |-
+    A carrier's care agent authenticates to BSS with a shared admin service account. A prompt injection in a customer's chat convinces it to "update the plan on account X", which belongs to someone else. The change succeeds because the service account can modify any account.
+  antipattern: |-
+    **The agent runs with an admin service account.**
+
+    *Think of it this way:* Giving the shop assistant the master key to every safe deposit box because it is easier than issuing individual keys.
+  fails: |-
+    **Mechanism:** The agent's permissions are the blast radius of any mistake or attack.
+
+    - The agent's permissions are far broader than the customer it serves.
+    - Account ownership is not re-checked in tools.
+    - Any mistake or injection has full blast radius.
+
+    **Root cause:** Agent credentials are not scoped to the user and task.
+
+    **Where it breaks:** Identity and access management for tools.
+  diagram:
+    bad:
+    - Care agent · Admin account
+    - '!Injection · Other account'
+    - No owner check · In tool
+    - '!Plan changed · Wrong customer'
+    bad_note: Shared admin account for the agent
+    good:
+    - User token · Delegated
+    - +Owner check · Every tool
+    - +Narrow scopes · Per tool
+    - Audit · Cross-account
+    good_note: Delegated, scoped tokens and ownership checks
+  solution: |-
+    1. Act on behalf of the authenticated customer (delegated, scoped tokens), not as an admin.
+    2. Re-check ownership inside every tool (account_id must belong to the session's party).
+    3. Use separate, narrow service accounts per tool, and sandbox code execution.
+  works: |-
+    **Trade-off to manage:** Delegated auth adds integration work with the identity provider and BSS.
+
+    **How you prove it worked:**
+
+    - Alerts for cross-account access in tool calls; access reviews of agent credentials.
+
+    **Same pattern elsewhere:** FinTech: a banking agent's service account can move money from any account, so an injected instruction transfers funds from another customer.
+  takeaway: An agent should never have more access than the user it serves.
+  related:
+  - sec-05
+  - tool-07
+  code: |
+    def get_account(account_id: str, ctx: Session):
+        token = sts.exchange(ctx.customer_token, scope="bss.account.read")   # delegated, scoped
+        if account_id not in party_service.accounts_of(ctx.party_id):
+            return {"status": "REFUSED", "why": "account not owned by caller"}  # re-check in the tool
+        return bss.accounts.get(account_id, bearer=token)
+
+    # each tool has its own narrow service account; code execution runs in a sandbox with no BSS creds
+  lang: python
+- id: agf-13
+  title: Account-closure plan ignores pending transactions
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's account-closure agent plans four steps: confirm identity, transfer the balance, close the account, send confirmation. During execution, the balance check shows a pending card authorisation. The agent continues with the original plan, closes the account, and the pending payment later bounces with fees.
+  antipattern: |-
+    **Rigid plan-then-execute with no feedback.**
+
+    *Think of it this way:* Following a recipe exactly even after you discover the oven is broken.
+  fails: |-
+    **Mechanism:** Real environments return surprises.
+
+    - The plan was made once, upfront, from assumptions.
+    - New observations didn't trigger re-planning.
+    - Preconditions for closure weren't checked in code.
+
+    **Root cause:** Plan-then-execute with no observe and re-plan step.
+
+    **Where it breaks:** Agent control loop and tool preconditions.
+  diagram:
+    bad:
+    - Plan 4 steps · Upfront
+    - '!Pending auth · Observed'
+    - Plan continues · Ignored
+    - '!Payment bounces · Fees'
+    bad_note: Fixed plan, no re-planning
+    good:
+    - Plan · As state
+    - +Observe · Each result
+    - +Re-plan · On surprise
+    - Preconditions · In close tool
+    good_note: Observe results, re-plan, tool preconditions
+  solution: |-
+    1. Use a plan-execute-observe loop where tool results can change the plan.
+    2. Enforce preconditions in the close_account tool (no pending items, zero balance) and return why it refused.
+    3. Keep the plan as editable state visible in traces.
+  works: |-
+    **Trade-off to manage:** Re-planning adds LLM calls; trigger it only on unexpected results.
+
+    **How you prove it worked:**
+
+    - Closures followed by returned items; tool refusals by reason.
+
+    **Same pattern elsewhere:** Telco: a disconnect agent keeps going after discovering the line has an active device-installment balance.
+  takeaway: Plans are hypotheses, so update them on evidence.
+  related:
+  - agf-01
+  - rag-17
+  code: |
+    @tool
+    def close_account(account_id: str):
+        acct = core.accounts.get(account_id)
+        blockers = []
+        if acct.pending_transactions: blockers.append(f"{len(acct.pending_transactions)} pending transactions")
+        if acct.balance != 0: blockers.append(f"balance {acct.balance}")
+        if blockers:
+            return {"status": "REFUSED", "preconditions_failed": blockers}   # plan must change
+        return core.accounts.close(account_id)
+
+    while not done:                                               # plan → execute → observe → replan
+        step = plan.next(); obs = execute(step); plan = planner.update(plan, obs)
+  lang: python
+- id: agf-14
+  title: Diagnosis agent tells the dispatch agent to see above
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A field-service system has a diagnosis agent and a dispatch agent. The diagnosis agent ends with "Root cause as discussed above; schedule accordingly." The dispatch agent has its own context, so there is no "above". It books a generic technician without the fiber splicing skill, and the job needs a second visit.
+  antipattern: |-
+    **Unstructured messages between agents.**
+
+    *Think of it this way:* Handing over a patient with a note saying "see what we talked about". The next shift wasn't in the room.
+  fails: |-
+    **Mechanism:** Each agent has a different context, so implicit references break.
+
+    - Agents pass free text with implicit references.
+    - Each agent has a different context window.
+    - Required fields for the next step aren't enforced.
+
+    **Root cause:** No typed contract between agents.
+
+    **Where it breaks:** Multi-agent interfaces.
+  diagram:
+    bad:
+    - Diagnosis · Agent
+    - '!''See above'' · Free text'
+    - Dispatch · No context
+    - '!Wrong skill · Second visit'
+    bad_note: Free-text handoff between agents
+    good:
+    - Handoff schema · Skill, parts
+    - +Validate · In code
+    - +Shared state · By id
+    - Right tech · First visit
+    good_note: Typed handoff schema and shared state
+  solution: |-
+    1. Define a handoff schema (site_id, fault_type, required_skill, parts, priority, evidence) validated in code.
+    2. Store shared artifacts in a state store referenced by id.
+    3. Reject handoffs that are missing required fields.
+  works: |-
+    **Trade-off to manage:** Schemas need maintenance as processes change; version them.
+
+    **How you prove it worked:**
+
+    - Second-visit rate; handoff validation failures.
+
+    **Same pattern elsewhere:** FinTech: a fraud-triage agent hands a case to a customer-contact agent without the confirmed fraudulent transactions, and the customer is asked about the wrong ones.
+  takeaway: Agent handoffs need API contracts.
+  related:
+  - mas-03
+  - aev-18
+  code: |
+    class DispatchHandoff(BaseModel):
+        site_id: str; fault_type: Literal["fiber_cut", "ont_failure", "power", "config"]
+        required_skill: str; parts: list[str]; priority: Literal["P1", "P2", "P3"]
+        evidence_refs: list[str]                                   # ids in the shared state store
+
+    def handoff(diag_output: dict):
+        try:
+            h = DispatchHandoff.model_validate(diag_output)
+        except ValidationError as e:
+            return reject_back_to_diagnosis(e.errors())           # no "see above"
+        dispatch_agent.run(h)
+  lang: python
+- id: agf-15
+  title: Mortgage document agent runs inside a 30-second HTTP call
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A mortgage lender exposes its document-review agent behind an API gateway with a 30-second timeout. Reviews of a 200-page application take 2-5 minutes. Most requests time out at the gateway, but the agent keeps running, and clients resubmit, creating duplicate reviews and double costs.
+  antipattern: |-
+    **Running long agent tasks inside an HTTP request.**
+
+    *Think of it this way:* Ordering a wedding cake at a drive-through window and expecting it before the driver behind you honks.
+  fails: |-
+    **Mechanism:** Agent runtime is unpredictable and often long.
+
+    - Agent runtime is long and unpredictable.
+    - Synchronous request-response doesn't fit long jobs.
+    - Clients retry on timeout, duplicating work.
+
+    **Root cause:** Agents modelled as requests instead of jobs.
+
+    **Where it breaks:** Service architecture.
+  diagram:
+    bad:
+    - Review request · 200 pages
+    - '!30 s gateway · Timeout'
+    - Agent runs on · Unseen
+    - '!Resubmits · Double cost'
+    bad_note: Long agent inside an HTTP request
+    good:
+    - Job id · Returned now
+    - +Queue + worker · Async
+    - +Status, stream · Or webhook
+    - Idem key · No duplicates
+    good_note: Async job, status, idempotent submit
+  solution: |-
+    1. Accept the request, return a job id, run the agent asynchronously from a queue.
+    2. Provide status endpoints, progress streaming or webhooks.
+    3. Deduplicate submissions with an idempotency key.
+  works: |-
+    **Trade-off to manage:** Async adds job storage and client changes; it is required for long tasks.
+
+    **How you prove it worked:**
+
+    - Gateway timeouts and duplicate job counts.
+
+    **Same pattern elsewhere:** Telco: a B2B quote-generation agent behind a 60-second CPQ integration timeout.
+  takeaway: Agents are jobs, not requests.
+  related:
+  - agf-07
+  code: |
+    @app.post("/mortgage-docs")
+    def submit(req: DocRequest, idem: str = Header(alias="Idempotency-Key")):
+        if (job := jobs.by_key(idem)): return {"job_id": job.id}      # dedupe resubmits
+        job = jobs.create(idem, req)
+        queue.publish("mortgage-agent", {"job_id": job.id})            # agent runs async
+        return JSONResponse({"job_id": job.id, "status_url": f"/jobs/{job.id}"}, status_code=202)
+
+    @app.get("/jobs/{job_id}")
+    def status(job_id): return jobs.get(job_id).progress()            # or SSE / webhook
+  lang: python
+- id: agf-16
+  title: Provider outage takes the care bot down at bill-run time
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's care bot depends on one model from one provider. On the first day of the billing cycle, when contact volume peaks, the provider has a 2-hour outage. The bot returns errors, all traffic hits the call centre, and wait times reach 50 minutes.
+  antipattern: |-
+    **One model, one provider, no degradation path.**
+
+    *Think of it this way:* A shop with one card reader and no backup. When it fails, the queue goes out the door.
+  fails: |-
+    **Mechanism:** LLM APIs have rate limits and outages.
+
+    - Single model, single provider, no degradation path.
+    - Rate limits and outages happen at peak times.
+    - No non-LLM fallback for top intents.
+
+    **Root cause:** The LLM was treated as always available.
+
+    **Where it breaks:** Serving architecture.
+  diagram:
+    bad:
+    - Bill-run day · Peak traffic
+    - '!Provider down · 2 hours'
+    - Bot errors · No fallback
+    - '!50-min waits · Call centre'
+    bad_note: One model, one provider, no fallback
+    good:
+    - LLM gateway · Retry, backoff
+    - +Fallback model · Evaluated
+    - +Degraded mode · Top intents
+    - Load test · Peak days
+    good_note: Gateway with fallbacks plus a degraded mode
+  solution: |-
+    1. Route through an LLM gateway with retries, backoff and fallback models or providers (tested with evals).
+    2. Provide a degraded mode (menu-driven flows for top intents such as bill pay and balance).
+    3. Load-test against provider rate limits for peak days.
+  works: |-
+    **Trade-off to manage:** Fallback models behave differently; evaluate them and accept slightly lower quality during incidents.
+
+    **How you prove it worked:**
+
+    - Provider error rates, fallback activation metric.
+
+    **Same pattern elsewhere:** FinTech: a bank's fraud alert explainer stops working during a provider outage on Black Friday.
+  takeaway: Design for the model being unavailable.
+  related:
+  - ops-07
+  - ops-16
+  - obs-14
+  code: |
+    gateway = LLMGateway(routes=[
+        Route("primary", provider="a", model=MID, retries=2, backoff="exponential"),
+        Route("fallback", provider="b", model=MID_EQUIV, prompt_variant="b"),   # eval-tested
+    ], circuit_breaker=CircuitBreaker(error_rate=0.2, window_s=60))
+
+    def handle(msg):
+        try:
+            return agent.run(msg, llm=gateway)
+        except AllRoutesDown:
+            return menu_flow(top_intents=["pay_bill", "balance", "outage"])     # degraded mode
+  lang: python
+- id: agf-17
+  title: Agent computes a loan payoff and gets daily interest wrong
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A personal-loan servicing agent is asked for a payoff amount as of next Friday. It reasons through principal, daily interest and fees in text and quotes $12,418.77. The servicing system says $12,455.32. The customer pays the quoted amount, the loan stays open with a small balance and goes delinquent.
+  antipattern: |-
+    **Asking the model to compute or validate deterministic things.**
+
+    *Think of it this way:* Asking a brilliant essayist to do your tax return in their head.
+  fails: |-
+    **Mechanism:** LLMs predict tokens. They are unreliable at arithmetic and exact rules.
+
+    - LLMs predict tokens and are unreliable at multi-step arithmetic.
+    - Day-count conventions and fee rules are exact.
+    - The answer looks precise, so nobody doubts it.
+
+    **Root cause:** The model performs calculations that belong in code.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - Payoff Friday? · Customer asks
+    - '!LLM computes · In text'
+    - $12,418.77 · Wrong
+    - '!Balance left · Delinquent'
+    bad_note: The model does the money maths
+    good:
+    - Payoff API · Servicing system
+    - +Calc tool · If needed
+    - +Amount check · Equals tool
+    - $12,455.32 · Correct
+    good_note: Payoff API, calculator tool, amount checks
+  solution: |-
+    1. Get the payoff quote from the servicing system's payoff API.
+    2. Give the agent a calculator or date tool for anything else, and never let it compute money in text.
+    3. Validate that any amount in the answer equals a tool result.
+  works: |-
+    **Trade-off to manage:** None worth discussing; money maths belongs in the system of record.
+
+    **How you prove it worked:**
+
+    - Numeric-faithfulness checks on all money amounts in answers.
+
+    **Same pattern elsewhere:** Telco: an agent prorates a mid-cycle plan change in its head and quotes a wrong first bill.
+  takeaway: Use the LLM for judgement and code for arithmetic.
+  related:
+  - rag-12
+  - rag-01
+  code: |
+    @tool
+    def payoff_quote(loan_id: str, payoff_date: date) -> dict:
+        return servicing.payoff(loan_id, as_of=payoff_date)       # per-diem interest from the system
+
+    @tool
+    def calc(expression: str) -> str:
+        return str(safe_eval(expression))                          # anything else: calculator, never text
+
+    def check_amounts(answer, tool_results):
+        return all(a in money_values(tool_results) for a in money_values(answer))
+  lang: python
+- id: agf-18
+  title: Three-hour troubleshooting session forgets the original fault
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A home-internet support agent works with a customer through modem resets, Wi-Fi channel changes and speed tests over three hours of intermittent chat. By the end it suggests resetting the modem again and has forgotten the customer said the problem only happens when it rains, a strong hint of a damaged outdoor cable.
+  antipattern: |-
+    **Appending every turn and tool result forever.**
+
+    *Think of it this way:* A meeting that runs so long nobody remembers the agenda.
+  fails: |-
+    **Mechanism:** Context fills, early instructions get diluted, and the model drifts.
+
+    - Every turn and tool result is appended forever.
+    - Early key facts get diluted by later noise.
+    - Cost per turn grows steadily.
+
+    **Root cause:** No memory management or pinned task state.
+
+    **Where it breaks:** Context management in the agent runtime.
+  diagram:
+    bad:
+    - 3-hour session · Many steps
+    - '!All appended · Tool outputs'
+    - Rain clue lost · Early fact
+    - '!Reset again · Repeated step'
+    bad_note: Append every turn forever
+    good:
+    - Pinned state · Symptoms, tried
+    - +Compact · Old tool output
+    - +Ticket · TMF621 case
+    - Right lead · Outdoor cable
+    good_note: Pinned task state plus compaction
+  solution: |-
+    1. Keep a pinned task-state block (problem, key symptoms, steps tried, results).
+    2. Summarise or drop old tool outputs, and keep constraints and symptoms verbatim.
+    3. Store the case in a ticket (TMF621) so a human or later session can continue.
+  works: |-
+    **Trade-off to manage:** Summaries lose detail; keep critical facts verbatim in the pinned block.
+
+    **How you prove it worked:**
+
+    - Repeated-step rate in long sessions; tokens per turn over time.
+
+    **Same pattern elsewhere:** FinTech: a long mortgage-application chat forgets that the borrower is self-employed and asks for payslips again.
+  takeaway: Memory needs a retention policy.
+  related:
+  - ctx-02
+  - ctx-15
+  - mem-02
+  code: |
+    def build_context(case):
+        pinned = (f"<task_state>\nProblem: {case.problem}\nSymptoms: {case.symptoms}\n"
+                  f"Tried: {case.steps_tried}\nResults: {case.results}\n</task_state>")   # verbatim, always present
+        recent = case.turns[-8:]
+        older = summarize(case.turns[:-8], keep=["symptoms", "constraints"]) if len(case.turns) > 8 else ""
+        return [pinned, older, *recent]
+
+    tmf621.update_ticket(case.ticket_id, notes=case.state_summary())       # resumable by a human
+  lang: python
+- id: agf-19
+  title: Pay John sends money to the wrong John
+  tags:
+  - Reliability
+  - FinTech
+  - Critical
+  scenario: |-
+    A banking assistant receives "Send $500 to John for rent." The customer has three saved payees named John. The agent picks the most recently used, John Martinez, instead of the landlord John Okafor. The payment is instant (no recall), and getting the money back depends on the recipient's goodwill.
+  antipattern: |-
+    **Forcing the agent to always act.**
+
+    *Think of it this way:* A courier who delivers to the first house on the street with the right surname instead of knocking to ask.
+  fails: |-
+    **Mechanism:** Ambiguity plus confident action means wrong actions.
+
+    - The agent is designed to always complete the task.
+    - Ambiguity is resolved by a heuristic, silently.
+    - The payment rail is irreversible.
+
+    **Root cause:** No clarification action and no rule for when to ask.
+
+    **Where it breaks:** Agent policy and tool design.
+  diagram:
+    bad:
+    - '''Pay John'' · $500 rent'
+    - '!3 Johns · Saved payees'
+    - Picks recent · Heuristic
+    - '!Wrong John · Instant, no recall'
+    bad_note: Always act, guess the payee
+    good:
+    - Detect · Several matches
+    - +Ask user · Which John?
+    - +Payee id · Required
+    - Confirm · Full details
+    good_note: Ask when ambiguous, confirm before paying
+  solution: |-
+    1. Give the agent an ask_user action, and define when it must ask (several matches, new payee, high amount, irreversible rail).
+    2. Make the payment tool require a resolved payee_id, never a name.
+    3. Show a confirmation with full payee details before sending.
+  works: |-
+    **Trade-off to manage:** Extra questions add friction; ask only when ambiguity or risk is real.
+
+    **How you prove it worked:**
+
+    - Rate of payments to non-usual payees followed by disputes or recall requests.
+
+    **Same pattern elsewhere:** Telco: "Add the data pass to Sam's line" on a family plan with two lines for Sam and Samantha.
+  takeaway: Asking is a valid action.
+  related:
+  - gov-02
+  - agf-04
+  code: |
+    @tool
+    def send_payment(payee_id: str, amount: Decimal, confirmed: bool = False):
+        payee = payees.get(payee_id)                               # resolved id, never a name
+        if not confirmed:
+            return {"status": "NEEDS_CONFIRMATION",
+                    "show_user": f"Send {amount} to {payee.name}, account ending {payee.acct[-4:]}, bank {payee.bank}?"}
+        return payments.send(payee_id, amount)
+
+    def resolve_payee(name):
+        matches = payees.search(name)
+        return matches[0].id if len(matches) == 1 else ask_user(f"Which {name}?", options=matches)
+  lang: python
+- id: agf-20
+  title: Frontier model used for every care-flow step
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's care agent uses the largest model for every call: intent detection, entity extraction, policy checks, tool selection and the final reply. The monthly bill reaches $90k, and 70% of calls are simple classification and extraction steps.
+  antipattern: |-
+    **The biggest model everywhere.**
+
+    *Think of it this way:* Sending a senior surgeon to take every patient's temperature.
+  fails: |-
+    **Mechanism:** Most steps don't need frontier reasoning.
+
+    - Simple steps don't need frontier reasoning.
+    - Latency is higher than necessary at every step.
+    - Cost scales with call volume.
+
+    **Root cause:** No model routing by task difficulty.
+
+    **Where it breaks:** Model selection per step.
+  diagram:
+    bad:
+    - Every step · Frontier model
+    - '!70% simple · Classify, extract'
+    - High latency · Every call
+    - '!$90k/month · Bill'
+    bad_note: Biggest model for every step
+    good:
+    - Small model · Classify, extract
+    - +Large model · Plan, reason
+    - +Per-step evals · Validate
+    - Gateway · Switch by config
+    good_note: Route each step to the smallest model that passes
+  solution: |-
+    1. Use small, fast models for classification, extraction and routing; large models for planning and complex reasoning.
+    2. Validate each choice with evals for that step.
+    3. Use a gateway to switch models per step without code changes.
+  works: |-
+    **Trade-off to manage:** More models means more evals and versions to manage.
+
+    **How you prove it worked:**
+
+    - Cost and latency per step; quality per step after routing changes.
+
+    **Same pattern elsewhere:** FinTech: a bank uses its largest model to classify card transaction categories at 100 million transactions a month.
+  takeaway: Match the model to the step.
+  related:
+  - cost-02
+  - cost-01
+  code: |
+    STEP_MODELS = {                               # chosen per step from evals; switchable in the gateway
+        "classify_intent":  "small-fast",
+        "extract_entities": "small-fast",
+        "route":            "small-fast",
+        "plan_resolution":  "frontier",
+        "draft_reply":      "mid",
+    }
+
+    def call(step, **kw):
+        return gateway.generate(model=STEP_MODELS[step], **kw)
+  lang: python

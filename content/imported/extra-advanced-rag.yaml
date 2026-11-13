@@ -1,0 +1,39 @@
+source: leadership-guide
+section: advanced-rag
+patterns:
+  - id: contextual-chunking-no-cost-model
+    title: Contextual chunking rolled out without a cost model
+    tags: [Cost, Quality]
+    scenario: |
+      Contextual retrieval (an LLM-written situating sentence per chunk) improved recall in a pilot. The team now wants to run
+      it on all 40 million chunks.
+    antipattern: |
+      **A per-chunk LLM enrichment is approved corpus-wide with no cost estimate, caching or prioritization.**
+    fails: |
+      - Contextual enrichment calls an LLM once per chunk at ingest, so cost scales with corpus size.
+      - Every re-ingest repeats the bill unless unchanged chunks are skipped.
+      - The gain is concentrated in a few sources, but the cost is spread over all of them.
+    diagram:
+      bad: ["Pilot recall gain", "!Run on all 40M chunks", "!No cost model / caching", "Large one-off + recurring bill"]
+      bad_note: "Good technique, unmanaged cost"
+      good: ["Pilot", "+Cost model (with prompt caching)", "+Worst-retrieval sources first", "+Recall gain per $", "+Re-contextualize changed hashes only"]
+      good_note: "Staged rollout ordered by value"
+    solution: |
+      Approve it as a **staged rollout with a cost model**:
+
+      1. Estimate cost: chunks × tokens per call × price, minus prompt-cache savings for the shared document prefix.
+      2. Pilot on the sources with the worst retrieval failures.
+      3. Measure **recall gain per dollar**, and roll out by priority.
+      4. Only re-contextualize chunks whose content hash changed.
+    works: |
+      The technique is applied where it pays back first, with a known budget. Prompt caching of the document prefix and
+      hash-based skipping keep both the one-off and recurring cost bounded.
+    code: |
+      def contextual_cost(n_chunks, doc_tokens_per_call, chunk_tokens, out_tokens,
+                          in_price_per_m, out_price_per_m, cache_hit=0.9, cached_discount=0.9):
+          doc_cost = doc_tokens_per_call * in_price_per_m / 1e6 * (1 - cache_hit * cached_discount)
+          chunk_cost = (chunk_tokens * in_price_per_m + out_tokens * out_price_per_m) / 1e6
+          return n_chunks * (doc_cost + chunk_cost)
+      # plug in your provider's current prices; compare with recall gain on the pilot sources
+    takeaway: "Good retrieval techniques still need a budget. Price per-chunk enrichment, start where retrieval is worst, and skip unchanged chunks."
+    followup: "Contextual retrieval improved recall, so the team wants to run it on all 40M chunks. Approve it?"

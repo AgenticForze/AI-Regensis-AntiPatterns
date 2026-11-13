@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Advanced RAG · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<title>Advanced RAG &amp; Fine-tuning vs RAG · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,41 +20,44 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="active" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part A · Retrieval &amp; Knowledge</div>
-  <h1><span class="sn">4</span>Advanced RAG</h1>
+  <h1><span class="sn">4</span>Advanced RAG &amp; Fine-tuning vs RAG</h1>
   <p class="lede">GraphRAG, agentic retrieval and citation verification solve real problems, but only when chosen for the right reason and verified in production.</p>
-  <span class="pill">4 anti-patterns</span>
+  <span class="pill">25 anti-patterns</span>
 </div>
 
-<div class="toc"><div class="toc-h">In this section</div><a href="#overengineered-rag"><span>4.1</span>GraphRAG or agentic RAG where simple RAG works</a><a href="#no-citation-verification"><span>4.2</span>No citation or grounding verification</a><a href="#temporal-blindness"><span>4.3</span>Ignoring temporal freshness and document validity</a><a href="#rag-vs-finetune-confusion"><span>4.4</span>Using RAG to fix behaviour, or fine-tuning to add knowledge</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#overengineered-rag"><span>4.1</span>GraphRAG or agentic RAG where simple RAG works</a><a href="#no-citation-verification"><span>4.2</span>No citation or grounding verification</a><a href="#temporal-blindness"><span>4.3</span>Ignoring temporal freshness and document validity</a><a href="#rag-vs-finetune-confusion"><span>4.4</span>Using RAG to fix behaviour, or fine-tuning to add knowledge</a><a href="#contextual-chunking-no-cost-model"><span>4.5</span>Contextual chunking rolled out without a cost model</a><a href="#ft-01"><span>4.6</span>Fine-tuning a model to answer credit-card policy questions</a><a href="#ft-02"><span>4.7</span>Adding more retrieval to fix the bot&#x27;s tone</a><a href="#ft-03"><span>4.8</span>Prompt with 400 ticket categories for routing</a><a href="#ft-04"><span>4.9</span>Fine-tuned model shipped without a held-out evaluation</a><a href="#ft-05"><span>4.10</span>Fine-tuning on the bot&#x27;s own past answers</a><a href="#ft-06"><span>4.11</span>Fine-tune makes the model forget its refusals</a><a href="#ft-07"><span>4.12</span>Fine-tuning teaches a confident tone, not correct answers</a><a href="#ft-08"><span>4.13</span>Fifty examples expected to teach a complex task</a><a href="#ft-09"><span>4.14</span>Fine-tuned model&#x27;s base version is being retired</a><a href="#ft-10"><span>4.15</span>Fine-tuned model repeats customers&#x27; account numbers</a><a href="#ft-11"><span>4.16</span>Twenty thousand documents stuffed into long context</a><a href="#ft-12"><span>4.17</span>RAG over documents to trace beneficial ownership</a><a href="#ft-13"><span>4.18</span>Small model distilled from a provider&#x27;s outputs against its terms</a><a href="#ft-14"><span>4.19</span>Prompt change and fine-tune shipped together</a><a href="#ft-15"><span>4.20</span>Fine-tuning chosen because a competitor announced it</a><a href="#ft-16"><span>4.21</span>Fine-tuned model can&#x27;t show where its answers come from</a><a href="#ft-17"><span>4.22</span>Generic embeddings don&#x27;t understand telco jargon</a><a href="#ft-18"><span>4.23</span>Fine-tuned on synthetic disputes, fails on real ones</a><a href="#ft-19"><span>4.24</span>Fine-tune saves on tokens, costs more to host</a><a href="#ft-20"><span>4.25</span>Fine-tuned model never A/B tested against the old one</a></div>
 
 <article class="ap" id="overengineered-rag">
   <header class="ap-h">
@@ -166,7 +169,9 @@ its place through evidence, which keeps the architecture explainable and maintai
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Advanced RAG is a tool, not a maturity level. Profile the queries, default to simple, and escalate only for the segments that measurably need it.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What query signals would tell you a knowledge graph is worth the investment?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-citation-verification">
@@ -253,7 +258,9 @@ click, and the faithfulness metric gives leadership a number to govern.</p></sec
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>A citation nobody verified is decoration. Make citations structured, check them claim by claim, and measure faithfulness.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you verify citations at scale without doubling latency?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="temporal-blindness">
@@ -338,7 +345,9 @@ glance, and historical questions still work because versioned content is kept, n
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>&quot;Correct&quot; is time-dependent. Index validity dates, resolve the question&#x27;s time frame, and filter before ranking.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you handle a question that spans two policy versions, such as a claim filed under the old policy and paid under the new one?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="rag-vs-finetune-confusion">
@@ -444,7 +453,1756 @@ evaluate. Distilled or fine-tuned small models can then cut serving cost for hig
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>RAG and tools for knowledge, prompting or fine-tuning for behaviour. Mixing them up produces stale facts or bloated prompts.</p></div>
     <div><span class="k">Follow-up to expect</span><p>When would you distill a frontier model into a smaller one for a production task?</p></div>
+    
   </section>
+  
+</article>
+
+<article class="ap" id="contextual-chunking-no-cost-model">
+  <header class="ap-h">
+    <div class="ap-num">4.5</div>
+    <div>
+      <h2><a href="#contextual-chunking-no-cost-model">Contextual chunking rolled out without a cost model</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Contextual retrieval (an LLM-written situating sentence per chunk) improved recall in a pilot. The team now wants to run
+it on all 40 million chunks.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>A per-chunk LLM enrichment is approved corpus-wide with no cost estimate, caching or prioritization.</strong></p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Contextual enrichment calls an LLM once per chunk at ingest, so cost scales with corpus size.</li>
+<li>Every re-ingest repeats the bill unless unchanged chunks are skipped.</li>
+<li>The gain is concentrated in a few sources, but the cost is spread over all of them.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-contextual-chunking-no-cost-model" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Pilot recall gain</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Run on all 40M chunks</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No cost model / caching</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Large one-off + recurring</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">bill</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Good technique, unmanaged cost</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Pilot</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Cost model (with</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">prompt caching)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Worst-retrieval</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">sources first</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Recall gain per $</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Re-contextualize</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">changed hashes only</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-advanced-rag-contextual-chunking-no-cost-model)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Staged rollout ordered by value</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Approve it as a <strong>staged rollout with a cost model</strong>:</p>
+<ol>
+<li>Estimate cost: chunks × tokens per call × price, minus prompt-cache savings for the shared document prefix.</li>
+<li>Pilot on the sources with the worst retrieval failures.</li>
+<li>Measure <strong>recall gain per dollar</strong>, and roll out by priority.</li>
+<li>Only re-contextualize chunks whose content hash changed.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The technique is applied where it pays back first, with a known budget. Prompt caching of the document prefix and
+hash-based skipping keep both the one-off and recurring cost bounded.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">contextual_cost</span><span class="p">(</span><span class="n">n_chunks</span><span class="p">,</span> <span class="n">doc_tokens_per_call</span><span class="p">,</span> <span class="n">chunk_tokens</span><span class="p">,</span> <span class="n">out_tokens</span><span class="p">,</span>
+                    <span class="n">in_price_per_m</span><span class="p">,</span> <span class="n">out_price_per_m</span><span class="p">,</span> <span class="n">cache_hit</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">cached_discount</span><span class="o">=</span><span class="mf">0.9</span><span class="p">):</span>
+    <span class="n">doc_cost</span> <span class="o">=</span> <span class="n">doc_tokens_per_call</span> <span class="o">*</span> <span class="n">in_price_per_m</span> <span class="o">/</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">cache_hit</span> <span class="o">*</span> <span class="n">cached_discount</span><span class="p">)</span>
+    <span class="n">chunk_cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">chunk_tokens</span> <span class="o">*</span> <span class="n">in_price_per_m</span> <span class="o">+</span> <span class="n">out_tokens</span> <span class="o">*</span> <span class="n">out_price_per_m</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1e6</span>
+    <span class="k">return</span> <span class="n">n_chunks</span> <span class="o">*</span> <span class="p">(</span><span class="n">doc_cost</span> <span class="o">+</span> <span class="n">chunk_cost</span><span class="p">)</span>
+<span class="c1"># plug in your provider's current prices; compare with recall gain on the pilot sources</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Good retrieval techniques still need a budget. Price per-chunk enrichment, start where retrieval is worst, and skip unchanged chunks.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Contextual retrieval improved recall, so the team wants to run it on all 40M chunks. Approve it?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="ft-01">
+  <header class="ap-h">
+    <div class="ap-num">4.6</div>
+    <div>
+      <h2><a href="#ft-01">Fine-tuning a model to answer credit-card policy questions</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A card issuer fine-tunes a model on its policy manual so the assistant "knows" policies. It answers fluently, but can't cite sources, mixes old and new versions of policy, and every policy update requires a new fine-tuning run that takes weeks.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Fine-tune the policy manual into the model.</strong></p>
+<p><em>Think of it this way:</em> Memorising the rulebook instead of keeping it on the desk and looking things up.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Knowledge baked into weights can't be cited or updated quickly.</li>
+<li>Fine-tuning blends versions present in training data.</li>
+<li>Compliance requires traceable answers.</li>
+</ul>
+<p><strong>Root cause:</strong> Fine-tuning chosen for a knowledge problem.</p>
+<p><strong>Where it breaks:</strong> Approach selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-01" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Policy manual ·</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">Fine-tuned</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fluent · No citations</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Versions mix · Old + new</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Weeks · Per update</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fine-tune the policy manual into the model</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Error analysis · What</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">fails?</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">RAG · Versioned docs</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Citations · Traceable</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Prompt · Format, tone</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-01)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">RAG for policy with citations, prompts for format</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Use RAG over versioned policy documents with citations for knowledge.</li>
+<li>Use prompting for format and tone; consider fine-tuning only if behaviour still fails after that.</li>
+<li>Run error analysis to decide what kind of problem you have.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> RAG adds retrieval latency and index operations.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Answer staleness after policy updates; citation coverage.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: fine-tuning on the roaming guide produces answers that go stale with every tariff change (see ops-03).</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">card_policy_answer</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">card_product</span><span class="p">):</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="n">search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">"product"</span><span class="p">:</span> <span class="n">card_product</span><span class="p">,</span> <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"in_force"</span><span class="p">})</span>   <span class="c1"># versioned policy docs</span>
+    <span class="k">return</span> <span class="n">generate</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">hits</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">TONE_AND_FORMAT_PROMPT</span><span class="p">,</span> <span class="n">require_citations</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">error_analysis</span><span class="p">(</span><span class="n">failures</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">Counter</span><span class="p">(</span><span class="n">label_failure</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">failures</span><span class="p">)</span>      <span class="c1"># knowledge vs behaviour → RAG vs fine-tune</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Fine-tune for how to say it. Retrieve what to say.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-03"><span>14.3</span>Fine-tuning a model on monthly price plans</a><a href="rag-core.html#rag-15"><span>3.25</span>AML policy assistant gives answers with no citations</a></div>
+</article>
+
+<article class="ap" id="ft-02">
+  <header class="ap-h">
+    <div class="ap-num">4.7</div>
+    <div>
+      <h2><a href="#ft-02">Adding more retrieval to fix the bot&#x27;s tone</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's bot answers correctly but sounds robotic and off-brand. The team adds brand guidelines and example conversations to the retrieval index. Retrieval now sometimes returns style guides instead of product facts, and tone barely changes.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Retrieve style guides to fix tone.</strong></p>
+<p><em>Think of it this way:</em> Buying more books to fix your handwriting.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>A behaviour problem treated as a knowledge problem.</li>
+<li>Style documents compete with facts in retrieval.</li>
+<li>Tone needs consistent instruction or training, not lookup.</li>
+</ul>
+<p><strong>Root cause:</strong> Approach chosen without diagnosing the failure type.</p>
+<p><strong>Where it breaks:</strong> Approach selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-02" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Robotic tone · Problem</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Index guides · Style docs</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Retrieval · Polluted</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Tone same · No change</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Retrieve style guides to fix tone</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Prompt · Tone + examples</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Fine-tune · If needed</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">RAG · Facts only</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Brand judge · Measured</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-02)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Tone in the prompt or a fine-tune; facts in RAG</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Put tone and style in the system prompt with a few good examples.</li>
+<li>If prompting isn't enough at scale, fine-tune on curated on-brand responses.</li>
+<li>Keep retrieval for facts only.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Fine-tuning for tone needs curated data and evals.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Brand-voice judge scores; retrieval precision for factual queries.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank indexes its writing style guide to make letters sound warmer, and retrieval quality drops.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">SYSTEM</span> <span class="o">=</span> <span class="s2">"""Voice: warm, direct, no jargon. Use the customer's name once.</span>
+<span class="s2">Examples:</span>
+<span class="s2">- "Good news, Priya: your bill went down by $8 this month because the promo kicked in."</span>
+<span class="s2">- "I'm sorry about the outage, Mark. Here's what's happening and when we expect it back."</span>
+<span class="s2">"""</span>
+<span class="n">reply</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">SYSTEM</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">retrieve_facts</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">user</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>    <span class="c1"># retrieval for facts only</span>
+<span class="c1"># if prompting isn't enough at scale: fine-tune on curated on-brand responses</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Retrieval fixes what the model knows, not how it talks.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="advanced-rag.html#ft-01"><span>4.6</span>Fine-tuning a model to answer credit-card policy questions</a></div>
+</article>
+
+<article class="ap" id="ft-03">
+  <header class="ap-h">
+    <div class="ap-num">4.8</div>
+    <div>
+      <h2><a href="#ft-03">Prompt with 400 ticket categories for routing</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier routes support tickets into 400 categories by putting all category descriptions into the prompt. The prompt is 25k tokens, accuracy is 71%, and cost is high. The company has three years of tickets labelled with the right queue.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>400 categories in one prompt.</strong></p>
+<p><em>Think of it this way:</em> Reading the whole phone directory before connecting each call.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Huge label sets strain prompting.</li>
+<li>Labelled data exists but is unused.</li>
+<li>Cost and latency scale with prompt size.</li>
+</ul>
+<p><strong>Root cause:</strong> Prompting used where supervised learning fits.</p>
+<p><strong>Where it breaks:</strong> Approach selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-03" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">400 classes · In prompt</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">25k tokens · Per call</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">71% accuracy · Costly</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Labels unused · 3 years</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">400 categories in one prompt</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Fine-tune · Small model</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Hierarchy · Labels</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">LLM · Low confidence</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Same evals · Compare</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-03)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Fine-tuned classifier, LLM for low confidence</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Fine-tune a small model or train a classifier on labelled tickets (hierarchical labels help).</li>
+<li>Use the LLM for low-confidence or new categories.</li>
+<li>Evaluate both approaches on the same held-out set.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Fine-tuned classifiers need retraining when categories change.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Accuracy by category and confidence band.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank classifies complaints into 150 regulatory categories by prompt alone.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">clf</span> <span class="o">=</span> <span class="n">train_hierarchical_classifier</span><span class="p">(</span><span class="n">labelled_tickets</span><span class="p">,</span> <span class="n">levels</span><span class="o">=</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">,</span> <span class="s2">"category"</span><span class="p">])</span>   <span class="c1"># small model</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">route</span><span class="p">(</span><span class="n">ticket</span><span class="p">):</span>
+    <span class="n">pred</span> <span class="o">=</span> <span class="n">clf</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">ticket</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pred</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&gt;=</span> <span class="mf">0.85</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pred</span><span class="o">.</span><span class="n">category</span>
+    <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">classify</span><span class="p">(</span><span class="n">ticket</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">candidates</span><span class="o">=</span><span class="n">pred</span><span class="o">.</span><span class="n">top_k</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>     <span class="c1"># low-confidence / new categories</span>
+
+<span class="n">compare</span><span class="p">(</span><span class="n">clf</span><span class="p">,</span> <span class="n">llm_prompted</span><span class="p">,</span> <span class="n">heldout</span><span class="p">)</span>                                 <span class="c1"># same held-out set</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Lots of labels plus lots of data means train, don&#x27;t prompt.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-14"><span>6.18</span>Large model classifying 100 million transactions a month</a><a href="prompts.html#prm-20"><span>5.24</span>Weeks of hand-tuning for a 1% gain</a></div>
+</article>
+
+<article class="ap" id="ft-04">
+  <header class="ap-h">
+    <div class="ap-num">4.9</div>
+    <div>
+      <h2><a href="#ft-04">Fine-tuned model shipped without a held-out evaluation</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank fine-tunes a model to extract fields from trade confirmations. Training loss looks great, and spot checks pass. There's no held-out test set and no comparison with the prompted baseline. In production, it's worse than the original prompted model on confirmations from smaller counterparties.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Ship on training loss and spot checks.</strong></p>
+<p><em>Think of it this way:</em> Judging a new recipe by how good the dough looked, without tasting the bread.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Training loss isn't task accuracy.</li>
+<li>No baseline comparison.</li>
+<li>Test data doesn't cover the long tail.</li>
+</ul>
+<p><strong>Root cause:</strong> Fine-tuning without rigorous evaluation.</p>
+<p><strong>Where it breaks:</strong> ML process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-04" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Fine-tune · Trade</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">confirms</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Loss good · Spot checks</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No baseline · No held-out</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Worse · Small banks</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Ship on training loss and spot checks</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Held-out · Stratified</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Baseline · Prompted model</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Compare · By slice</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Ship if · Beats baseline</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-04)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Stratified held-out set vs prompted baseline</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Hold out a test set stratified by counterparty and document type.</li>
+<li>Compare against the prompted baseline on the same set.</li>
+<li>Ship only if the fine-tune beats the baseline on the slices that matter.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Smaller training set.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Field-level accuracy by slice, before and after.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a fine-tuned intent model looks good in training and underperforms the prompted model on prepaid-brand slang.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">train</span><span class="p">,</span> <span class="n">test</span> <span class="o">=</span> <span class="n">stratified_split</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">"counterparty"</span><span class="p">,</span> <span class="s2">"doc_type"</span><span class="p">],</span> <span class="n">test_frac</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">tuned</span> <span class="o">=</span> <span class="n">finetune</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">train</span><span class="p">)</span>
+<span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"prompted"</span><span class="p">:</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">prompted_baseline</span><span class="p">,</span> <span class="n">test</span><span class="p">),</span> <span class="s2">"tuned"</span><span class="p">:</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">tuned</span><span class="p">,</span> <span class="n">test</span><span class="p">)}</span>
+<span class="n">important</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"isda"</span><span class="p">,</span> <span class="s2">"csa"</span><span class="p">,</span> <span class="s2">"top_10_counterparties"</span><span class="p">]</span>
+<span class="n">ship</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s2">"tuned"</span><span class="p">]</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">results</span><span class="p">[</span><span class="s2">"prompted"</span><span class="p">]</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">important</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A fine-tune must beat the baseline on held-out data, or it doesn&#x27;t ship.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="evals-ops.html#eval-08"><span>11.14</span>KYC extraction few-shots leaked into the eval set</a><a href="advanced-rag.html#ft-20"><span>4.25</span>Fine-tuned model never A/B tested against the old one</a></div>
+</article>
+
+<article class="ap" id="ft-05">
+  <header class="ap-h">
+    <div class="ap-num">4.10</div>
+    <div>
+      <h2><a href="#ft-05">Fine-tuning on the bot&#x27;s own past answers</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>To save labelling cost, a carrier fine-tunes its next care model on transcripts of the current bot's answers that customers didn't complain about. The new model inherits the old one's mistakes, with more confidence, and quality slowly declines with each round.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Train on the bot's unverified outputs.</strong></p>
+<p><em>Think of it this way:</em> Photocopying a photocopy; each generation gets blurrier.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Model outputs used as training targets without verification.</li>
+<li>A lack of complaints isn't correctness.</li>
+<li>Errors are amplified.</li>
+</ul>
+<p><strong>Root cause:</strong> Self-generated training data without quality control.</p>
+<p><strong>Where it breaks:</strong> Data curation.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-05" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Bot answers · Past</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">No complaint · = correct?</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · On them</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Errors amplified · Each</text>
+<text class="dg-t dg-t-bad" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">round</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Train on the bot&#x27;s unverified outputs</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Verified data · Expert</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">review</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Confirmed · Outcomes</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Filter · Synthetic</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Track · Across rounds</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-05)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Verified, expert-reviewed training data</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Use verified data (expert-reviewed answers, resolved cases with confirmed outcomes).</li>
+<li>If using synthetic or model-generated data, filter with strong checks and mix with human data.</li>
+<li>Track quality across generations.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Expert review costs.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Eval trend across successive fine-tunes.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank trains its document classifier on its own previous predictions.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">training_examples</span><span class="p">():</span>
+    <span class="n">expert</span> <span class="o">=</span> <span class="n">answers</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">reviewed_by_expert</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">verdict</span><span class="o">=</span><span class="s2">"correct"</span><span class="p">)</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="n">cases</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">outcome_confirmed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">answers</span><span class="p">()</span>
+    <span class="n">synthetic</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">generate_synthetic</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">2000</span><span class="p">)</span> <span class="k">if</span> <span class="n">strong_checks</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">expert</span> <span class="o">+</span> <span class="n">resolved</span> <span class="o">+</span> <span class="n">synthetic</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">expert</span><span class="p">)]</span>           <span class="c1"># synthetic never dominates</span>
+    <span class="n">lineage</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">sources</span><span class="o">=</span><span class="p">{</span><span class="s2">"expert"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">expert</span><span class="p">),</span> <span class="s2">"resolved"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">resolved</span><span class="p">),</span> <span class="s2">"synthetic"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">synthetic</span><span class="p">)})</span>
+    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Don&#x27;t teach a model its own mistakes.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-04"><span>14.4</span>Collections model fine-tuned on raw call transcripts</a><a href="security-gov.html#sec-13"><span>12.18</span>Coordinated thumbs-up teaches the bot to waive fees</a></div>
+</article>
+
+<article class="ap" id="ft-06">
+  <header class="ap-h">
+    <div class="ap-num">4.11</div>
+    <div>
+      <h2><a href="#ft-06">Fine-tune makes the model forget its refusals</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A wealth platform fine-tunes a model on advisor conversations to sound more like its advisors. After deployment, the model readily gives specific buy and sell recommendations to retail users, which the base model used to decline. The training data contained advisors giving recommendations to clients with whom they had a suitability relationship.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>No safety evals after fine-tuning.</strong></p>
+<p><em>Think of it this way:</em> Teaching someone a new accent and finding they've forgotten their manners.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Fine-tuning shifts behaviour beyond the target.</li>
+<li>Safety and compliance behaviours regress.</li>
+<li>No safety evals after fine-tuning.</li>
+</ul>
+<p><strong>Root cause:</strong> No regression testing of safety behaviour after fine-tuning.</p>
+<p><strong>Where it breaks:</strong> Fine-tuning process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-06" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Advisor chats · Training</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · Style</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Refusals gone ·</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">Recommends</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Retail users · Unsuitable</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No safety evals after fine-tuning</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Safety suite · After tune</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Boundary data · In</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">training</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Guardrails · Runtime</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Compare · Base vs tuned</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-06)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Full safety suite and boundary examples in training</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Run the full safety and compliance eval suite after every fine-tune.</li>
+<li>Include refusal and boundary examples in training data.</li>
+<li>Keep runtime guardrails independent of the model.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> More training and eval effort.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Safety eval deltas between base and fine-tuned models.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a fine-tuned care model starts revealing account details without verification because training chats came from already-verified sessions.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">train_data</span> <span class="o">=</span> <span class="n">core_examples</span> <span class="o">+</span> <span class="n">refusal_and_boundary_examples</span>       <span class="c1"># keep refusals in the training mix</span>
+<span class="n">tuned</span> <span class="o">=</span> <span class="n">finetune</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">train_data</span><span class="p">)</span>
+
+<span class="n">safety</span> <span class="o">=</span> <span class="n">run_suite</span><span class="p">(</span><span class="n">tuned</span><span class="p">,</span> <span class="n">suites</span><span class="o">=</span><span class="p">[</span><span class="s2">"safety"</span><span class="p">,</span> <span class="s2">"compliance"</span><span class="p">,</span> <span class="s2">"refusals"</span><span class="p">])</span>
+<span class="k">assert</span> <span class="n">safety</span><span class="o">.</span><span class="n">critical_failures</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"fine-tune broke safety behaviour"</span>
+<span class="c1"># runtime guardrails stay independent of the model:</span>
+<span class="n">reply</span> <span class="o">=</span> <span class="n">output_guard</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">tuned</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Fine-tuning can unlearn safety. Re-test it every time.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="evals-ops.html#eval-10"><span>11.16</span>No safety suite before the investing assistant launch</a><a href="advanced-rag.html#ft-04"><span>4.9</span>Fine-tuned model shipped without a held-out evaluation</a></div>
+</article>
+
+<article class="ap" id="ft-07">
+  <header class="ap-h">
+    <div class="ap-num">4.12</div>
+    <div>
+      <h2><a href="#ft-07">Fine-tuning teaches a confident tone, not correct answers</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier fine-tunes its troubleshooting bot on polished agent responses to reduce hedging. Customers like the confident tone, but the model now states guesses about network faults as facts, and wrong-diagnosis rates rise.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Fine-tune away the hedging.</strong></p>
+<p><em>Think of it this way:</em> Training someone to speak confidently without teaching them anything new.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Style training changes certainty, not knowledge.</li>
+<li>Hedging was a useful signal of uncertainty.</li>
+<li>No grounding or diagnostics behind answers.</li>
+</ul>
+<p><strong>Root cause:</strong> Fine-tuning used to fix a symptom (hedging) instead of the cause (missing data).</p>
+<p><strong>Where it breaks:</strong> Approach and data.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-07" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Hedging · Problem</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">Fine-tune · Confident</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">style</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Guesses · As facts</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wrong diagnosis · Up</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fine-tune away the hedging</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Line tests · Tools</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Outage data · Grounding</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Calibrated · When unsure</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Evaluate · Correctness</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-07)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Diagnostic tools for evidence, calibrated language</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Give the bot diagnostic tools (line tests, outage data) so answers are grounded.</li>
+<li>Keep calibrated uncertainty language when evidence is weak.</li>
+<li>Evaluate correctness, not just tone.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Less confident tone where evidence is weak, which is honest.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Wrong-diagnosis rate before and after.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a fine-tuned bot sounds certain about fee outcomes it can't check.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">TOOLS</span> <span class="o">=</span> <span class="p">[</span><span class="n">run_line_test</span><span class="p">,</span> <span class="n">check_outage</span><span class="p">,</span> <span class="n">device_status</span><span class="p">]</span>               <span class="c1"># grounded diagnostics</span>
+
+<span class="n">SYSTEM</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"If the line test or outage data doesn't confirm the cause, say what you checked and "</span>
+          <span class="s2">"that the cause isn't confirmed yet."</span><span class="p">)</span>
+
+<span class="n">eval_metrics</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"diagnosis_correct"</span><span class="p">,</span> <span class="s2">"resolution_correct"</span><span class="p">,</span> <span class="s2">"calibrated_uncertainty"</span><span class="p">]</span>   <span class="c1"># not just tone</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Confidence should come from evidence, not training.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-10"><span>3.20</span>Card benefits bot invents trip insurance</a><a href="advanced-rag.html#ft-02"><span>4.7</span>Adding more retrieval to fix the bot&#x27;s tone</a></div>
+</article>
+
+<article class="ap" id="ft-08">
+  <header class="ap-h">
+    <div class="ap-num">4.13</div>
+    <div>
+      <h2><a href="#ft-08">Fifty examples expected to teach a complex task</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank fine-tunes a model with 50 examples of commercial-loan covenant analysis, expecting it to learn the task. Results are worse than prompting with good instructions and three examples, because 50 examples can't cover the variety of covenant structures.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Fine-tune on 50 examples.</strong></p>
+<p><em>Think of it this way:</em> Expecting someone to learn a language from fifty sentences.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Too little data for a complex task.</li>
+<li>Fine-tuning chosen before prompting was optimised.</li>
+<li>No learning curve measured.</li>
+</ul>
+<p><strong>Root cause:</strong> Unrealistic expectations of fine-tuning.</p>
+<p><strong>Where it breaks:</strong> Approach selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-08" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">50 examples · Covenants</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · Complex task</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Worse · Than prompt</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wasted · Weeks</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fine-tune on 50 examples</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Prompt first · Optimised</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Curve · 50, 200, 1k</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Enough data? · Decide</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Then tune · If it pays</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-08)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Optimise prompting, measure a learning curve</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Optimise prompting and retrieval first.</li>
+<li>Estimate data needs with a learning curve (train on 50, 200, 1,000 examples).</li>
+<li>Use fine-tuning when you have enough diverse, high-quality data.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Collecting quality data takes time.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Learning curve and comparison with the prompted baseline.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: 40 examples of enterprise contract review are used to fine-tune a model.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">learning_curve</span><span class="p">(</span><span class="n">train_pool</span><span class="p">,</span> <span class="n">sizes</span><span class="o">=</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">finetune</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">sample</span><span class="p">(</span><span class="n">train_pool</span><span class="p">,</span> <span class="n">n</span><span class="p">)),</span> <span class="n">heldout</span><span class="p">)</span><span class="o">.</span><span class="n">score</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">sizes</span><span class="p">}</span>
+
+<span class="n">curve</span> <span class="o">=</span> <span class="n">learning_curve</span><span class="p">(</span><span class="n">pool</span><span class="p">)</span>
+<span class="c1"># fine-tune only if the curve is still rising and enough diverse, high-quality data exists</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Fine-tuning needs data. Measure the learning curve first.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="advanced-rag.html#ft-04"><span>4.9</span>Fine-tuned model shipped without a held-out evaluation</a></div>
+</article>
+
+<article class="ap" id="ft-09">
+  <header class="ap-h">
+    <div class="ap-num">4.14</div>
+    <div>
+      <h2><a href="#ft-09">Fine-tuned model&#x27;s base version is being retired</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's fine-tuned intent model is built on a hosted base model the provider will retire in 90 days. The training data, scripts and evals are scattered in notebooks. Re-creating the fine-tune on a new base becomes a scramble.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>One-off fine-tune on a retiring base.</strong></p>
+<p><em>Think of it this way:</em> Customising a car model that's going out of production, without keeping the parts list.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Fine-tunes are tied to specific base models.</li>
+<li>No reproducible training pipeline.</li>
+<li>Deprecation dates not tracked.</li>
+</ul>
+<p><strong>Root cause:</strong> Fine-tuning treated as a one-off.</p>
+<p><strong>Where it breaks:</strong> MLOps.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-09" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · Hosted base</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Base retired · 90 days</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Scattered · Notebooks</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Scramble · Rebuild</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">One-off fine-tune on a retiring base</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Pipeline · Reproducible</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Versioned · Data, evals</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Track dates · Deprecation</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Re-tune · Proactively</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-09)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Reproducible tuning pipeline and deprecation tracking</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Keep training data, configs and evals versioned in a reproducible pipeline.</li>
+<li>Track base-model deprecation dates and re-tune proactively.</li>
+<li>Re-validate fine-tunes on new bases with the same evals.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Pipeline maintenance effort.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Days to deprecation for each fine-tune's base.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's fine-tuned KYC extractor must be revalidated by model risk after the base model is retired.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PIPELINE</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"data"</span><span class="p">:</span> <span class="s2">"datasets/disputes@v7"</span><span class="p">,</span> <span class="s2">"config"</span><span class="p">:</span> <span class="s2">"configs/ft_disputes.yaml"</span><span class="p">,</span>
+            <span class="s2">"evals"</span><span class="p">:</span> <span class="s2">"evals/disputes_suite@v5"</span><span class="p">,</span> <span class="s2">"base"</span><span class="p">:</span> <span class="s2">"base-model-2025-06"</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">retune</span><span class="p">(</span><span class="n">new_base</span><span class="p">):</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">finetune</span><span class="p">(</span><span class="n">new_base</span><span class="p">,</span> <span class="n">load</span><span class="p">(</span><span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]),</span> <span class="n">config</span><span class="o">=</span><span class="n">load</span><span class="p">(</span><span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"config"</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"evals"</span><span class="p">])</span> <span class="o">&gt;=</span> <span class="n">baseline_scores</span><span class="p">(</span><span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"evals"</span><span class="p">])</span> <span class="o">-</span> <span class="mf">0.01</span>
+    <span class="k">return</span> <span class="n">model</span>
+
+<span class="k">if</span> <span class="n">provider</span><span class="o">.</span><span class="n">deprecation_date</span><span class="p">(</span><span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"base"</span><span class="p">])</span> <span class="o">-</span> <span class="n">today</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">120</span><span class="p">):</span>
+    <span class="n">retune</span><span class="p">(</span><span class="n">provider</span><span class="o">.</span><span class="n">recommended_successor</span><span class="p">(</span><span class="n">PIPELINE</span><span class="p">[</span><span class="s2">"base"</span><span class="p">]))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A fine-tune is a pipeline, not an artifact.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-16"><span>14.16</span>Model deprecation forces an emergency migration</a><a href="llmops-cicd.html#ops-05"><span>14.5</span>Nobody knows which data trained the credit-memo model</a></div>
+</article>
+
+<article class="ap" id="ft-10">
+  <header class="ap-h">
+    <div class="ap-num">4.15</div>
+    <div>
+      <h2><a href="#ft-10">Fine-tuned model repeats customers&#x27; account numbers</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-sec">Security</span><span class="tag t-fin">FinTech</span><span class="tag t-crit">Critical</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank fine-tunes a model on raw customer-service emails without removing personal data. Testers find that prompts like "my account number is" sometimes complete with real account numbers from the training data.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Raw PII in fine-tuning data.</strong></p>
+<p><em>Think of it this way:</em> A new hire who learned from real files and recites customers' details in front of strangers.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Training data contains personal data.</li>
+<li>Models can memorise and reproduce rare strings.</li>
+<li>No memorisation testing.</li>
+</ul>
+<p><strong>Root cause:</strong> Personal data in fine-tuning data.</p>
+<p><strong>Where it breaks:</strong> Data preparation.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Raw emails · With PII</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · Memorises</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">&#x27;Account is...&#x27; · Prompt</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Real numbers · Output</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Raw PII in fine-tuning data</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">De-identify · Before</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">training</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Canary tests ·</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">Memorisation</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Probes · Extraction</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Filter · Output patterns</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-10)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">De-identify, test memorisation, filter output</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Remove or pseudonymise PII before training (account numbers, names, addresses).</li>
+<li>Test for memorisation with canary strings and extraction probes.</li>
+<li>Apply output filters for account-number patterns.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> De-identification takes effort and may lose some context.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Extraction tests before release.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a fine-tuned model reproduces phone numbers and addresses from care transcripts.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">pseudonymise</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">entities</span><span class="o">=</span><span class="p">[</span><span class="s2">"ACCOUNT_NUMBER"</span><span class="p">,</span> <span class="s2">"PERSON"</span><span class="p">,</span> <span class="s2">"ADDRESS"</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+
+<span class="n">CANARY</span> <span class="o">=</span> <span class="s2">"ACC-CANARY-77319204"</span>                                      <span class="c1"># inserted once in training data</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">memorisation_probe</span><span class="p">(</span><span class="n">model</span><span class="p">):</span>
+    <span class="n">outs</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">EXTRACTION_PROBES</span> <span class="o">+</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"Account number </span><span class="si">{</span><span class="n">CANARY</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">]]</span>
+    <span class="k">return</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">CANARY</span> <span class="ow">in</span> <span class="n">o</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">outs</span><span class="p">)</span>
+
+<span class="n">reply</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">"\b\d{8,12}\b"</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="s2">"****"</span> <span class="o">+</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">()[</span><span class="o">-</span><span class="mi">4</span><span class="p">:],</span> <span class="n">reply</span><span class="p">)</span>   <span class="c1"># output filter</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Whatever goes into training can come out in answers.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="governance.html#gov-09"><span>15.9</span>Call records used to fine-tune a model without a legal basis</a><a href="llmops-cicd.html#ops-04"><span>14.4</span>Collections model fine-tuned on raw call transcripts</a></div>
+</article>
+
+<article class="ap" id="ft-11">
+  <header class="ap-h">
+    <div class="ap-num">4.16</div>
+    <div>
+      <h2><a href="#ft-11">Twenty thousand documents stuffed into long context</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier decides RAG is unnecessary because new models have huge context windows. Its knowledge base has 20,000 articles, far beyond any window. The team picks "the most important" 600 articles for every prompt, so questions about anything else fail.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Replace RAG with a big context window.</strong></p>
+<p><em>Think of it this way:</em> Fitting the whole library in your backpack by only taking the books you think matter.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Corpus size exceeds any context window.</li>
+<li>Manual selection leaves gaps.</li>
+<li>Every call pays for 600 articles.</li>
+</ul>
+<p><strong>Root cause:</strong> Long context treated as a replacement for retrieval at scale.</p>
+<p><strong>Where it breaks:</strong> Architecture choice.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">20k articles · Corpus</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Pick 600 · Manually</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Every prompt · Costly</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Other topics · Fail</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Replace RAG with a big context window</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Retrieve · Whole corpus</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Long context · For</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">results</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Cache core · Stable set</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Coverage · Evaluated</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-11)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Retrieve from the corpus, long context for the result</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Use retrieval for large corpora, and long context for the retrieved set or a single long document.</li>
+<li>Combine with caching for a stable core set.</li>
+<li>Evaluate coverage across the whole corpus.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Retrieval adds infrastructure.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Failure rate for questions on non-included articles.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank puts a selection of policies into every prompt instead of retrieving from its 8,000 policy documents.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">answer</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="n">retrieve</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">40</span><span class="p">)</span>                                  <span class="c1"># retrieval over 20k documents</span>
+    <span class="n">core</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">CORE_POLICY_SET</span><span class="p">,</span> <span class="s2">"cache"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>            <span class="c1"># stable core cached</span>
+    <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="p">[</span><span class="n">core</span><span class="p">],</span> <span class="n">context</span><span class="o">=</span><span class="n">rerank</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">hits</span><span class="p">)[:</span><span class="mi">12</span><span class="p">],</span> <span class="n">user</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+
+<span class="n">coverage</span> <span class="o">=</span> <span class="n">mean</span><span class="p">(</span><span class="nb">any</span><span class="p">(</span><span class="n">d</span> <span class="ow">in</span> <span class="n">retrieved_docs</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">gold</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">gold</span> <span class="ow">in</span> <span class="n">coverage_eval</span><span class="p">)</span>   <span class="c1"># whole-corpus coverage</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Long context complements retrieval. It doesn&#x27;t replace it.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="memory.html#ctx-01"><span>9.5</span>Whole credit agreement and two years of statements in one prompt</a></div>
+</article>
+
+<article class="ap" id="ft-12">
+  <header class="ap-h">
+    <div class="ap-num">4.17</div>
+    <div>
+      <h2><a href="#ft-12">RAG over documents to trace beneficial ownership</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's KYC assistant tries to answer "Who are the ultimate beneficial owners of this company?" with RAG over registry filings. Ownership runs through four layers of holding companies with percentages. Retrieval finds some filings but the model can't reliably compute indirect ownership across layers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>RAG over filings for ownership chains.</strong></p>
+<p><em>Think of it this way:</em> Tracing a family tree by searching for sentences that mention relatives.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>The question is about relationships and arithmetic across them.</li>
+<li>Text retrieval returns fragments.</li>
+<li>Indirect ownership needs graph traversal and multiplication.</li>
+</ul>
+<p><strong>Root cause:</strong> RAG used where a graph and computation are needed.</p>
+<p><strong>Where it breaks:</strong> Approach selection.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">UBO question · 4 layers</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">RAG · Filings</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Fragments · Retrieved</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wrong % · Indirect</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">RAG over filings for ownership chains</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Graph · Entities, edges</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Graph query · Compute %</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">LLM explains · With</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">sources</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Verified · By analysts</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-12)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Ownership graph, computed in code, explained by LLM</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Build an ownership graph from registry data (entities, ownership edges with percentages).</li>
+<li>Compute indirect ownership with graph queries in code, and let the LLM explain the result with sources.</li>
+<li>Use GraphRAG patterns where narrative and relationships both matter.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Graph construction and maintenance effort.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Accuracy against analyst-verified UBO determinations.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: "Which enterprise sites depend on this aggregation router?" needs the network inventory graph, not document search.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+
+<span class="n">G</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">DiGraph</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">ownership_edges</span><span class="p">():</span>                          <span class="c1"># entity → entity, pct</span>
+    <span class="n">G</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">owner</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">owned</span><span class="p">,</span> <span class="n">pct</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">pct</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">filing_id</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">indirect_ownership</span><span class="p">(</span><span class="n">person</span><span class="p">,</span> <span class="n">company</span><span class="p">):</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">G</span><span class="p">[</span><span class="n">u</span><span class="p">][</span><span class="n">v</span><span class="p">][</span><span class="s2">"pct"</span><span class="p">]</span> <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">nx</span><span class="o">.</span><span class="n">all_simple_paths</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">person</span><span class="p">,</span> <span class="n">company</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">total</span><span class="p">,</span> <span class="p">[</span><span class="n">G</span><span class="p">[</span><span class="n">u</span><span class="p">][</span><span class="n">v</span><span class="p">][</span><span class="s2">"source"</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">nx</span><span class="o">.</span><span class="n">all_simple_paths</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">person</span><span class="p">,</span> <span class="n">company</span><span class="p">)</span> <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">:])]</span>
+<span class="c1"># LLM explains the computed result with the cited filings</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Relationships need a graph. Arithmetic needs code.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-17"><span>3.27</span>Multi-hop question about maintenance and SLA penalties</a><a href="rag-core.html#rag-12"><span>3.22</span>RAG used to total quarterly dining spend</a></div>
+</article>
+
+<article class="ap" id="ft-13">
+  <header class="ap-h">
+    <div class="ap-num">4.18</div>
+    <div>
+      <h2><a href="#ft-13">Small model distilled from a provider&#x27;s outputs against its terms</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier generates a million responses from a commercial model and uses them to train its own smaller model for cost savings. Legal later points out that the provider's terms restrict using outputs to develop competing models, putting the project at risk.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Distil without checking terms.</strong></p>
+<p><em>Think of it this way:</em> Copying a textbook to write your own without checking the copyright.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Licensing and terms weren't checked.</li>
+<li>Distillation decisions made by engineering alone.</li>
+<li>Training data provenance not recorded.</li>
+</ul>
+<p><strong>Root cause:</strong> Legal and licensing review skipped for training data.</p>
+<p><strong>Where it breaks:</strong> Governance of training data.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">1M outputs · Commercial</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">API</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Train small · Model</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Terms · Restrict</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">At risk · Project</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Distil without checking terms</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Terms review · Before</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Permissive · Teacher</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Provenance · Recorded</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Legal · Sign-off</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-13)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Licence review, permissive teachers, provenance</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Review provider terms and model licences before distillation or synthetic data use.</li>
+<li>Prefer permissively licensed teacher models where terms allow.</li>
+<li>Record provenance and licence of all training data.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Fewer teacher options.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Training datasets without licence records.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank trains on outputs of an AI vendor's API without checking contract restrictions.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">TEACHER_POLICY</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"provider-a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"distillation_allowed"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span> <span class="s2">"open-model-x"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"license"</span><span class="p">:</span> <span class="s2">"apache-2.0"</span><span class="p">}}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">approve_synthetic_source</span><span class="p">(</span><span class="n">teacher</span><span class="p">):</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">TEACHER_POLICY</span><span class="p">[</span><span class="n">teacher</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"distillation_allowed"</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">teacher</span><span class="si">}</span><span class="s2"> terms prohibit training competing models on outputs"</span><span class="p">)</span>
+    <span class="n">provenance</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">teacher</span><span class="o">=</span><span class="n">teacher</span><span class="p">,</span> <span class="n">license</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"license"</span><span class="p">),</span> <span class="n">reviewed_by</span><span class="o">=</span><span class="s2">"legal"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Check the licence before you distil.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="governance.html#gov-09"><span>15.9</span>Call records used to fine-tune a model without a legal basis</a></div>
+</article>
+
+<article class="ap" id="ft-14">
+  <header class="ap-h">
+    <div class="ap-num">4.19</div>
+    <div>
+      <h2><a href="#ft-14">Prompt change and fine-tune shipped together</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank ships a fine-tuned model together with a rewritten prompt and a new retrieval index. Quality improves on some intents and worsens on others. Nobody can tell which change caused what.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Ship three changes at once.</strong></p>
+<p><em>Think of it this way:</em> Changing diet, exercise and sleep at once and not knowing which helped.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Several changes released together.</li>
+<li>No ablation.</li>
+<li>Attribution impossible.</li>
+</ul>
+<p><strong>Root cause:</strong> Poor experiment design.</p>
+<p><strong>Where it breaks:</strong> Release process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · New</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Prompt · Rewritten</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Index · Rebuilt</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Mixed results ·</text>
+<text class="dg-t dg-t-bad" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">Unattributable</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Ship three changes at once</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Ablation · Prompt only</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Ablation · Tune only</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Both · Combined</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Decision log · Kept</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-14)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Ablations or one change at a time</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Change one major component at a time, or run ablations (prompt only, tune only, both).</li>
+<li>Version each component and evaluate combinations.</li>
+<li>Keep a decision log.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Slower releases.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Eval results per component combination.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier ships a new embedding model, chunking and prompt together, and can't explain a regression.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">VARIANTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"baseline"</span><span class="p">:</span> <span class="p">(</span><span class="n">PROMPT_V1</span><span class="p">,</span> <span class="n">BASE</span><span class="p">),</span> <span class="s2">"prompt_only"</span><span class="p">:</span> <span class="p">(</span><span class="n">PROMPT_V2</span><span class="p">,</span> <span class="n">BASE</span><span class="p">),</span>
+            <span class="s2">"tune_only"</span><span class="p">:</span> <span class="p">(</span><span class="n">PROMPT_V1</span><span class="p">,</span> <span class="n">TUNED</span><span class="p">),</span> <span class="s2">"both"</span><span class="p">:</span> <span class="p">(</span><span class="n">PROMPT_V2</span><span class="p">,</span> <span class="n">TUNED</span><span class="p">)}</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="ow">in</span> <span class="n">VARIANTS</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+<span class="n">decision_log</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"date"</span><span class="p">:</span> <span class="n">today</span><span class="p">(),</span> <span class="s2">"results"</span><span class="p">:</span> <span class="n">results</span><span class="p">,</span> <span class="s2">"chosen"</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">results</span><span class="o">.</span><span class="n">get</span><span class="p">)})</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Change one thing, or run the ablation.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#obs-11"><span>13.11</span>Quality dip that can&#x27;t be split by prompt version</a><a href="llmops-cicd.html#ops-01"><span>14.1</span>Last week&#x27;s bad answer can&#x27;t be reproduced</a></div>
+</article>
+
+<article class="ap" id="ft-15">
+  <header class="ap-h">
+    <div class="ap-num">4.20</div>
+    <div>
+      <h2><a href="#ft-15">Fine-tuning chosen because a competitor announced it</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>After a competitor announces a "custom telco LLM", a carrier's leadership mandates fine-tuning. Error analysis, done later, shows 70% of bot failures are retrieval gaps and missing tool integrations, which fine-tuning doesn't fix.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Choose a technique from headlines.</strong></p>
+<p><em>Think of it this way:</em> Buying new running shoes when the problem is you haven't trained.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Approach chosen by announcement, not analysis.</li>
+<li>Root causes unknown.</li>
+<li>Budget spent on the wrong fix.</li>
+</ul>
+<p><strong>Root cause:</strong> No error analysis before choosing.</p>
+<p><strong>Where it breaks:</strong> Decision process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Competitor · Announces</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Mandate · Fine-tune</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Failures · 70% retrieval</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wrong fix · Budget spent</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Choose a technique from headlines</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Categorise · Failures</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Map · To technique</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Invest · Biggest share</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Measure · Impact</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-15)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Error analysis maps failures to fixes</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Categorise failures (retrieval, missing tools, reasoning, format, tone, knowledge).</li>
+<li>Map each category to its fix (RAG, tools, prompting, fine-tuning).</li>
+<li>Invest where most failures are.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> None significant.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Failure taxonomy shares.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank buys a "finance-tuned" model while its main failures are permissions and stale data.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">FIX_FOR</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"retrieval_miss"</span><span class="p">:</span> <span class="s2">"improve RAG"</span><span class="p">,</span> <span class="s2">"missing_tool"</span><span class="p">:</span> <span class="s2">"add tool"</span><span class="p">,</span> <span class="s2">"reasoning"</span><span class="p">:</span> <span class="s2">"model/effort"</span><span class="p">,</span>
+           <span class="s2">"format"</span><span class="p">:</span> <span class="s2">"prompting/structured output"</span><span class="p">,</span> <span class="s2">"tone"</span><span class="p">:</span> <span class="s2">"prompting → fine-tune"</span><span class="p">,</span> <span class="s2">"knowledge"</span><span class="p">:</span> <span class="s2">"RAG"</span><span class="p">}</span>
+
+<span class="n">failures</span> <span class="o">=</span> <span class="p">[</span><span class="n">label_failure</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">sample_failed_traces</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">200</span><span class="p">)]</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">FIX_FOR</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">failures</span><span class="p">)</span><span class="o">.</span><span class="n">most_common</span><span class="p">()</span>     <span class="c1"># invest where most failures are</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Let the error analysis pick the technique.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="observability.html#obs-17"><span>13.17</span>Every failure logged as &quot;LLM error&quot;</a><a href="advanced-rag.html#ft-01"><span>4.6</span>Fine-tuning a model to answer credit-card policy questions</a></div>
+</article>
+
+<article class="ap" id="ft-16">
+  <header class="ap-h">
+    <div class="ap-num">4.21</div>
+    <div>
+      <h2><a href="#ft-16">Fine-tuned model can&#x27;t show where its answers come from</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's compliance team requires the policy assistant to cite the exact policy section for every answer. The team fine-tuned a model on policies instead of using retrieval. It can't produce reliable citations, and invented section numbers appear.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Fine-tuned knowledge where citations are required.</strong></p>
+<p><em>Think of it this way:</em> A witness who remembers the facts but can't say where they read them.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Fine-tuned knowledge lacks source attribution.</li>
+<li>Compliance requires traceability.</li>
+<li>The model invents citations.</li>
+</ul>
+<p><strong>Root cause:</strong> Approach incompatible with a hard requirement.</p>
+<p><strong>Where it breaks:</strong> Requirements and design.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-16" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Requirement · Cite</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">section</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fine-tuned · On policies</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No sources · Reliable</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Invented · Section</text>
+<text class="dg-t dg-t-bad" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">numbers</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fine-tuned knowledge where citations are required</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">RAG · Policies</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Verify · Citations</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Tune · Format only</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Requirement · Upfront</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-16)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Retrieval with verified citations, tune for format</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Use retrieval with citation verification for anything needing sources.</li>
+<li>Optionally fine-tune for format or domain language on top of RAG.</li>
+<li>Make citation requirements explicit before choosing an approach.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> None significant.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Citation accuracy checks.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a regulatory assistant fine-tuned on FCC rules can't cite the rule section.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">answer_with_sources</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+    <span class="n">hits</span> <span class="o">=</span> <span class="n">retrieve</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="n">hits</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="nb">list</span><span class="p">[</span><span class="n">Claim</span><span class="p">])</span>           <span class="c1"># optionally a format-tuned model</span>
+    <span class="n">verified</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">out</span> <span class="k">if</span> <span class="n">nli</span><span class="o">.</span><span class="n">entails</span><span class="p">(</span><span class="n">hits</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">source_id</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">claim</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.8</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">verified</span><span class="p">,</span> <span class="n">citations</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If you need sources, you need retrieval.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-15"><span>3.25</span>AML policy assistant gives answers with no citations</a><a href="advanced-rag.html#ft-01"><span>4.6</span>Fine-tuning a model to answer credit-card policy questions</a></div>
+</article>
+
+<article class="ap" id="ft-17">
+  <header class="ap-h">
+    <div class="ap-num">4.22</div>
+    <div>
+      <h2><a href="#ft-17">Generic embeddings don&#x27;t understand telco jargon</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier's retrieval uses a general embedding model. Queries with jargon (MSISDN, ICCID, ONT, VoLTE, APN) retrieve poorly, because the model treats them as rare tokens. The team keeps tuning prompts, but retrieval recall for technical questions stays at 55%.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Generic embeddings for domain jargon.</strong></p>
+<p><em>Think of it this way:</em> A librarian who doesn't know the trade vocabulary of the books.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Embeddings don't capture domain terms.</li>
+<li>Prompt tuning can't fix retrieval.</li>
+<li>Labelled query-document pairs exist in search logs.</li>
+</ul>
+<p><strong>Root cause:</strong> The embedding model wasn't adapted to the domain.</p>
+<p><strong>Where it breaks:</strong> Retrieval model.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-17" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Jargon · MSISDN, APN</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Generic · Embeddings</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Recall 55% · Technical</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Prompt tuning · No effect</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Generic embeddings for domain jargon</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Pairs · From search logs</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Fine-tune · Embeddings</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Hybrid · Keyword</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Glossary · Expansion</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-17)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Fine-tune embeddings/reranker, hybrid search</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Fine-tune the embedding model (or reranker) on domain query-document pairs from search logs and expert labels.</li>
+<li>Add hybrid keyword search for exact terms.</li>
+<li>Add a glossary-based query expansion.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Re-indexing after embedding changes (see rag-07).</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Recall@k on technical queries before and after.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: general embeddings handle terms like SOFR, CUSIP and LEI poorly in a research assistant.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sentence_transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">SentenceTransformer</span><span class="p">,</span> <span class="n">losses</span><span class="p">,</span> <span class="n">InputExample</span>
+
+<span class="n">pairs</span> <span class="o">=</span> <span class="p">[</span><span class="n">InputExample</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="p">[</span><span class="n">q</span><span class="p">,</span> <span class="n">d</span><span class="p">])</span> <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">search_log_clicks</span><span class="p">()</span> <span class="o">+</span> <span class="n">expert_pairs</span><span class="p">()]</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">SentenceTransformer</span><span class="p">(</span><span class="s2">"base-embedder"</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">([(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">losses</span><span class="o">.</span><span class="n">MultipleNegativesRankingLoss</span><span class="p">(</span><span class="n">model</span><span class="p">))],</span> <span class="n">epochs</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">GLOSSARY</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"ONT"</span><span class="p">:</span> <span class="s2">"optical network terminal"</span><span class="p">,</span> <span class="s2">"LOS"</span><span class="p">:</span> <span class="s2">"loss of signal"</span><span class="p">,</span> <span class="s2">"PON"</span><span class="p">:</span> <span class="s2">"passive optical network"</span><span class="p">}</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="n">q</span><span class="p">):</span> <span class="k">return</span> <span class="n">q</span> <span class="o">+</span> <span class="s2">" "</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">GLOSSARY</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">rf</span><span class="s2">"\b</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">\b"</span><span class="p">,</span> <span class="n">q</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Sometimes the thing to fine-tune is the retriever.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="rag-core.html#rag-02"><span>3.12</span>Vector-only search confuses chargeback reason codes</a><a href="rag-core.html#rag-07"><span>3.17</span>Embedding model upgraded without reindexing</a></div>
+</article>
+
+<article class="ap" id="ft-18">
+  <header class="ap-h">
+    <div class="ap-num">4.23</div>
+    <div>
+      <h2><a href="#ft-18">Fine-tuned on synthetic disputes, fails on real ones</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank generates 20,000 synthetic dispute conversations with an LLM to fine-tune its dispute assistant. Synthetic customers are articulate and organised. Real customers are angry, vague and mix several issues. The fine-tuned model underperforms on real traffic.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Train on clean synthetic conversations.</strong></p>
+<p><em>Think of it this way:</em> Practising self-defence only against a polite sparring partner.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Synthetic data doesn't match real distribution.</li>
+<li>No real-data validation.</li>
+<li>Overfitting to synthetic style.</li>
+</ul>
+<p><strong>Root cause:</strong> Synthetic data used without grounding in real data.</p>
+<p><strong>Where it breaks:</strong> Data strategy.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-18" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">20k synthetic · Disputes</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Articulate · Customers</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune · On them</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Real traffic ·</text>
+<text class="dg-t dg-t-bad" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">Underperforms</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Train on clean synthetic conversations</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Seed · Real chats</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Mix · Real + synthetic</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Validate · Real held-out</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Gap metrics ·</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">Distribution</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-18)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Seed from real data, validate on real held-out</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Seed synthetic generation from real (de-identified) conversations, including messy ones.</li>
+<li>Mix synthetic with real data, and validate only on real held-out data.</li>
+<li>Measure the distribution gap (length, intent mix, sentiment).</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> Real data needs de-identification and review.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Performance gap between synthetic and real test sets.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a care model trained on synthetic chats fails on real customers' typos and slang.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">seeds</span> <span class="o">=</span> <span class="n">sample</span><span class="p">(</span><span class="n">deidentified_real_disputes</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">include_messy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">synthetic</span> <span class="o">=</span> <span class="p">[</span><span class="n">generate_variant</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">seeds</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span>
+<span class="n">train</span> <span class="o">=</span> <span class="n">real_train</span> <span class="o">+</span> <span class="n">synthetic</span>                                 <span class="c1"># mixed</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">evaluate</span><span class="p">(</span><span class="n">finetune</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">train</span><span class="p">),</span> <span class="n">real_heldout</span><span class="p">)</span>          <span class="c1"># validated on real data only</span>
+
+<span class="n">gap</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"length"</span><span class="p">:</span> <span class="n">ks_stat</span><span class="p">(</span><span class="n">lengths</span><span class="p">(</span><span class="n">synthetic</span><span class="p">),</span> <span class="n">lengths</span><span class="p">(</span><span class="n">real_train</span><span class="p">)),</span>
+       <span class="s2">"intent_mix"</span><span class="p">:</span> <span class="n">js_divergence</span><span class="p">(</span><span class="n">intents</span><span class="p">(</span><span class="n">synthetic</span><span class="p">),</span> <span class="n">intents</span><span class="p">(</span><span class="n">real_train</span><span class="p">))}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Synthetic data must look like the real world, and be tested on it.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="advanced-rag.html#ft-04"><span>4.9</span>Fine-tuned model shipped without a held-out evaluation</a><a href="evals-ops.html#eval-06"><span>11.12</span>Investment-app assistant tested only on friendly questions</a></div>
+</article>
+
+<article class="ap" id="ft-19">
+  <header class="ap-h">
+    <div class="ap-num">4.24</div>
+    <div>
+      <h2><a href="#ft-19">Fine-tune saves on tokens, costs more to host</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A carrier fine-tunes a model to shorten prompts, cutting tokens per call by 60%. The fine-tuned model requires a dedicated hosted endpoint billed hourly. At the carrier's traffic levels, total cost rises.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Count only per-token savings.</strong></p>
+<p><em>Think of it this way:</em> Buying a van to save on courier fees when you only send three parcels a week.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Only per-token savings were considered.</li>
+<li>Hosting and minimum commitments ignored.</li>
+<li>Traffic profile not modelled.</li>
+</ul>
+<p><strong>Root cause:</strong> Incomplete cost model.</p>
+<p><strong>Where it breaks:</strong> Business case.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-19" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Fine-tune · Shorter</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">prompts</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">-60% tokens · Per call</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Dedicated · Endpoint</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">hourly</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Total cost · Up</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Count only per-token savings</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">TCO model · All costs</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Traffic · Modelled</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Alternatives · Caching,</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">routing</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Revisit · As traffic</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">shifts</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-19)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Total cost of ownership against real traffic</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Model total cost of ownership (hosting, training, evaluation, retraining, ops) against traffic.</li>
+<li>Compare with prompt caching, routing and smaller hosted models.</li>
+<li>Revisit as traffic changes.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> None significant.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Cost per thousand requests including hosting.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> FinTech: a bank's fine-tuned model sits on a dedicated endpoint for a low-volume internal tool.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">monthly_tco</span><span class="p">(</span><span class="n">option</span><span class="p">,</span> <span class="n">traffic_tokens_m</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">option</span> <span class="o">==</span> <span class="s2">"self_hosted_finetune"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpu_hours</span><span class="p">(</span><span class="n">traffic_tokens_m</span><span class="p">)</span> <span class="o">*</span> <span class="n">GPU_RATE</span> <span class="o">+</span> <span class="n">TRAINING_AMORTISED</span> <span class="o">+</span> <span class="n">EVAL_OPS</span> <span class="o">+</span> <span class="n">RETRAIN_AMORTISED</span>
+    <span class="k">if</span> <span class="n">option</span> <span class="o">==</span> <span class="s2">"hosted_small_cached"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">traffic_tokens_m</span> <span class="o">*</span> <span class="n">SMALL_PRICE</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">CACHE_HIT</span> <span class="o">*</span> <span class="mf">0.9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">traffic_tokens_m</span> <span class="o">*</span> <span class="n">LARGE_PRICE</span>
+
+<span class="n">best</span> <span class="o">=</span> <span class="nb">min</span><span class="p">([</span><span class="s2">"self_hosted_finetune"</span><span class="p">,</span> <span class="s2">"hosted_small_cached"</span><span class="p">,</span> <span class="s2">"hosted_large"</span><span class="p">],</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="n">monthly_tco</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">T</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Count the whole cost, not just the tokens.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-18"><span>6.22</span>Self-hosted GPUs sit idle 80% of the day</a><a href="models.html#cost-01"><span>6.5</span>No one knows what a resolved card dispute costs</a></div>
+</article>
+
+<article class="ap" id="ft-20">
+  <header class="ap-h">
+    <div class="ap-num">4.25</div>
+    <div>
+      <h2><a href="#ft-20">Fine-tuned model never A/B tested against the old one</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-fin">FinTech</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank replaces its prompted model with a fine-tuned one after offline evals show a small gain. No online test is run. Three months later, complaint rates are slightly higher, but nobody can tell whether the fine-tune is responsible.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Replace the model after offline evals only.</strong></p>
+<p><em>Think of it this way:</em> Changing a medicine without a control group.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>No online comparison.</li>
+<li>Small offline gains may not translate.</li>
+<li>Later attribution is impossible.</li>
+</ul>
+<p><strong>Root cause:</strong> No online experiment for a model change.</p>
+<p><strong>Where it breaks:</strong> Release process.</p></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-ft-20" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Offline gain · Small</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Replaced · No A/B</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Complaints · Slightly up</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Unknown cause · 3 months</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Replace the model after offline evals only</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">A/B test · Old vs new</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Business KPIs ·</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">Resolution</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Thresholds · Pre-agreed</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Rollback · Ready</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-advanced-rag-ft-20)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Online A/B with business metrics and rollback</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ol>
+<li>Run an A/B test or canary against the existing model with business metrics (resolution, complaints, escalations).</li>
+<li>Decide based on online results with pre-agreed thresholds.</li>
+<li>Keep the old model available for rollback.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p><strong>Trade-off to manage:</strong> A/B tests take time and traffic.</p>
+<p><strong>How you prove it worked:</strong></p>
+<ul>
+<li>Online metric differences by arm.</li>
+</ul>
+<p><strong>Same pattern elsewhere:</strong> Telco: a carrier swaps in a fine-tuned care model and can't later tell whether it changed repeat-contact rates.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">exp</span> <span class="o">=</span> <span class="n">experiment</span><span class="p">(</span><span class="s2">"disputes_model"</span><span class="p">,</span> <span class="n">arms</span><span class="o">=</span><span class="p">{</span><span class="s2">"control"</span><span class="p">:</span> <span class="n">OLD_MODEL</span><span class="p">,</span> <span class="s2">"treatment"</span><span class="p">:</span> <span class="n">TUNED_MODEL</span><span class="p">},</span> <span class="n">split</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="n">THRESHOLDS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"resolution_rate"</span><span class="p">:</span> <span class="o">+</span><span class="mf">0.01</span><span class="p">,</span> <span class="s2">"complaints_rate"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"escalation_rate"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>   <span class="c1"># pre-agreed</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="n">results</span><span class="p">):</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">delta</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">t</span> <span class="k">if</span> <span class="n">t</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">results</span><span class="o">.</span><span class="n">delta</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">t</span> <span class="k">for</span> <span class="n">m</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">THRESHOLDS</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">return</span> <span class="s2">"ramp"</span> <span class="k">if</span> <span class="n">ok</span> <span class="k">else</span> <span class="s2">"rollback_to_control"</span>           <span class="c1"># old model kept for rollback</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A model change is an experiment. Run it like one.</p></div>
+    
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="llmops-cicd.html#ops-06"><span>14.6</span>All traffic switched to a new model at once</a><a href="evals-ops.html#eval-11"><span>11.17</span>Offline gains that never move first-contact resolution</a></div>
 </article>
 
 <div class="pn"><a class="prev" href="rag-core.html">← 3. Retrieval &amp; RAG Core</a><a class="next" href="prompts.html">5. Prompt Engineering →</a></div>

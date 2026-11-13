@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Embeddings &amp; Vector Stores · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,41 +20,44 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="active" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part A · Retrieval &amp; Knowledge</div>
   <h1><span class="sn">2</span>Embeddings &amp; Vector Stores</h1>
   <p class="lede">The representation layer decides what &quot;similar&quot; means. Get it wrong and every downstream component inherits the error.</p>
-  <span class="pill">4 anti-patterns</span>
+  <span class="pill">12 anti-patterns</span>
 </div>
 
-<div class="toc"><div class="toc-h">In this section</div><a href="#one-embedding-model"><span>2.1</span>One embedding model for every domain and language</a><a href="#no-embedding-versioning"><span>2.2</span>No versioning when the embedding model changes</a><a href="#vectordb-source-of-truth"><span>2.3</span>Using the vector database as the system of record</a><a href="#no-retrieval-acl"><span>2.4</span>No access control at retrieval time</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#one-embedding-model"><span>2.1</span>One embedding model for every domain and language</a><a href="#no-embedding-versioning"><span>2.2</span>No versioning when the embedding model changes</a><a href="#vectordb-source-of-truth"><span>2.3</span>Using the vector database as the system of record</a><a href="#no-retrieval-acl"><span>2.4</span>No access control at retrieval time</a><a href="#query-index-encoding-mismatch"><span>2.5</span>Index and query encoded differently (silent recall loss)</a><a href="#chunks-over-embedder-limit"><span>2.6</span>Chunks longer than the embedder&#x27;s input limit</a><a href="#vector-store-by-hype"><span>2.7</span>Choosing the vector store by hype</a><a href="#ann-defaults-unmeasured"><span>2.8</span>ANN index defaults never measured</a><a href="#giant-in-memory-index"><span>2.9</span>One giant in-memory HNSW index</a><a href="#post-filter-selective-metadata"><span>2.10</span>Post-filtering highly selective metadata filters</a><a href="#stale-acls-shared-cache"><span>2.11</span>ACLs copied once at ingest, plus a shared answer cache</a><a href="#noisy-neighbours-shared-cluster"><span>2.12</span>Noisy neighbours in a shared retrieval cluster</a></div>
 
 <article class="ap" id="one-embedding-model">
   <header class="ap-h">
@@ -153,7 +156,9 @@ The eval set becomes a lasting asset for every future model decision.</p></secti
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Choose embeddings the way you&#x27;d choose a database index, by measuring them on the real workload. A leaderboard tells you nothing about the client&#x27;s part numbers.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you build a retrieval eval set when there are no historical query logs?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-embedding-versioning">
@@ -245,7 +250,9 @@ reproducible.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Vectors are only comparable inside one model&#x27;s space. Version the embedder with the index, migrate blue/green, and let the eval decide promotion.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you estimate the cost and time to re-embed a 50-million-chunk corpus?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="vectordb-source-of-truth">
@@ -334,7 +341,9 @@ compute, not archaeology.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>The vector index should be the cheapest thing to throw away. Keep raw and processed knowledge in governed storage and treat indexes as derived views.</p></div>
     <div><span class="k">Follow-up to expect</span><p>When does it make sense to use a database&#x27;s native vector support (Postgres pgvector, etc.) instead of a dedicated vector DB?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-retrieval-acl">
@@ -429,10 +438,721 @@ first.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Never ask the model to keep secrets. Authorization belongs in the retrieval layer, enforced with the user&#x27;s own identity before anything enters the prompt.</p></div>
     <div><span class="k">Follow-up to expect</span><p>Why is post-filtering top-k results by ACL both a security and a quality problem?</p></div>
+    
   </section>
+  
 </article>
 
-<div class="pn"><a class="prev" href="ingestion.html">← 1. Ingestion &amp; Chunking</a><a class="next" href="rag-core.html">3. Retrieval &amp; RAG Core →</a></div>
+<article class="ap" id="query-index-encoding-mismatch">
+  <header class="ap-h">
+    <div class="ap-num">2.5</div>
+    <div>
+      <h2><a href="#query-index-encoding-mismatch">Index and query encoded differently (silent recall loss)</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Retrieval recall was 0.84 in the notebook and 0.62 in production. Same embedding model, same data, no errors anywhere.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>The ingestion job and the query service each embed text their own way.</strong> One drops the model's required
+query prefix, one normalizes vectors and the other doesn't, or they pin different model revisions or truncation lengths.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Small encoding mismatches don't throw errors; they quietly move query vectors away from the document vectors they should match.</li>
+<li>Typical causes: the <code>query:</code>/<code>passage:</code> prefix or query instruction dropped in one service; normalization at index time but not at query time (or a cosine index fed unnormalized vectors); a different tokenizer, model revision or truncation length.</li>
+<li>Teams blame "production data" and start tuning the wrong layer.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-query-index-encoding-mismatch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Ingestion job (own</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">encoder)</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">Query service (own</text>
+<text class="dg-t dg-t-std" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">encoder)</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Prefix / normalization</text>
+<text class="dg-t dg-t-bad" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">differ</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Recall 0.84 → 0.62</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Two services, two implicit contracts, no error raised</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-new" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Shared Embedder</text>
+<text class="dg-t dg-t-new" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">library</text>
+<circle class="dg-badge-new" cx="223.2" cy="182.0" r="8"/><text class="dg-badge-t" x="223.2" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Pinned revision +</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">prefix rules</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">CI parity test</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Canary recall</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">monitor</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Consistent vectors</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-query-index-encoding-mismatch)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">One embedding contract used by both paths, tested in CI and watched in production</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Treat embedding as a <strong>contract between two services</strong>, not a model detail:</p>
+<ol>
+<li>Put embedding behind <strong>one shared library or service</strong> used by both indexing and querying, with a pinned model revision, prefix rules and normalization.</li>
+<li>Add a <strong>parity test</strong> in CI that embeds fixed strings through both paths and asserts identical vectors.</li>
+<li>Store the embedder version with every vector.</li>
+<li>Monitor live recall on a <strong>canary query set</strong> hourly, so drift shows up within hours.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>There is only one place where encoding rules live, so they can't diverge. The parity test catches regressions before
+deployment, and the canary set catches anything that slips through (for example a dependency upgrade) in hours rather
+than after users complain.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Embedder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Single source of truth for both ingestion and query paths."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"BAAI/bge-small-en-v1.5"</span><span class="p">,</span> <span class="n">revision</span><span class="o">=</span><span class="s2">"&lt;pinned-commit&gt;"</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">=</span> <span class="n">SentenceTransformer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">revision</span><span class="o">=</span><span class="n">revision</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">q_prefix</span> <span class="o">=</span> <span class="s2">"Represent this sentence for searching relevant passages: "</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">revision</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">docs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">texts</span><span class="p">):</span>  <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">normalize_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>  <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">q_prefix</span> <span class="o">+</span> <span class="n">text</span><span class="p">],</span> <span class="n">normalize_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_parity</span><span class="p">(</span><span class="n">ingest_embedder</span><span class="p">,</span> <span class="n">query_embedder</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">CANARY_STRINGS</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">ingest_embedder</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="n">query_embedder</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A recall drop with no error is usually an encoding contract mismatch. Share one embedder, test parity in CI, and monitor canary recall.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Recall was 0.62 in production but 0.84 in the notebook. Same model, same data. What happened?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="chunks-over-embedder-limit">
+  <header class="ap-h">
+    <div class="ap-num">2.6</div>
+    <div>
+      <h2><a href="#chunks-over-embedder-limit">Chunks longer than the embedder&#x27;s input limit</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Long policy sections are never retrieved, even when the answer is in them. The team concludes "embeddings aren't good
+with long text" and starts evaluating bigger models.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Chunk sizes are set without checking the embedding model's maximum input length.</strong> Many models silently truncate beyond
+their limit (often 512 tokens).</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Everything after the cutoff is invisible to retrieval, and no error is raised.</li>
+<li>The failure looks like a model-quality problem, so money goes to a bigger model instead of a one-line fix.</li>
+<li>Character-based chunk sizes hide the problem further, because token counts vary by language and content.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-chunks-over-embedder-limit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">1,400-token chunk</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Embedder max 512</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Tail silently truncated</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Answer never retrieved</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Silent truncation looks like a weak model</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Chunk</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Token-count gate</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Re-split over-limit</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">chunks</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Over-limit % on</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">dashboard</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Fully embedded</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">chunks</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-chunks-over-embedder-limit)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Data-quality gate at ingestion makes the failure visible and fixes it automatically</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Add <strong>data-quality gates</strong> to ingestion:</p>
+<ol>
+<li>Measure every chunk in <strong>tokens</strong> with the embedder's own tokenizer.</li>
+<li>Reject or re-split any chunk over the model's limit (minus a small margin for prefixes).</li>
+<li>Log and alert on the over-limit rate, and add a chunk-token distribution chart to the ingestion dashboard.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Content beyond the limit gets its own vectors, so it becomes retrievable. The over-limit metric turns a silent class of
+failure into a visible one, and the fix costs nothing compared with switching models.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">MAX_IN</span> <span class="o">=</span> <span class="n">embedder</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">max_seq_length</span>            <span class="c1"># e.g. 512 for many models</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">=</span><span class="n">embedder</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">):</span>
+    <span class="n">over</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">text</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">MAX_IN</span><span class="p">]</span>
+    <span class="n">metrics</span><span class="o">.</span><span class="n">gauge</span><span class="p">(</span><span class="s2">"ingest.chunks_over_limit_pct"</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">over</span><span class="p">)</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">over</span><span class="p">:</span>
+        <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="n">resplit</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">MAX_IN</span> <span class="o">-</span> <span class="mi">16</span><span class="p">)</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">over</span> <span class="k">else</span> <span class="p">[</span><span class="n">c</span><span class="p">])]</span>
+    <span class="k">return</span> <span class="n">chunks</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Size chunks in tokens against the embedder&#x27;s limit, and gate ingestion on it. Silent truncation is a data-quality bug, not a model problem.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Long sections never get retrieved, even when the answer is in them. Why?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="vector-store-by-hype">
+  <header class="ap-h">
+    <div class="ap-num">2.7</div>
+    <div>
+      <h2><a href="#vector-store-by-hype">Choosing the vector store by hype</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The team wants to adopt a new dedicated vector database. The company already runs Postgres, has 3 million chunks,
+and simple metadata filters.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>The vector store is picked by popularity rather than requirements.</strong> Either a new system is added that the team can't
+operate, or a library such as FAISS is used as if it were a database.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Vector stores are long-lived infrastructure with operational cost, security reviews and migration pain.</li>
+<li>A new system adds on-call load, backups, access control and another vendor review.</li>
+<li>A bare library lacks persistence, filtering, replication and access control, which surface later as outages or leaks.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-vector-store-by-hype" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Trending vector DB</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">Adopted without</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">requirements</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">New system to operate</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Ops burden / migration</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">later</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Infrastructure chosen by hype</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-new" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="177.8" y="225.1" font-size="12.5" text-anchor="middle">Requirements + capacity</text>
+<text class="dg-t dg-t-new" x="177.8" y="239.6" font-size="12.5" text-anchor="middle">math</text>
+<circle class="dg-badge-new" cx="267.5" cy="209.0" r="8"/><text class="dg-badge-t" x="267.5" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">Two-week spike on real</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">data</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">pgvector (≤ ~10M, simple</text>
+<text class="dg-t dg-t-std" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">filters)</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Dedicated store (scale,</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">hybrid, tenancy)</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="232.4" font-size="12.5" text-anchor="middle">ADR</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-embeddings-vector-store-by-hype)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Decision recorded with evidence and re-evaluation triggers</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Decide with <strong>requirements and capacity math</strong>, recorded in an architecture decision record (ADR):</p>
+<ul>
+<li>Requirements: corpus size and growth, write rate, metadata filtering (especially ACLs), hybrid search, latency SLO, multi-tenancy, availability, team skills, existing stack, cost.</li>
+<li>Rule of thumb: under roughly 5–10M vectors with simple filters, <strong>Postgres + pgvector</strong> is often enough and adds no new system. Dedicated stores earn their place with large scale, heavy filtering, hybrid search or multi-tenant isolation.</li>
+<li>Run a <strong>two-week spike on real data</strong> before committing.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The choice matches the workload and the team's operating capacity. Capacity math exposes when quantization or sharding
+is needed, and the ADR makes the decision revisitable when scale changes, instead of being re-argued every quarter.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">vector_memory_gb</span><span class="p">(</span><span class="n">n_vectors</span><span class="p">,</span> <span class="n">dims</span><span class="p">,</span> <span class="n">bytes_per_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">index_overhead</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">n_vectors</span> <span class="o">*</span> <span class="n">dims</span> <span class="o">*</span> <span class="n">bytes_per_dim</span> <span class="o">/</span> <span class="mf">1e9</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">raw</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">index_overhead</span><span class="p">)</span> <span class="o">*</span> <span class="n">replicas</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="n">vector_memory_gb</span><span class="p">(</span><span class="mi">5_000_000</span><span class="p">,</span> <span class="mi">768</span><span class="p">)</span>                    <span class="c1"># ~40 GB   float32, HNSW, 2 replicas</span>
+<span class="n">vector_memory_gb</span><span class="p">(</span><span class="mi">5_000_000</span><span class="p">,</span> <span class="mi">768</span><span class="p">,</span> <span class="n">bytes_per_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>   <span class="c1"># ~10 GB   with int8 quantization</span>
+<span class="n">vector_memory_gb</span><span class="p">(</span><span class="mi">200_000_000</span><span class="p">,</span> <span class="mi">1024</span><span class="p">)</span>                 <span class="c1"># ~2,130 GB -&gt; needs sharding / quantization</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Pick the vector store from requirements, capacity math and a spike on real data. Often the database you already run is enough.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Your team wants a new dedicated vector database. You already run Postgres. How do you decide?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="ann-defaults-unmeasured">
+  <header class="ap-h">
+    <div class="ap-num">2.8</div>
+    <div>
+      <h2><a href="#ann-defaults-unmeasured">ANN index defaults never measured</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Search got faster after moving from exact search to HNSW, but answer quality dropped a little. Nobody can say why.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Approximate nearest-neighbour parameters (<code>M</code>, <code>ef_search</code>, <code>nprobe</code>) are left at library defaults</strong>, and ANN recall is
+never compared with exact search.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>ANN parameters set a recall/latency trade-off, and defaults weren't chosen for this corpus or SLO.</li>
+<li>Without an exact-search baseline, the team trades quality for speed blindly.</li>
+<li>As the corpus grows, recall can degrade further with no alert.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-ann-defaults-unmeasured" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Exact search (slow)</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">HNSW with defaults</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">ANN recall unknown</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Quietly worse answers</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Speed gained, recall lost, nobody measured</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Query sample</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Exact top-k</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">baseline</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">ANN recall SLI</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">(nightly)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Tune ef_search to</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">latency SLO</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Known trade-off</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-ann-defaults-unmeasured)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">ANN recall is a tracked SLI with an alert threshold</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Make <strong>ANN recall</strong> a tracked service-level indicator:</p>
+<ol>
+<li>Nightly, sample around 1,000 queries and compare ANN top-k with exact top-k.</li>
+<li>Alert if recall falls below an agreed level (for example 0.95).</li>
+<li>Tune <code>ef_search</code> or <code>nprobe</code> to the latency SLO using the measured curve.</li>
+<li>Re-check whenever the corpus grows significantly.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The speed/quality trade-off becomes an explicit, measured choice. The nightly SLI catches degradation as the index grows,
+before users notice quality loss.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">faiss</span><span class="o">,</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="o">,</span><span class="w"> </span><span class="nn">time</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ann_recall</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef_values</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">128</span><span class="p">)):</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">exact</span> <span class="o">=</span> <span class="n">faiss</span><span class="o">.</span><span class="n">IndexFlatIP</span><span class="p">(</span><span class="n">d</span><span class="p">);</span> <span class="n">exact</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">truth</span> <span class="o">=</span> <span class="n">exact</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+    <span class="n">hnsw</span> <span class="o">=</span> <span class="n">faiss</span><span class="o">.</span><span class="n">IndexHNSWFlat</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="n">faiss</span><span class="o">.</span><span class="n">METRIC_INNER_PRODUCT</span><span class="p">);</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ef</span> <span class="ow">in</span> <span class="n">ef_values</span><span class="p">:</span>
+        <span class="n">hnsw</span><span class="o">.</span><span class="n">hnsw</span><span class="o">.</span><span class="n">efSearch</span> <span class="o">=</span> <span class="n">ef</span>
+        <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">();</span> <span class="n">_</span><span class="p">,</span> <span class="n">approx</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+        <span class="n">ms</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span>
+        <span class="n">rec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="n">t</span><span class="p">))</span> <span class="o">/</span> <span class="n">k</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">approx</span><span class="p">,</span> <span class="n">truth</span><span class="p">)])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ef_search=</span><span class="si">{</span><span class="n">ef</span><span class="si">:</span><span class="s2">&gt;4</span><span class="si">}</span><span class="s2">  recall@</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">rec</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">ms</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms/query"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Approximate search is a trade-off you should measure. Track ANN recall against exact search and tune to the latency SLO.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Search got faster after moving to HNSW, but answer quality dropped. Nobody can say why. What do you do?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="giant-in-memory-index">
+  <header class="ap-h">
+    <div class="ap-num">2.9</div>
+    <div>
+      <h2><a href="#giant-in-memory-index">One giant in-memory HNSW index</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The vector database node runs out of memory, index rebuilds take a day, and p99 latency spikes during compaction. The
+corpus has grown to 200 million chunks.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>200 million float32 vectors held in one in-memory index on one node</strong>, as if it were a demo. 200M × 768 × 4 bytes is
+about 615 GB before graph overhead, with a single failure domain.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Memory, rebuild time and compaction all scale with the whole corpus, so every operation is slow and risky.</li>
+<li>One node means one failure domain: any outage takes retrieval down entirely.</li>
+<li>Most queries only need a slice of the corpus but pay for searching all of it.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-giant-in-memory-index" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">200M vectors</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">One in-memory HNSW node</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">615 GB+ RAM</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">OOM / day-long rebuilds</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Demo architecture at production scale</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">200M vectors</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Quantize (int8 /</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">PQ) + rescore</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Shard by tenant /</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">region</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Replicas per shard</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Bounded memory,</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">fast rebuilds</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-giant-in-memory-index)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Shrink, split and replicate</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Shrink and split</strong> the index:</p>
+<ul>
+<li><strong>Quantize:</strong> int8 is about 4× smaller; binary or product quantization for candidates, then rescore the top few hundred with full-precision vectors.</li>
+<li><strong>Reduce dimensions</strong> if the model supports it (Matryoshka-style truncation).</li>
+<li><strong>Shard by a natural key</strong> (tenant, region, document type) so most queries hit one shard.</li>
+<li>Consider <strong>disk-based ANN</strong> for cold data, and <strong>replicate</strong> shards for availability.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Memory per node drops by an order of magnitude, rebuilds are per shard, and most queries touch one small shard.
+Rescoring recovers most of the recall lost to quantization, and replicas remove the single failure domain.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">plan_index</span><span class="p">(</span><span class="n">n_vectors</span><span class="p">,</span> <span class="n">dims</span><span class="p">,</span> <span class="n">shards</span><span class="p">,</span> <span class="n">bytes_per_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">overhead</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">per_shard_gb</span> <span class="o">=</span> <span class="n">n_vectors</span> <span class="o">/</span> <span class="n">shards</span> <span class="o">*</span> <span class="n">dims</span> <span class="o">*</span> <span class="n">bytes_per_dim</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">overhead</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1e9</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"per_shard_gb"</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">per_shard_gb</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"total_gb"</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">per_shard_gb</span> <span class="o">*</span> <span class="n">shards</span> <span class="o">*</span> <span class="n">replicas</span><span class="p">,</span> <span class="mi">1</span><span class="p">)}</span>
+
+<span class="n">plan_index</span><span class="p">(</span><span class="mi">200_000_000</span><span class="p">,</span> <span class="mi">768</span><span class="p">,</span> <span class="n">shards</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>          <span class="c1"># int8: ~12.5 GB per shard</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">tenant</span><span class="p">):</span>
+    <span class="n">shard</span> <span class="o">=</span> <span class="n">router</span><span class="o">.</span><span class="n">shard_for</span><span class="p">(</span><span class="n">tenant</span><span class="p">)</span>              <span class="c1"># most queries hit one shard</span>
+    <span class="n">cands</span> <span class="o">=</span> <span class="n">shard</span><span class="o">.</span><span class="n">search_quantized</span><span class="p">(</span><span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">k</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rescore_full_precision</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">cands</span><span class="p">)[:</span><span class="mi">10</span><span class="p">]</span>  <span class="c1"># recover recall lost to quantization</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>At hundreds of millions of vectors, quantize, shard by a natural key and replicate. One giant in-memory index is a single point of failure.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How much memory do 200M 768-dimension vectors need, and how would you bring that down?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="post-filter-selective-metadata">
+  <header class="ap-h">
+    <div class="ap-num">2.10</div>
+    <div>
+      <h2><a href="#post-filter-selective-metadata">Post-filtering highly selective metadata filters</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A user in a small department gets 0–2 results, or irrelevant ones, even though the answer exists in documents they're
+allowed to see.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>ANN search returns the top 100 across all 100M chunks, and only then drops what the user can't see</strong> or what doesn't
+match the filter.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>If the filter keeps 0.01% of the corpus, almost all 100 candidates are discarded.</li>
+<li>Users with narrow permissions or rare filters systematically get worse answers.</li>
+<li>Raising k to compensate makes every query slower without fixing the root cause.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-post-filter-selective-metadata" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">ANN top-100 (whole</text>
+<text class="dg-t dg-t-std" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">corpus)</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Post-filter by ACL / dept</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">0–2 results left</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Selective filters starve the candidate pool</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Query + filters</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Filter-aware ANN</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(payload index)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Partition by tenant</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">/ region</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Exact search on</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">tiny subsets</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Full k results</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-post-filter-selective-metadata)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Filter during search, not after</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Filter during search:</strong></p>
+<ul>
+<li>Use a store with filter-aware ANN (filtered HNSW, payload indexes).</li>
+<li>Partition or shard on high-selectivity keys (tenant, region).</li>
+<li>For very selective filters, fall back to <strong>exact search over the filtered subset</strong>, which is small by definition.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Every user gets a full candidate set from the documents they can actually see. Exact search on small subsets is both
+accurate and fast, and partitioning keeps large tenants from crowding out small ones.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">filtered_search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">flt</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">20_000</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">exact_search</span><span class="p">(</span><span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">ids</span><span class="o">=</span><span class="n">index</span><span class="o">.</span><span class="n">ids</span><span class="p">(</span><span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">),</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>   <span class="c1"># tiny subset: exact is cheap</span>
+    <span class="k">return</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">)</span>                       <span class="c1"># filter-aware ANN</span>
+
+<span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"results_below_k"</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt_name</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">hits</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">k</span> <span class="k">else</span> <span class="kc">None</span>   <span class="c1"># catch it per filter</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Post-filtering starves users with narrow permissions. Filter inside the search, partition on selective keys, and use exact search for tiny subsets.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Why is post-filtering top-k results by ACL both a quality and a security problem?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="stale-acls-shared-cache">
+  <header class="ap-h">
+    <div class="ap-num">2.11</div>
+    <div>
+      <h2><a href="#stale-acls-shared-cache">ACLs copied once at ingest, plus a shared answer cache</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An employee who moved out of Finance still gets answers from Finance documents. Worse, user B receives user A's cached
+answer containing a salary figure.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Permissions are snapshotted at index time and never synced</strong>, and a semantic or answer cache is keyed only on the
+query text and shared across users with different access.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Revocations never reach the index, so former entitlements live on indefinitely.</li>
+<li>A shared cache bypasses retrieval-time security entirely: the first user's answer is served to everyone who asks a similar question.</li>
+<li>Storing per-user ACLs on chunks explodes index size, so teams avoid syncing at all.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-stale-acls-shared-cache" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Ingest (ACL snapshot)</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Never re-synced</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Cache keyed by query only</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Salary figure to wrong</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">user</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Stale permissions plus a cross-user cache</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Group ACLs on</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">chunks</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Resolve groups from</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">IdP per request</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Permission change</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">stream</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Cache key = tenant</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">+ perm hash + query</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Correct, isolated</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">answers</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-stale-acls-shared-cache)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Permissions synced as events; caches scoped by permission set</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Store <strong>group-level ACLs</strong> on chunks (not individual users) and resolve the user's current groups from the identity provider <strong>on every request</strong>.</li>
+<li>Sync permission changes as <strong>their own event stream</strong>, which is far cheaper than re-embedding.</li>
+<li>Scope every cache key by <strong>tenant and a hash of the permission set</strong>, and invalidate on permission changes.</li>
+<li>For hard multi-tenant isolation, use a separate namespace or index per large tenant.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Revocations take effect within minutes, and no cached answer can cross a permission boundary. An automated access test
+suite ("user X must never see doc Y") and a canary document per tenant prove it on every deploy.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cache_key</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">perm</span> <span class="o">=</span> <span class="n">sha256</span><span class="p">(</span><span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">groups</span><span class="p">)))[:</span><span class="mi">16</span><span class="p">]</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">tenant</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">perm</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">normalize</span><span class="p">(</span><span class="n">q</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="nd">@idp</span><span class="o">.</span><span class="n">on</span><span class="p">(</span><span class="s2">"group_membership_changed"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">on_membership</span><span class="p">(</span><span class="n">evt</span><span class="p">):</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">invalidate</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">evt</span><span class="o">.</span><span class="n">tenant</span><span class="si">}</span><span class="s2">:"</span><span class="p">)</span>             <span class="c1"># permission-scoped invalidation</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_access</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="s2">"finance-leaver"</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">"FIN-SALARY-2026"</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="n">doc</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">doc_id</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">secure_search</span><span class="p">(</span><span class="s2">"salary bands"</span><span class="p">,</span> <span class="n">token_for</span><span class="p">(</span><span class="n">user</span><span class="p">))]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Permissions change after ingestion and caches cross users. Sync ACLs as events, resolve groups per request, and scope every cache by permission set.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>An employee changed departments last month and still sees the old department&#x27;s documents. Where do you look?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="noisy-neighbours-shared-cluster">
+  <header class="ap-h">
+    <div class="ap-num">2.12</div>
+    <div>
+      <h2><a href="#noisy-neighbours-shared-cluster">Noisy neighbours in a shared retrieval cluster</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-lat">Latency</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>One enterprise tenant starts a 30-million-document backfill, and every other tenant's retrieval latency triples.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Ingestion and queries share one compute pool with no isolation or quotas.</strong></p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Bulk ingestion competes with interactive queries for CPU, memory and I/O.</li>
+<li>One tenant's activity sets everyone else's latency, which breaks SLAs for all tenants.</li>
+<li>Without per-tenant metrics, the cause isn't visible.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-embeddings-noisy-neighbours-shared-cluster" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Tenant A 30M backfill</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">Shared ingest + query</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">pool</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No quotas</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Everyone&#x27;s p95 × 3</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">One tenant&#x27;s load becomes everyone&#x27;s outage</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Tenants</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Separate ingest vs</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">query compute</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Per-tenant quotas /</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">rate limits</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Dedicated shards</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">for largest tenants</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Isolated SLOs</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-embeddings-noisy-neighbours-shared-cluster)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Isolation by workload and tenant</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Separate <strong>ingestion and query compute</strong>.</li>
+<li>Apply <strong>per-tenant rate limits and quotas</strong>.</li>
+<li>Give the largest tenants <strong>dedicated shards or namespaces</strong>.</li>
+<li>Schedule backfills <strong>off-peak with throttling</strong>, and autoscale query replicas on p95 latency.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Interactive latency no longer depends on other tenants' bulk work. Dedicated resources cost more and run at lower
+utilization, which is the price of predictable SLOs. Per-tenant p95 and error-rate alerts make any remaining contention visible.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">ingest_limiter</span> <span class="o">=</span> <span class="n">TokenBucket</span><span class="p">(</span><span class="n">rate_per_tenant</span><span class="o">=</span><span class="p">{</span><span class="s2">"default"</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s2">"enterprise-a"</span><span class="p">:</span> <span class="mi">200</span><span class="p">})</span>   <span class="c1"># docs/s</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">submit_backfill</span><span class="p">(</span><span class="n">tenant</span><span class="p">,</span> <span class="n">docs</span><span class="p">):</span>
+    <span class="n">job</span> <span class="o">=</span> <span class="n">ingest_queue</span><span class="o">.</span><span class="n">enqueue</span><span class="p">(</span><span class="n">tenant</span><span class="p">,</span> <span class="n">docs</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="s2">"off_peak"</span><span class="p">,</span> <span class="n">throttle</span><span class="o">=</span><span class="n">ingest_limiter</span><span class="o">.</span><span class="n">rate</span><span class="p">(</span><span class="n">tenant</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">job</span><span class="o">.</span><span class="n">id</span>
+
+<span class="c1"># query pool autoscaling (KEDA): trigger on per-pool p95 latency, separate from ingestion workers</span>
+<span class="n">metrics</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span><span class="s2">"retrieval_p95_ms"</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">{</span><span class="s2">"tenant"</span><span class="p">:</span> <span class="n">tenant</span><span class="p">})</span>   <span class="c1"># alert per tenant</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Isolate ingestion from queries and tenants from each other. Without quotas, one backfill sets everyone&#x27;s latency.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you design multi-tenant retrieval so one large customer can&#x27;t degrade the others?</p></div>
+    
+  </section>
+  
+</article>
+
+<div class="pn"><a class="prev" href="ingestion.html">← 1. Ingestion &amp; Data Pipelines</a><a class="next" href="rag-core.html">3. Retrieval &amp; RAG Core →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

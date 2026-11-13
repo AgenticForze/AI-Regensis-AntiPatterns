@@ -1,0 +1,194 @@
+source: leadership-guide
+section: rag-core
+patterns:
+  - id: reranker-for-recall-problem
+    title: Adding a reranker to fix a recall problem
+    tags: [Quality, Cost]
+    scenario: |
+      The team added a state-of-the-art reranker, but answer accuracy barely moved. The next proposal is an even bigger reranker.
+    antipattern: |
+      **A retrieval upgrade is bought before diagnosing which stage fails.** A reranker is applied to a problem that lives in stage 1.
+    fails: |
+      - A reranker can only reorder what stage 1 retrieved. If the right chunk isn't in the candidate pool, reranking can't help.
+      - Without recall@50 vs recall@5, nobody knows whether the problem is recall, precision or generation.
+      - Money and latency go to the wrong stage, and the real fix (chunking, hybrid search, query rewriting) waits.
+    diagram:
+      bad: ["Low accuracy", "!Add bigger reranker", "Answer still not in pool", "!No improvement"]
+      bad_note: "Solution chosen before diagnosis"
+      good: ["Low accuracy", "+Measure recall@50 vs recall@5", "Recall fix (chunking / hybrid / rewrite) | Precision fix (rerank) | Generation fix (prompt)", "Targeted change"]
+      good_note: "Every retrieval proposal names the failure it targets, with numbers"
+    solution: |
+      Require a **diagnosis before investment**. Every retrieval change proposal states which failure it targets:
+
+      - **recall@50 low** → recall problem: fix chunking, hybrid search or query rewriting.
+      - **recall@50 high, recall@5 low** → precision problem: improve reranking.
+      - **both high but answers wrong** → generation or context problem.
+    works: |
+      Investment goes to the stage that is actually failing. The three-way diagnosis takes minutes on a golden set and
+      prevents expensive changes that can't help.
+    code: |
+      def diagnose(golden, retrieve_pool, rerank_top, k_pool=50, k_top=5):
+          pool = recall_at_k(retrieve_pool, golden, k_pool)
+          top = recall_at_k(lambda q, k: rerank_top(q, retrieve_pool(q, k_pool), k), golden, k_top)
+          if pool < 0.85:
+              return f"RECALL problem (recall@{k_pool}={pool:.2f}): fix chunking/hybrid/query rewriting"
+          if top < pool - 0.10:
+              return f"PRECISION problem ({top:.2f} vs pool {pool:.2f}): improve reranking"
+          return "Retrieval OK: look at context shaping and the generation prompt"
+    takeaway: "A reranker can't promote a chunk that never arrived. Diagnose recall vs precision vs generation before buying a fix."
+    followup: "The team added a state-of-the-art reranker, but accuracy barely moved. Why, and what would you have done?"
+
+  - id: hand-tuned-score-fusion
+    title: Hand-tuned score fusion for hybrid search
+    tags: [Quality, Reliability]
+    scenario: |
+      Search quality drifts every few weeks, and someone re-tunes the weights that combine BM25 and vector scores.
+    antipattern: |
+      **Raw cosine and BM25 scores are combined linearly with hand-picked weights** (`0.7 × dense + 0.3 × bm25`).
+    fails: |
+      - The two score scales shift as the corpus, document lengths and query mix change.
+      - The weights encode one moment's data and silently go stale.
+      - Re-tuning is a recurring manual chore that depends on one engineer's intuition.
+    diagram:
+      bad: ["Dense score | BM25 score", "!0.7 × dense + 0.3 × bm25", "Scales drift", "!Manual re-tuning cycle"]
+      bad_note: "Weights encode one moment's data"
+      good: ["Dense ranks | BM25 ranks", "+Reciprocal Rank Fusion (k=60)", "+Nightly RRF vs weighted check", "Stable ranking"]
+      good_note: "Rank-based fusion by default; weights only when an ablation proves a durable gain"
+    solution: |
+      - Standardize on **Reciprocal Rank Fusion (RRF)** as the platform default, because it uses ranks and needs no calibration.
+      - Allow weighted fusion only when an ablation shows a durable gain, with weights **re-validated automatically** in the nightly eval.
+      - Make fusion a measured platform setting rather than a per-engineer tweak.
+    works: |
+      Rank-based fusion is robust to score drift, so quality no longer degrades between tuning sessions. The nightly
+      comparison flags the rare case where weighted fusion is worth it.
+    code: |
+      def rrf(rankings: list[list[str]], k: int = 60, weights=None) -> list[str]:
+          weights = weights or [1.0] * len(rankings)
+          scores = {}
+          for w, ranking in zip(weights, rankings):
+              for rank, doc_id in enumerate(ranking, start=1):
+                  scores[doc_id] = scores.get(doc_id, 0.0) + w / (k + rank)
+          return sorted(scores, key=scores.get, reverse=True)
+
+      @schedule(cron="0 3 * * *")
+      def fusion_check():
+          gap = evaluate(fusion="weighted") - evaluate(fusion="rrf")
+          if gap > 0.02: alert(f"weighted fusion beats RRF by {gap:.3f}; review weights")
+    takeaway: "Fuse rankings, not raw scores. RRF needs no calibration and doesn't go stale as the corpus changes."
+    followup: "Search quality drifts every few weeks and someone re-tunes the hybrid weights. How do you stop the cycle?"
+
+  - id: rerank-without-latency-budget
+    title: Reranking without a latency budget
+    tags: [Latency, Quality]
+    scenario: |
+      After adding reranking, p95 latency went from 1.2 s to 3.8 s and users complain. The proposal is to remove the reranker.
+    antipattern: |
+      **A new stage is added with no latency budget**, so there's no agreed point at which quality gains stop being worth the wait.
+    fails: |
+      - Removing the stage throws away the quality gain; keeping it unchanged hurts adoption.
+      - Every stage expands to fill the time it's given, with no owner for the end-to-end number.
+      - The reranker runs on every query, even where stage 1 is already confident.
+    diagram:
+      bad: ["Hybrid retrieve", "!Rerank 100 candidates (no budget)", "Generate", "!p95 3.8 s"]
+      bad_note: "Quality gain, adoption loss"
+      good: ["Hybrid retrieve", "+Skip if stage-1 confident", "+Rerank 40 (knee), 250 ms budget", "+Stream answer", "p95 < 2 s"]
+      good_note: "End-to-end SLO split into per-stage budgets"
+    solution: |
+      Set an end-to-end **latency SLO** with the product owner (for example p95 under 2 s to first token) and give each stage
+      a budget. Then optimize the reranker inside its budget:
+
+      - Fewer candidates (find the knee on the eval curve).
+      - A smaller or distilled model, GPU batching and score caching.
+      - **Adaptive reranking** that skips the step when stage-1 results are already confident.
+      - Stream the answer to cut perceived latency.
+    works: |
+      The quality gain stays, and latency fits the SLO. Adaptive skipping removes reranking cost from the easy majority of
+      queries, and per-stage budgets give every component an owner and a limit.
+    code: |
+      def adaptive_rerank(query, cands, scores, gap=0.15, keep=8):
+          # skip reranking when stage 1 is already confident: top-1 clearly ahead of top-2
+          if len(scores) > 1 and scores[0] - scores[1] > gap:
+              metrics.incr("rerank.skipped")
+              return cands[:keep]
+          with timer("rerank_ms", budget_ms=250):
+              return rerank(query, cands[:40], keep=keep)      # 40 = knee from the eval curve
+    takeaway: "Every stage needs a latency budget. Optimize the reranker inside its budget instead of choosing between quality and speed."
+    followup: "After adding reranking, p95 latency went from 1.2 s to 3.8 s. Remove it?"
+
+  - id: every-transformation-every-query
+    title: Every query gets every query transformation
+    tags: [Cost, Latency]
+    scenario: |
+      Each query now runs a rewrite, four multi-query variants and HyDE. Quality rose 3 points; cost rose 5×.
+    antipattern: |
+      **The heaviest retrieval pipeline is applied uniformly to every query**, including the many that were already easy.
+    fails: |
+      - Most of the gain usually comes from a minority of hard queries, but every query pays full price.
+      - Latency rises for simple questions that needed none of it.
+      - Cost per query hides that cost per correct answer barely improved for most traffic.
+    diagram:
+      bad: ["Every query", "!Rewrite + 4 variants + HyDE", "5× cost", "+3 pts quality"]
+      bad_note: "Full price on easy queries"
+      good: ["Query", "Standalone rewrite (cheap)", "+Confidence check", "Easy path (most traffic) | Escalated path: multi-query + HyDE", "Cost per correct answer"]
+      good_note: "Route by difficulty; escalate only on weak retrieval signals"
+    solution: |
+      **Route by difficulty:**
+
+      - Always do the cheap, high-value step (standalone rewrite in chat).
+      - Trigger multi-query, HyDE or decomposition only when a cheap signal says retrieval is weak: low top rerank score, short or vague query, multiple entities.
+      - Measure quality and cost per route, and report **cost per correctly answered question** rather than cost per query.
+    works: |
+      Hard queries still get the full treatment, so most of the quality gain is kept, while the easy majority runs at baseline
+      cost and latency.
+    code: |
+      def smart_retrieve(q, history):
+          q1 = standalone_rewrite(q, history) if history else q          # always, cheap
+          cands = hybrid(q1, k=50)
+          top = rerank(q1, cands, keep=8)
+          if top[0].score >= 0.5 and len(q1.split()) > 3:
+              return top                                                   # easy path (most traffic)
+          metrics.incr("retrieval.escalated")
+          variants = multi_query(q1, n=3) + [hyde(q1)]
+          pool = rrf([ids(cands)] + [ids(hybrid(v, k=50)) for v in variants])[:80]
+          return rerank(q1, [chunk(i) for i in pool], keep=8)
+    takeaway: "Spend retrieval effort where it changes the answer. Route by difficulty and report cost per correct answer."
+    followup: "Quality rose 3 points, cost rose 5×. Is that a good trade?"
+
+  - id: retrieval-upgrades-no-ablation
+    title: Shipping bundled retrieval upgrades with no ablation
+    tags: [Quality, Cost]
+    scenario: |
+      In one release the team added contextual chunks, multi-query, a new reranker and compression. Quality went up 6 points.
+      Nobody can say which change mattered.
+    antipattern: |
+      **Several retrieval changes ship together and are evaluated only as a bundle.**
+    fails: |
+      - Bundled changes can't be attributed, so you can't remove the ones that only add cost.
+      - When one later regresses, there's no baseline to isolate it.
+      - The team learns nothing reusable for the next project.
+    diagram:
+      bad: ["4 changes", "!Shipped together", "+6 pts (unattributed)", "Cost and regressions untraceable"]
+      bad_note: "No ablation, no learning"
+      good: ["4 changes", "+Leave-one-out matrix", "+Quality / p95 / cost per change", "+Shared experiment log", "Keep only what pays"]
+      good_note: "Ablation is part of the definition of done"
+    solution: |
+      Make **ablation studies** part of the definition of done for retrieval changes:
+
+      - One change per experiment, or a **leave-one-out matrix** for bundles.
+      - All on the same golden set, reporting quality, latency and cost.
+      - Publish results in a shared experiment log so other teams reuse findings.
+    works: |
+      Each component has to justify its latency and cost, so dead weight is removed. The experiment log turns one team's
+      results into platform knowledge.
+    code: |
+      STAGES = ["contextual_chunks", "multi_query", "reranker_v2", "compression"]
+
+      def leave_one_out(build_pipeline, golden):
+          full = evaluate(build_pipeline(set(STAGES)), golden)
+          print("full", full)
+          for s in STAGES:
+              r = evaluate(build_pipeline(set(STAGES) - {s}), golden)
+              print(f"without {s:<18} quality {r['quality'] - full['quality']:+.3f}  "
+                    f"p95 {r['p95_ms'] - full['p95_ms']:+.0f} ms  cost {r['cost'] - full['cost']:+.4f}")
+    takeaway: "If you can't say which change mattered, you can't keep the good ones and drop the expensive ones. Ablate every retrieval change."
+    followup: "Quality went up 6 points after four changes shipped together. Which change mattered?"

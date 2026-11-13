@@ -1,0 +1,1203 @@
+source: regensis
+section: protocols
+patterns:
+- id: tool-01
+  title: Agent given a raw SQL tool on the billing database
+  tags:
+  - Reliability
+  - Latency
+  - Security
+  - Telco
+  - Critical
+  scenario: |-
+    To move fast, a carrier gives its care agent a run_sql tool on a read replica of the billing database. The agent writes queries that scan entire tables at peak (slowing the replica used by billing reports), and a prompt injection gets it to return other customers' invoices.
+  antipattern: |-
+    **Raw SQL tool on the billing DB.**
+
+    *Think of it this way:* Handing a visitor the keys to the archive room instead of fetching the file they need.
+  fails: |-
+    - Generic power with no business boundaries.
+    - No object-level authorisation.
+    - Unpredictable load on shared systems.
+
+    **Root cause:** Exposing raw data access instead of task-shaped tools.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - run_sql · Billing replica
+    - '!Full scans · At peak'
+    - Injection · Other invoices
+    - '!Load + leak · Both'
+    bad_note: Raw SQL tool on the billing DB
+    good:
+    - get_invoice · Task-shaped
+    - +Owner check · Account
+    - +Limits · Rows, time
+    - Templates · For analytics
+    good_note: Task-shaped tools with ownership and limits
+  solution: |-
+    1. Replace raw SQL with task-shaped tools (get_invoice_summary(account_id, period)) that enforce ownership and limits.
+    2. If analytics needs SQL, use parameterised templates on a dedicated store with row-level security and query limits.
+    3. Rate-limit and time-box tools that hit shared systems.
+  works: |-
+    **Trade-off to manage:** Less flexibility; more tools to build.
+
+    **How you prove it worked:**
+
+    - Query cost and cross-account access per tool.
+
+    **Same pattern elsewhere:** FinTech: an agent with SQL access to the core-banking reporting database exposes balances of other customers.
+  takeaway: Give agents verbs for the business, not a shell into the database.
+  related:
+  - rag-12
+  - sec-04
+  code: |
+    @tool(rate_limit="10/min", timeout_s=3)
+    def get_invoice_summary(period: str, ctx: Session) -> dict:
+        """Invoice totals and line categories for the caller's own account and one billing period."""
+        account_id = ctx.verified_account_id                      # ownership from the session
+        row = billing_ro.execute(
+            "SELECT total, tax, line_category, amount FROM invoice_lines "
+            "WHERE account_id = :a AND period = :p LIMIT 200", a=account_id, p=period)
+        return summarize(row)
+  lang: python
+- id: tool-02
+  title: Wire value date in the wrong time zone
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A corporate-banking agent schedules a wire "for tomorrow" for a client in Singapore. The tool takes value_date as a date with no time zone, and the agent computes "tomorrow" in UTC. The wire is scheduled a day late and misses a supplier deadline, incurring penalties.
+  antipattern: |-
+    **Relative dates resolved by the model.**
+
+    *Think of it this way:* Booking a meeting "at 9" without saying whose 9.
+  fails: |-
+    - Relative dates resolved by the model.
+    - No time-zone context in the tool.
+    - Cut-off times and business days ignored.
+
+    **Root cause:** Ambiguous temporal parameters.
+
+    **Where it breaks:** Tool interface.
+  diagram:
+    bad:
+    - '''Tomorrow'' · Singapore client'
+    - '!Model computes · In UTC'
+    - Day late · Value date
+    - '!Penalty · Supplier'
+    bad_note: Relative dates resolved by the model
+    good:
+    - Date tool · Client TZ
+    - +Calendar · Holidays
+    - +Cut-off check · Validate
+    - Confirm · Resolved date
+    good_note: Date tool with time zone, calendar and cut-offs
+  solution: |-
+    1. Provide a date-resolution tool or resolve relative dates in code using the client's time zone and calendar.
+    2. Require explicit dates with time zone, and validate against cut-off times and holidays.
+    3. Echo the resolved date in confirmation.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Mismatches between requested and executed dates.
+
+    **Same pattern elsewhere:** Telco: a technician visit "tomorrow morning" is booked in the data centre's time zone.
+  takeaway: Never let the model guess what tomorrow means.
+  related:
+  - agf-04
+  - aev-10
+  code: |
+    @tool
+    def resolve_value_date(expression: str, ctx: Session) -> dict:
+        tz = ZoneInfo(ctx.client.timezone)                        # client's zone, not the server's
+        d = dateparser.parse(expression, settings={"TIMEZONE": str(tz), "RETURN_AS_TIMEZONE_AWARE": True}).date()
+        cal = holiday_calendar(ctx.wire.currency)
+        if not cal.is_business_day(d) or past_cutoff(d, ctx.wire.currency, tz):
+            d = cal.next_business_day(d)
+        return {"value_date": d.isoformat(), "timezone": str(tz), "echo": f"Value date {d:%a %d %b %Y} ({tz})"}
+  lang: python
+- id: tool-03
+  title: get_bill, get_invoice and get_statement all exist
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's agent has three tools that return billing information from different systems: get_bill (legacy), get_invoice (new billing) and get_statement (finance). The agent picks inconsistently and gives customers numbers from the legacy system for accounts already migrated.
+  antipattern: |-
+    **Overlapping tools from different systems.**
+
+    *Think of it this way:* Three phone numbers for the same department, one of which goes to an empty office.
+  fails: |-
+    - Overlapping tools with vague differences.
+    - Legacy tools never retired.
+    - The model can't tell which is current.
+
+    **Root cause:** Tool set mirrors system history, not tasks.
+
+    **Where it breaks:** Tool catalogue design.
+  diagram:
+    bad:
+    - get_bill · Legacy
+    - '!get_invoice · New system'
+    - get_statement · Finance
+    - '!Wrong numbers · Migrated'
+    bad_note: Overlapping tools from different systems
+    good:
+    - One tool · Bill summary
+    - +Routes · By migration
+    - +Hide legacy · Retired
+    - Clear docs · When to use
+    good_note: One task-shaped tool that routes internally
+  solution: |-
+    1. Expose one tool per task (get_bill_summary) that routes internally to the right system based on migration status.
+    2. Retire or hide legacy tools.
+    3. Name and describe tools by what they're for and when not to use them.
+  works: |-
+    **Trade-off to manage:** Routing logic moves into the tool layer.
+
+    **How you prove it worked:**
+
+    - Tool-selection confusion in traces.
+
+    **Same pattern elsewhere:** FinTech: transfer, payment and send_money tools overlap, and the agent picks a slower rail.
+  takeaway: One task, one tool. Hide the plumbing.
+  related:
+  - agf-03
+  code: |
+    @tool
+    def get_bill_summary(period: str, ctx: Session) -> dict:
+        """Use for any question about a customer's bill, invoice or statement. Not for payment history."""
+        acct = ctx.verified_account_id
+        if migration.status(acct) == "migrated":
+            return new_billing.summary(acct, period)
+        return legacy_billing.statement(acct, period)              # routing is internal, one tool for the task
+
+    # get_bill / get_invoice / get_statement removed from the agent's tool list
+  lang: python
+- id: tool-04
+  title: Transaction tool returns 10,000 rows
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A business-banking agent calls get_transactions(account) for a corporate account. The tool returns 10,000 transactions for the year. The response exceeds the context limit and the call fails, or is truncated and the agent analyses partial data.
+  antipattern: |-
+    **Unbounded list tool.**
+
+    *Think of it this way:* Asking for a book and being handed the whole library.
+  fails: |-
+    - No filtering or pagination parameters.
+    - Output size is unbounded.
+    - Truncation is silent.
+
+    **Root cause:** Tools without size controls.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - get_txns · Whole year
+    - '!10,000 rows · Returned'
+    - Over limit · Or truncated
+    - '!Partial data · Analysed'
+    bad_note: Unbounded list tool
+    good:
+    - Filters · Date, amount
+    - +Pages · Default size
+    - +Totals · And has_more
+    - Aggregate · Summary tool
+    good_note: Filters, pagination, totals, aggregates
+  solution: |-
+    1. Add filters (date range, amount, counterparty, category) and pagination with a sensible default page size.
+    2. Return totals and counts with each page, and say when more pages exist.
+    3. Provide aggregate tools for summary questions.
+  works: |-
+    **Trade-off to manage:** More parameters to document.
+
+    **How you prove it worked:**
+
+    - Response sizes and truncation events per tool.
+
+    **Same pattern elsewhere:** Telco: get_usage returns every data session for a month on an IoT account with thousands of SIMs.
+  takeaway: Every list tool needs filters, pages and totals.
+  related:
+  - agf-10
+  code: |
+    @tool
+    def list_transactions(start: date, end: date, min_amount: float | None = None,
+                          counterparty: str | None = None, category: str | None = None,
+                          page: int = 1, page_size: int = 25) -> dict:
+        q = txns.query(start=start, end=end, min_amount=min_amount, counterparty=counterparty, category=category)
+        items = q.page(page, page_size)
+        return {"items": items, "total_count": q.count(), "total_amount": q.sum(),
+                "page": page, "has_more": page * page_size < q.count()}
+
+    @tool
+    def spending_by_category(start: date, end: date) -> dict: return txns.aggregate(start, end, by="category")
+  lang: python
+- id: tool-05
+  title: Plan change executed without a preview
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's agent has a change_plan tool that executes immediately. Customers don't see the prorated charges, lost promotions or device-installment effects until the next bill. Plan-change complaints and reversals rise.
+  antipattern: |-
+    **Change executes immediately.**
+
+    *Think of it this way:* A checkout that charges your card before showing the basket total.
+  fails: |-
+    - No dry-run or quote mode.
+    - Side effects aren't shown before execution.
+    - Confirmation is based on the model's description.
+
+    **Root cause:** Write tools without a preview step.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - change_plan · Executes now
+    - '!No preview · Proration'
+    - Promo lost · Hidden
+    - '!Complaints · Reversals'
+    bad_note: Change executes immediately
+    good:
+    - Preview · Charges, effects
+    - +Show customer · Confirm
+    - +Execute · Preview id
+    - Eligibility · TMF679
+    good_note: Preview tool, confirmation, execute with preview id
+  solution: |-
+    1. Split into preview_plan_change (returns prorated charges, promotions lost, effective date) and execute_plan_change (requires the preview id).
+    2. Show the preview to the customer and require explicit confirmation.
+    3. Use TMF679 product offering qualification or a quote API for eligibility and effects.
+  works: |-
+    **Trade-off to manage:** One more step in the flow.
+
+    **How you prove it worked:**
+
+    - Reversal and complaint rates after plan changes.
+
+    **Same pattern elsewhere:** FinTech: a loan-restructure tool executes without showing the new payment schedule and total interest.
+  takeaway: Preview before you commit.
+  related:
+  - agf-19
+  - gov-02
+  code: |
+    @tool
+    def preview_plan_change(subscription_id: str, new_offering_id: str) -> dict:
+        q = tmf679.qualify(subscription_id, new_offering_id)
+        return {"preview_id": q.id, "prorated_charge": q.proration, "promotions_lost": q.lost_promotions,
+                "effective_date": q.effective_date, "eligible": q.eligible}
+
+    @tool
+    def execute_plan_change(preview_id: str, customer_confirmed: bool) -> dict:
+        if not customer_confirmed:
+            return {"status": "REFUSED", "why": "show the preview and get explicit confirmation first"}
+        return orders.submit_from_preview(preview_id)
+  lang: python
+- id: tool-06
+  title: Bulk suspension reports success when 3 of 50 lines failed
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    An enterprise customer asks the agent to suspend 50 lines reported stolen in an office burglary. The bulk tool returns "success" because the batch was accepted. Three lines failed provisioning and stayed active. Fraudulent international calls on those lines cost $8,000.
+  antipattern: |-
+    **Batch accepted reported as success.**
+
+    *Think of it this way:* A courier reporting "all delivered" when three parcels were returned.
+  fails: |-
+    - Bulk tools report batch acceptance, not per-item outcomes.
+    - The agent tells the customer everything is done.
+    - No follow-up on failures.
+
+    **Root cause:** Coarse success semantics for bulk operations.
+
+    **Where it breaks:** Tool response design.
+  diagram:
+    bad:
+    - 50 lines · Suspend
+    - '!''Success'' · Batch accepted'
+    - 3 failed · Still active
+    - '!$8k fraud · Calls'
+    bad_note: Batch accepted reported as success
+    good:
+    - Per-item · Results
+    - +Counts · OK, failed
+    - +Report · Failures
+    - Retry · Or escalate
+    good_note: Per-item results, explicit failures, follow-up
+  solution: |-
+    1. Return per-item results (succeeded, failed with reason, pending) and overall counts.
+    2. Make the agent report failures explicitly and retry or escalate them.
+    3. Track asynchronous completion to the final state.
+  works: |-
+    **Trade-off to manage:** Larger responses for bulk calls; summarise counts plus failures only.
+
+    **How you prove it worked:**
+
+    - Items still active after bulk suspension requests.
+
+    **Same pattern elsewhere:** FinTech: a bulk card-block request reports success while two cards remain active.
+  takeaway: Bulk tools must report per-item truth.
+  related:
+  - aev-12
+  - tool-12
+  code: |
+    @tool
+    def suspend_lines(line_ids: list[str], reason: str) -> dict:
+        results = [{"line_id": l, **oss.suspend(l, reason)} for l in line_ids]   # per-item status
+        counts = Counter(r["status"] for r in results)
+        return {"succeeded": counts["OK"], "failed": counts["FAILED"], "pending": counts["PENDING"],
+                "failures": [r for r in results if r["status"] == "FAILED"],
+                "track": [r["job_id"] for r in results if r["status"] == "PENDING"]}
+    # agent instructions: report failures explicitly; retry or escalate each failed line
+  lang: python
+- id: tool-07
+  title: Statement tool trusts the account id the model supplies
+  tags:
+  - Reliability
+  - FinTech
+  - Critical
+  scenario: |-
+    A bank's get_statement tool takes account_id as a parameter and returns the statement. The agent normally passes the customer's own account, but a user asks "show me the statement for account 4471-2208" and the agent passes it through. The tool returns another customer's statement.
+  antipattern: |-
+    **Tool trusts model-supplied ids.**
+
+    *Think of it this way:* A post office that hands over any parcel if you can read out the tracking number.
+  fails: |-
+    - The tool trusts identifiers from the model.
+    - No check that the account belongs to the authenticated user.
+    - Classic insecure direct object reference.
+
+    **Root cause:** Missing object-level authorisation in tools.
+
+    **Where it breaks:** Tool authorisation.
+  diagram:
+    bad:
+    - User asks · Other account
+    - '!Agent passes · account_id'
+    - Tool trusts · No check
+    - '!Other statement · Returned'
+    bad_note: Tool trusts model-supplied ids
+    good:
+    - Session id · Identity
+    - +Ownership · Checked
+    - +My-account · No id param
+    - Alert · Cross-account
+    good_note: Identity from session, object-level checks
+  solution: |-
+    1. Derive the user's identity from the session, not from tool arguments.
+    2. Check that every requested object belongs to (or is delegated to) that identity.
+    3. Prefer tools that take no account id for "my account" questions.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Authorisation failures per tool; cross-account attempts.
+
+    **Same pattern elsewhere:** Telco: a get_call_records tool returns records for any phone number passed (see sec-04).
+  takeaway: Identity comes from the session, never from the prompt.
+  related:
+  - sec-04
+  - agf-12
+  code: |
+    @tool
+    def get_statement(month: str, ctx: Session) -> dict:
+        """Statement for the signed-in customer. Takes no account id."""
+        account_id = ctx.identity.primary_account_id               # derived from the session
+        return statements.get(account_id, month)
+
+    @tool
+    def get_statement_for(account_id: str, month: str, ctx: Session) -> dict:
+        if account_id not in ctx.identity.accounts_and_delegations():
+            return {"status": "REFUSED", "why": "account not owned or delegated"}
+        return statements.get(account_id, month)
+  lang: python
+- id: tool-08
+  title: Legacy OSS call with no timeout hangs the conversation
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's agent calls a legacy OSS for line-test results. Sometimes the OSS takes 90 seconds or never responds. The tool has no timeout, so the customer's chat hangs and eventually the session expires.
+  antipattern: |-
+    **Tool calls with no timeout.**
+
+    *Think of it this way:* Waiting on hold forever because nobody set a limit.
+  fails: |-
+    - No timeouts on tool calls.
+    - No async pattern for slow operations.
+    - The user isn't informed.
+
+    **Root cause:** Missing timeout and slow-path design.
+
+    **Where it breaks:** Tool implementation.
+  diagram:
+    bad:
+    - Line test · Legacy OSS
+    - '!90 s+ · Or never'
+    - No timeout · Tool
+    - '!Chat hangs · Expires'
+    bad_note: Tool calls with no timeout
+    good:
+    - Timeout · Per SLA
+    - +Job id · Async
+    - +Status check · Later
+    - Inform · Offer callback
+    good_note: Per-tool timeouts and async jobs for slow work
+  solution: |-
+    1. Set timeouts per tool based on its SLA, and return a structured timeout error.
+    2. For slow operations, start the job and return a job id; notify or let the agent check status later.
+    3. Tell the customer what's happening and offer a callback.
+  works: |-
+    **Trade-off to manage:** Async flows need status tracking.
+
+    **How you prove it worked:**
+
+    - Tool latency percentiles and timeout rates.
+
+    **Same pattern elsewhere:** FinTech: a credit-bureau call without a timeout stalls loan applications.
+  takeaway: Every tool call needs a deadline.
+  related:
+  - tool-12
+  - agf-15
+  code: |
+    TOOL_TIMEOUTS = {"oss_line_test": 8, "get_balance": 2}
+
+    @tool
+    async def run_line_test(line_id: str) -> dict:
+        try:
+            return await asyncio.wait_for(oss.line_test(line_id), TOOL_TIMEOUTS["oss_line_test"])
+        except asyncio.TimeoutError:
+            job = jobs.start(oss.line_test, line_id)                   # continue in the background
+            return {"status": "TIMEOUT_STARTED_JOB", "job_id": job.id,
+                    "tell_customer": "This test takes a few minutes. Want a text when it's done?"}
+  lang: python
+- id: tool-09
+  title: Tool schema changed in place breaks deployed agents
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's platform team renames a parameter in the shared transfer tool from "amount" to "amount_minor" and changes units, in place. Three agents built by other teams keep sending "amount" in major units; the tool fills defaults, and transfers are created for the wrong amounts until someone notices.
+  antipattern: |-
+    **Change tool schema in place.**
+
+    *Think of it this way:* Changing the shape of a plug socket overnight across the whole building.
+  fails: |-
+    - Tool interfaces change without versioning.
+    - Consumers aren't notified or tested.
+    - Defaults hide errors.
+
+    **Root cause:** No versioning or compatibility policy for tools.
+
+    **Where it breaks:** Tool lifecycle.
+  diagram:
+    bad:
+    - Rename param · amount_minor
+    - '!In place · No version'
+    - Old calls · Defaults used
+    - '!Wrong amounts · Transfers'
+    bad_note: Change tool schema in place
+    good:
+    - transfer_v2 · New version
+    - +Keep v1 · Until migrated
+    - +Reject unknown · No defaults
+    - Contract tests · Consumers
+    good_note: Versioned tools, strict params, contract tests
+  solution: |-
+    1. Version tools (transfer_v2) and keep v1 until consumers migrate.
+    2. Reject unknown or missing parameters instead of defaulting.
+    3. Run consumer contract tests in the tool's CI.
+  works: |-
+    **Trade-off to manage:** Maintaining two versions temporarily.
+
+    **How you prove it worked:**
+
+    - Calls with unknown parameters; usage by version.
+
+    **Same pattern elsewhere:** Telco: a shared provisioning tool changes its product-code format and breaks three agents.
+  takeaway: Tools are APIs. Version them like APIs.
+  related:
+  - cicd-18
+  - agf-04
+  code: |
+    class TransferV2Args(BaseModel):
+        model_config = ConfigDict(extra="forbid")                  # unknown params rejected, no defaults
+        from_account: str; to_account: str; amount: Decimal; currency: str; reference: str
+
+    @tool(name="transfer_v2")
+    def transfer_v2(args: TransferV2Args): ...
+
+    @tool(name="transfer", deprecated="use transfer_v2; removal 2027-01-31")
+    def transfer_v1(args: TransferV1Args): ...                       # kept until consumers migrate
+    # CI: consumer contract tests for every agent that calls transfer*
+  lang: python
+- id: tool-10
+  title: MCP server exposes the whole BSS API with an admin token
+  tags:
+  - Reliability
+  - Security
+  - Telco
+  - Critical
+  scenario: |-
+    A carrier team wraps its entire BSS API (300 endpoints) as an MCP server using an admin token, so any internal agent can connect. A sales-assistant agent gains the ability to terminate subscriptions and change billing accounts, far beyond its purpose.
+  antipattern: |-
+    **Whole API as one MCP server, admin token.**
+
+    *Think of it this way:* Publishing the master key so any department can open any door.
+  fails: |-
+    - The MCP server exposes everything to everyone.
+    - One powerful credential sits behind all tools.
+    - Clients get capabilities they don't need.
+
+    **Root cause:** MCP used as a pass-through instead of a scoped capability boundary.
+
+    **Where it breaks:** MCP server design.
+  diagram:
+    bad:
+    - 300 endpoints · One server
+    - '!Admin token · Shared'
+    - Sales agent · Connects
+    - '!Can terminate · Subscriptions'
+    bad_note: Whole API as one MCP server, admin token
+    good:
+    - Per purpose · MCP servers
+    - +OAuth scopes · Per client
+    - +Task tools · Not endpoints
+    - Audit · Every call
+    good_note: Purpose-specific servers, scoped OAuth, task tools
+  solution: |-
+    1. Build purpose-specific MCP servers (sales read-only catalog and quotes; care with scoped writes).
+    2. Use per-client authorisation (OAuth scopes for the calling agent and user), not a shared admin token.
+    3. Expose task-shaped tools, and log every call.
+  works: |-
+    **Trade-off to manage:** More servers to maintain.
+
+    **How you prove it worked:**
+
+    - Tool capabilities per client versus their registered purpose.
+
+    **Same pattern elsewhere:** FinTech: a bank's core-banking MCP server exposes payment initiation to a research assistant.
+  takeaway: MCP standardises access. You still have to scope it.
+  related:
+  - sec-14
+  - tool-01
+  code: |
+    sales_mcp = FastMCP("sales-catalog")                           # purpose-specific, read-only
+
+    @sales_mcp.tool()
+    def get_offer(offering_id: str) -> dict: return catalog.get(offering_id)
+
+    @sales_mcp.tool()
+    def create_quote(offering_id: str, quantity: int) -> dict: return quotes.create(offering_id, quantity)
+
+    # auth: OAuth 2.1 bearer per calling agent + user; scopes ["catalog.read", "quote.write"]; every call logged
+  lang: python
+- id: tool-11
+  title: Tool description promises something the tool doesn't do
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's block_card tool description says "Blocks the card and orders a replacement." The implementation only blocks. The agent tells customers a replacement is on its way, and replacement requests never happen.
+  antipattern: |-
+    **Tool description drifts from behaviour.**
+
+    *Think of it this way:* A vending machine labelled "coffee and biscuit" that only gives coffee.
+  fails: |-
+    - Tool docs drift from implementation.
+    - The model trusts descriptions completely.
+    - No tests check described behaviour.
+
+    **Root cause:** Tool descriptions not tested against behaviour.
+
+    **Where it breaks:** Tool documentation.
+  diagram:
+    bad:
+    - Doc says · Block + replace
+    - '!Code does · Block only'
+    - Agent promises · Replacement
+    - '!None sent · Complaints'
+    bad_note: Tool description drifts from behaviour
+    good:
+    - Docs in code · Reviewed
+    - +Response lists · Actions done
+    - +Behaviour test · Side effects
+    - Claims match · Results
+    good_note: Docs with code, actions in response, tests
+  solution: |-
+    1. Keep descriptions next to code and review them with every change.
+    2. Return what was actually done in the response (actions_completed list).
+    3. Test that described side effects happen.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Claims vs tool-result mismatches.
+
+    **Same pattern elsewhere:** Telco: a reset_voicemail tool claims to send the new PIN by SMS but doesn't.
+  takeaway: Tool docs are a contract with the model. Test them.
+  related:
+  - aev-12
+  - agf-04
+  code: |
+    @tool
+    def cancel_add_on(subscription_id: str, add_on_id: str) -> dict:
+        """Cancels the add-on at the end of the current bill cycle. Does NOT issue a refund."""
+        r = orders.cancel_add_on(subscription_id, add_on_id, when="end_of_cycle")
+        return {"actions_completed": ["add_on_cancel_scheduled"], "effective": r.effective_date, "refund_issued": False}
+
+    def test_description_matches_behaviour():
+        r = cancel_add_on("SUB-T1", "ADD-ROAM")
+        assert r["actions_completed"] == ["add_on_cancel_scheduled"] and not r["refund_issued"]
+  lang: python
+- id: tool-12
+  title: Port-in tool blocks for hours waiting for completion
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's port_in tool waits synchronously until the number is ported, which can take hours. The agent session times out, the tool keeps running, and the customer gets no update.
+  antipattern: |-
+    **Blocking call for an hours-long process.**
+
+    *Think of it this way:* Standing at the post office counter until your parcel arrives abroad.
+  fails: |-
+    - Long business processes modelled as blocking calls.
+    - No status or notification path.
+    - Session lifetimes are shorter than processes.
+
+    **Root cause:** Synchronous design for asynchronous operations.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - port_in · Blocking
+    - '!Hours · Waiting'
+    - Session ends · Timeout
+    - '!No update · Customer'
+    bad_note: Blocking call for an hours-long process
+    good:
+    - Start port · Order id
+    - +Status tool · Any session
+    - +Notify · Done or failed
+    - Timeline · Expected
+    good_note: Start, return order id, status and notifications
+  solution: |-
+    1. Make the tool start the process and return an order id and expected timeline.
+    2. Provide get_port_status and send notifications on completion or failure.
+    3. Store state so any later session can continue.
+  works: |-
+    **Trade-off to manage:** Status polling and notification infrastructure.
+
+    **How you prove it worked:**
+
+    - Tool calls exceeding session lifetimes.
+
+    **Same pattern elsewhere:** FinTech: an account-switching tool blocks until the switch completes over several days.
+  takeaway: Long processes return a ticket, not a result.
+  related:
+  - tool-08
+  - agf-15
+  code: |
+    @tool
+    def start_port_in(msisdn: str, losing_carrier: str, account_number: str, pin: str) -> dict:
+        order = porting.submit(msisdn, losing_carrier, account_number, pin)
+        state_store.put(f"port:{msisdn}", {"order_id": order.id, "status": "SUBMITTED"})
+        return {"order_id": order.id, "expected": "usually within 2-4 hours", "status": "SUBMITTED"}
+
+    @tool
+    def get_port_status(order_id: str) -> dict: return porting.status(order_id)
+
+    porting.on_complete(lambda o: notify(o.customer, f"Your number {o.msisdn} is now active."))
+  lang: python
+- id: tool-13
+  title: Agent hammers the mainframe core-banking system
+  tags:
+  - Reliability
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's agents call a mainframe-backed balance API on every turn "to stay current". At peak, agent traffic triples mainframe transactions, raising MIPS costs and slowing branch systems.
+  antipattern: |-
+    **Call the mainframe on every turn.**
+
+    *Think of it this way:* Asking the head office for your balance every time you blink.
+  fails: |-
+    - No caching or rate limits.
+    - Agents call tools more than needed.
+    - Legacy systems have costly capacity.
+
+    **Root cause:** Tools hitting expensive legacy systems without protection.
+
+    **Where it breaks:** Tool layer.
+  diagram:
+    bad:
+    - Every turn · Balance call
+    - '!Peak · 3x txns'
+    - MIPS cost · Rises
+    - '!Branches slow · Shared system'
+    bad_note: Call the mainframe on every turn
+    good:
+    - Cache · Short TTL
+    - +Rate limit · Per session
+    - +Facade · Protects
+    - Call rules · When needed
+    good_note: Caching, rate limits, facade, call rules
+  solution: |-
+    1. Cache read results with short TTLs where freshness allows, and fetch once per turn at most.
+    2. Rate-limit tools per session and overall, and protect legacy systems with a facade.
+    3. Instruct agents when to call (only for balance questions).
+  works: |-
+    **Trade-off to manage:** Slightly stale reads; show "as of" times.
+
+    **How you prove it worked:**
+
+    - Calls per session; legacy system load attributed to agents.
+
+    **Same pattern elsewhere:** Telco: agents overload a legacy billing system with balance queries on bill-run day.
+  takeaway: Protect legacy systems from enthusiastic agents.
+  related:
+  - tool-08
+  - obs-12
+  code: |
+    @tool(rate_limit_per_session="3/min")
+    def get_balance(ctx: Session) -> dict:
+        """Call only when the customer asks about balance or available funds."""
+        key = f"bal:{ctx.account_id}:{ctx.turn_id}"
+        if (hit := cache.get(key)) or (hit := cache.get(f"bal:{ctx.account_id}", max_age_s=30)):
+            return hit
+        bal = core_facade.balance(ctx.account_id)                      # facade with global rate limit
+        cache.set(key, bal); cache.set(f"bal:{ctx.account_id}", bal, ttl=30)
+        return bal
+  lang: python
+- id: tool-14
+  title: Agent trusts a coverage tool's malformed response
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's serviceability API occasionally returns an empty JSON object during maintenance. The agent interprets missing fields as "no restrictions" and tells prospects fiber is available at addresses where it isn't.
+  antipattern: |-
+    **Unvalidated tool responses.**
+
+    *Think of it this way:* Reading a blank form as "everything approved".
+  fails: |-
+    - Responses aren't validated.
+    - Missing data is interpreted optimistically.
+    - The model fills gaps.
+
+    **Root cause:** No schema validation of tool responses.
+
+    **Where it breaks:** Tool implementation.
+  diagram:
+    bad:
+    - Empty JSON · Maintenance
+    - '!No fields · Read as OK'
+    - '''Available'' · Told prospect'
+    - '!No fiber · Reality'
+    bad_note: Unvalidated tool responses
+    good:
+    - Validate · Schema
+    - +Status enum · Incl. UNKNOWN
+    - +Error · If invalid
+    - Honest reply · Unknown
+    good_note: Schema validation and explicit UNKNOWN status
+  solution: |-
+    1. Validate responses against a schema in the tool; treat invalid ones as errors.
+    2. Return explicit status (AVAILABLE, NOT_AVAILABLE, UNKNOWN).
+    3. Teach the agent to handle UNKNOWN honestly.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Response validation failures per tool.
+
+    **Same pattern elsewhere:** FinTech: a KYC vendor's empty response is read as "no adverse media".
+  takeaway: Missing data means unknown, never yes.
+  related:
+  - cicd-18
+  - agf-11
+  code: |
+    class Coverage(BaseModel):
+        status: Literal["AVAILABLE", "NOT_AVAILABLE", "UNKNOWN"]
+        technology: str | None = None; max_down_mbps: int | None = None
+
+    @tool
+    def check_coverage(address_id: str) -> dict:
+        raw = coverage_api.lookup(address_id)
+        try:
+            return Coverage.model_validate(raw).model_dump()
+        except ValidationError:
+            return {"status": "UNKNOWN", "why": "coverage system returned invalid data",
+                    "tell_customer": "I can't confirm coverage right now; I'll have a specialist check."}
+  lang: python
+- id: tool-15
+  title: Balance unchanged right after the payment, so the agent pays again
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's bill-pay agent makes a credit-card payment, then checks the card balance to confirm. The balance service is eventually consistent and still shows the old balance. The agent concludes the payment failed and pays again.
+  antipattern: |-
+    **Confirm a write with a stale read.**
+
+    *Think of it this way:* Checking your letterbox seconds after posting a letter and assuming it wasn't sent.
+  fails: |-
+    - Reads after writes may be stale.
+    - The agent uses a read to confirm a write.
+    - No idempotency on the payment.
+
+    **Root cause:** Ignoring eventual consistency in tool design.
+
+    **Where it breaks:** Tool semantics.
+  diagram:
+    bad:
+    - Pay card · Done
+    - '!Read balance · Stale'
+    - '''Failed'' · Agent thinks'
+    - '!Pays again · Duplicate'
+    bad_note: Confirm a write with a stale read
+    good:
+    - Receipt · Payment id
+    - +Status · From write
+    - +Idem key · Blocks repeat
+    - Docs · Consistency
+    good_note: Use the write's receipt plus idempotency
+  solution: |-
+    1. Return a confirmation (payment id and status) from the write tool and use that, not a later read.
+    2. Use idempotency keys so a repeated payment is rejected.
+    3. Document consistency guarantees in tool descriptions.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Duplicate payments within minutes.
+
+    **Same pattern elsewhere:** Telco: after adding a data pass, the usage tool still shows the old allowance and the agent adds another pass.
+  takeaway: Confirm a write with its receipt, not with a read.
+  related:
+  - agf-06
+  code: |
+    @tool
+    def make_payment(amount: Decimal, ctx: Session) -> dict:
+        """Returns payment_id and status. The balance can take up to 15 minutes to update after a payment."""
+        key = f"pay:{ctx.account_id}:{ctx.intent_id}"                  # one payment per intent
+        r = payments.create(ctx.account_id, amount, idempotency_key=key)
+        return {"payment_id": r.id, "status": r.status, "note": "use this confirmation, not the balance"}
+  lang: python
+- id: tool-16
+  title: A generic http_request tool for everything
+  tags:
+  - Reliability
+  - Security
+  - Telco
+  scenario: |-
+    A carrier's internal agent has a single http_request(url, method, body) tool so it can call "any internal API". A prompt injection makes it call an internal admin endpoint that resets a network element's configuration.
+  antipattern: |-
+    **One generic HTTP tool.**
+
+    *Think of it this way:* Giving someone a phone that can dial any extension, including the emergency shutdown line.
+  fails: |-
+    - Unlimited reach inside the network.
+    - No per-endpoint authorisation.
+    - Server-side request forgery by design.
+
+    **Root cause:** Generic tools with unbounded scope.
+
+    **Where it breaks:** Tool design.
+  diagram:
+    bad:
+    - http_request · Any URL
+    - '!Injection · Admin endpoint'
+    - Config reset · Network element
+    - '!Outage · Risk'
+    bad_note: One generic HTTP tool
+    good:
+    - Specific tools · Approved ops
+    - +Allow-list · Read-only
+    - +Segmentation · Network
+    - Alerts · Off-list calls
+    good_note: Specific tools, allow-lists, segmentation
+  solution: |-
+    1. Replace generic HTTP with specific tools for approved operations.
+    2. If a generic fetch is needed, restrict it to an allow-list of read-only endpoints and methods.
+    3. Enforce network segmentation for agent runtimes.
+  works: |-
+    **Trade-off to manage:** More tools to build.
+
+    **How you prove it worked:**
+
+    - Calls to non-allow-listed endpoints.
+
+    **Same pattern elsewhere:** FinTech: an agent's generic HTTP tool reaches an internal payments admin API.
+  takeaway: Generic tools are generic attack surface.
+  related:
+  - tool-01
+  - sec-17
+  code: |
+    READ_ONLY_ALLOW = {("GET", "https://api.status.internal/v1/services"),
+                       ("GET", "https://kb.internal/api/articles")}
+
+    @tool
+    def fetch_internal(method: str, url: str) -> dict:
+        base = url.split("?")[0]
+        if (method, base) not in READ_ONLY_ALLOW:
+            return {"status": "REFUSED", "why": "endpoint not on the read-only allow-list"}
+        return http.request(method, url, timeout=5).json()
+    # agent runtime network policy: egress only to the gateway and allow-listed hosts
+  lang: python
+- id: tool-17
+  title: Tool returns ACH return code R03 with no explanation
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's payment-status tool returns only codes like "R03" or "R10". The agent guesses their meaning and tells a customer their payment was "returned for insufficient funds" (R01) instead of "no account found" (R03), so the customer doesn't fix the account number.
+  antipattern: |-
+    **Raw codes in tool output.**
+
+    *Think of it this way:* A doctor's note with only diagnosis codes and no description.
+  fails: |-
+    - Responses carry codes without meaning.
+    - The model guesses from training data.
+    - The next action isn't given.
+
+    **Root cause:** Tool outputs lack business semantics.
+
+    **Where it breaks:** Tool response design.
+  diagram:
+    bad:
+    - 'Status: R03 · Code only'
+    - '!Agent guesses · Means R01?'
+    - '''Low funds'' · Wrong reason'
+    - '!Not fixed · Account no.'
+    bad_note: Raw codes in tool output
+    good:
+    - Code map · In tool
+    - +Meaning · No account
+    - +Next action · Check number
+    - Fixable · By customer
+    good_note: Meaning and next action from the tool
+  solution: |-
+    1. Map codes to human-readable meanings and recommended next actions inside the tool.
+    2. Include whether the customer can fix it and how.
+  works: |-
+    **Trade-off to manage:** Code mappings need maintenance.
+
+    **How you prove it worked:**
+
+    - Explanation accuracy for returned payments in evals.
+
+    **Same pattern elsewhere:** Telco: a port-in rejection code is returned raw and the agent explains it wrongly.
+  takeaway: Return meaning and next step, not just codes.
+  related:
+  - aev-11
+  - agf-11
+  code: |
+    ACH_CODES = {
+        "R01": ("Insufficient funds", "customer_fixable", "Ask the customer to fund the account and retry in 2 days."),
+        "R03": ("No account / unable to locate account", "customer_fixable", "Ask the customer to confirm the account and routing numbers."),
+        "R10": ("Customer advises not authorized", "not_fixable", "Escalate to disputes; do not retry."),
+    }
+
+    @tool
+    def payment_status(payment_id: str) -> dict:
+        p = ach.status(payment_id)
+        if p.return_code:
+            meaning, fixable, next_action = ACH_CODES[p.return_code]
+            return {"status": "RETURNED", "code": p.return_code, "meaning": meaning,
+                    "customer_can_fix": fixable == "customer_fixable", "next_action": next_action}
+        return {"status": p.status}
+  lang: python
+- id: tool-18
+  title: Tool returns a formatted paragraph the agent must parse
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's get_plan_details tool returns a marketing paragraph ("Enjoy unlimited talk and text plus 50GB of premium data, then..."). The agent must extract the allowance from prose and sometimes reads 50GB as the total cap when it's the premium tier only.
+  antipattern: |-
+    **Tool returns marketing prose.**
+
+    *Think of it this way:* Getting a brochure when you asked for a spec sheet.
+  fails: |-
+    - Responses are human prose, not data.
+    - The model re-parses and misreads.
+    - Fields aren't explicit.
+
+    **Root cause:** Tools designed for display, not for agents.
+
+    **Where it breaks:** Tool response design.
+  diagram:
+    bad:
+    - Plan details · As prose
+    - '!''50GB premium'' · Then...'
+    - Agent parses · Misreads
+    - '!Wrong cap · Told customer'
+    bad_note: Tool returns marketing prose
+    good:
+    - Fields · premium_gb
+    - +Throttle · Speed field
+    - +Hotspot · Separate
+    - Display text · Optional
+    good_note: Structured fields, display text separate
+  solution: |-
+    1. Return structured fields (premium_data_gb, throttled_speed, hotspot_gb, roaming zones).
+    2. Include a short display string separately if needed.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Allowance answer accuracy in evals.
+
+    **Same pattern elsewhere:** FinTech: a product tool returns a marketing description instead of APR and fee fields.
+  takeaway: Tools should return data. Let the agent write the prose.
+  related:
+  - tool-17
+  code: |
+    @tool
+    def plan_allowances(subscription_id: str) -> dict:
+        a = catalog.allowances(subscription_id)
+        return {"premium_data_gb": a.premium_gb, "throttled_speed_kbps": a.throttle_kbps,
+                "hotspot_gb": a.hotspot_gb, "roaming_zones": a.roaming_zones,
+                "display": f"{a.premium_gb} GB premium data, then {a.throttle_kbps // 1000} Mbps"}
+  lang: python
+- id: tool-19
+  title: Two MCP servers both offer a tool named transfer
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's agent connects to two MCP servers: one for internal account transfers and one for a brokerage partner. Both expose a tool named "transfer". The agent calls the brokerage transfer when the customer meant moving money between their own current and savings accounts.
+  antipattern: |-
+    **Colliding tool names across servers.**
+
+    *Think of it this way:* Two contacts in your phone both called "Mum".
+  fails: |-
+    - Tool names collide across servers.
+    - Descriptions don't disambiguate.
+    - The client doesn't namespace.
+
+    **Root cause:** No namespacing or disambiguation across tool sources.
+
+    **Where it breaks:** MCP client configuration and tool naming.
+  diagram:
+    bad:
+    - Server A · transfer
+    - '!Server B · transfer'
+    - Ambiguous · Same name
+    - '!Wrong rail · Brokerage'
+    bad_note: Colliding tool names across servers
+    good:
+    - Namespace · Per server
+    - +Clear names · Own accounts
+    - +When not · In docs
+    - Load · By intent
+    good_note: Namespaced tools and intent-based loading
+  solution: |-
+    1. Namespace tools by server (banking__transfer_between_own_accounts, brokerage__transfer_to_investment).
+    2. Write descriptions that say when not to use each tool.
+    3. Load only the servers needed for the intent.
+  works: |-
+    **Trade-off to manage:** Longer tool names.
+
+    **How you prove it worked:**
+
+    - Name collisions at registration; wrong-server calls in evals.
+
+    **Same pattern elsewhere:** Telco: care and wholesale MCP servers both expose "get_account", with different meanings.
+  takeaway: Tool names need namespaces once you have more than one server.
+  related:
+  - tool-03
+  - sec-14
+  code: |
+    def load_tools(intent):
+        servers = {"move_money": ["banking"], "invest": ["brokerage"]}[intent.domain]   # only what's needed
+        tools = []
+        for s in servers:
+            for t in mcp[s].list_tools():
+                t.name = f"{s}__{t.name}"                                    # namespaced
+                tools.append(t)
+        return tools
+
+    # banking__transfer_between_own_accounts: "Moves cash between the customer's bank accounts.
+    #   Do NOT use to fund an investment account (use brokerage__transfer_to_investment)."
+  lang: python
+- id: tool-20
+  title: No one knows which tools agents actually use
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's platform exposes 80 tools to agents. When the BSS team plans to retire an API, nobody can say which agents call the tools that depend on it, how often, or with what error rates. The retirement breaks two agents.
+  antipattern: |-
+    **Tools without usage telemetry.**
+
+    *Think of it this way:* Turning off a water main without knowing which houses it supplies.
+  fails: |-
+    - No per-tool usage or error telemetry.
+    - Dependencies between tools and APIs aren't mapped.
+    - Changes are risky.
+
+    **Root cause:** Tools without observability or inventory.
+
+    **Where it breaks:** Tool platform.
+  diagram:
+    bad:
+    - 80 tools · Exposed
+    - '!API retired · Planned'
+    - Who uses it? · Unknown
+    - '!2 agents · Broken'
+    bad_note: Tools without usage telemetry
+    good:
+    - Tool metrics · Calls, errors
+    - +Dependency map · Tool to API
+    - +Registry · Owners
+    - Notify · Before retire
+    good_note: Per-tool metrics, dependency map, registry
+  solution: |-
+    1. Emit metrics per tool (calls, callers, latency, errors) and keep a dependency map from tools to backend APIs.
+    2. Maintain a tool registry with owners and deprecation status.
+    3. Notify consuming agents before retirements.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Tools without usage data; unknown callers.
+
+    **Same pattern elsewhere:** FinTech: a bank retires a fraud-score API and silently breaks an agent tool.
+  takeaway: You can't retire what you can't see being used.
+  related:
+  - mas-15
+  - tel-11
+  code: |
+    def instrumented(tool):
+        def run(*a, ctx, **kw):
+            t0 = monotonic()
+            try:
+                return tool(*a, ctx=ctx, **kw)
+            except Exception:
+                tool_errors.labels(tool=tool.__name__, caller=ctx.agent_id).inc(); raise
+            finally:
+                tool_calls.labels(tool=tool.__name__, caller=ctx.agent_id).inc()
+                tool_latency.labels(tool=tool.__name__).observe(monotonic() - t0)
+        return run
+
+    registry.register(tool="get_bill_summary", owner="billing-platform", backends=["billing-api/v3"], status="active")
+  lang: python

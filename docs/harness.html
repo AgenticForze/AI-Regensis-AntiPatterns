@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Harness Engineering at Every Stage · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,36 +20,39 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="active" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="active" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part F · Harness Engineering</div>
-  <h1><span class="sn">15</span>Harness Engineering at Every Stage</h1>
+  <h1><span class="sn">18</span>Harness Engineering at Every Stage</h1>
   <p class="lede">The harness is all the engineering around the model, at each stage from data to production. It covers the test harnesses that measure the system and the runtime harness that makes an agent work.</p>
   <span class="pill">8 anti-patterns</span>
 </div>
@@ -175,11 +178,11 @@ Two kinds of harness matter:</p>
 <text class="dg-side-t" x="851.0" y="270.2" font-size="12" text-anchor="middle">Shared trace store</text>
 <rect class="dg-side" x="766" y="319.5" width="170" height="90.5" rx="10"/>
 <text class="dg-side-t" x="851.0" y="368.8" font-size="12" text-anchor="middle">One metrics catalog</text></svg><figcaption>Harness stack: each lifecycle stage has its own harness, on shared datasets, judges and traces</figcaption></figure>
-<div class="toc"><div class="toc-h">In this section</div><a href="#harness-data-stage"><span>15.1</span>Data stage: no golden documents, so parser regressions go unnoticed</a><a href="#harness-retrieval-stage"><span>15.2</span>Retrieval stage: no labelled query set</a><a href="#harness-generation-stage"><span>15.3</span>Generation stage: no faithfulness harness</a><a href="#harness-runtime-prompt-only"><span>15.4</span>Agent runtime: the prompt treated as the whole agent</a><a href="#harness-final-answer-only"><span>15.5</span>Agent evaluation: judging only the final answer, not the trajectory</a><a href="#harness-redteam-once"><span>15.6</span>Safety: red-teaming once before launch</a><a href="#harness-cicd-stage"><span>15.7</span>CI/CD: one big eval run instead of a tiered gate</a><a href="#harness-production-stage"><span>15.8</span>Production: no online evaluation, drift detection or feedback loop</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#harness-data-stage"><span>18.1</span>Data stage: no golden documents, so parser regressions go unnoticed</a><a href="#harness-retrieval-stage"><span>18.2</span>Retrieval stage: no labelled query set</a><a href="#harness-generation-stage"><span>18.3</span>Generation stage: no faithfulness harness</a><a href="#harness-runtime-prompt-only"><span>18.4</span>Agent runtime: the prompt treated as the whole agent</a><a href="#harness-final-answer-only"><span>18.5</span>Agent evaluation: judging only the final answer, not the trajectory</a><a href="#harness-redteam-once"><span>18.6</span>Safety: red-teaming once before launch</a><a href="#harness-cicd-stage"><span>18.7</span>CI/CD: one big eval run instead of a tiered gate</a><a href="#harness-production-stage"><span>18.8</span>Production: no online evaluation, drift detection or feedback loop</a></div>
 
 <article class="ap" id="harness-data-stage">
   <header class="ap-h">
-    <div class="ap-num">15.1</div>
+    <div class="ap-num">18.1</div>
     <div>
       <h2><a href="#harness-data-stage">Data stage: no golden documents, so parser regressions go unnoticed</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span></div>
@@ -255,12 +258,14 @@ definition of extraction quality between data and AI teams.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Parsing is the first place quality is lost. A golden-document harness catches regressions before they spread into every index.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you choose which documents go into a golden set?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-retrieval-stage">
   <header class="ap-h">
-    <div class="ap-num">15.2</div>
+    <div class="ap-num">18.2</div>
     <div>
       <h2><a href="#harness-retrieval-stage">Retrieval stage: no labelled query set</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span></div>
@@ -334,12 +339,14 @@ automated regression test rather than a one-time review.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>You can&#x27;t tune retrieval through the final answer. A labelled query set, with security tests included, makes retrieval an engineering decision.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you avoid overfitting to synthetic queries?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-generation-stage">
   <header class="ap-h">
-    <div class="ap-num">15.3</div>
+    <div class="ap-num">18.3</div>
     <div>
       <h2><a href="#harness-generation-stage">Generation stage: no faithfulness harness</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span></div>
@@ -414,12 +421,14 @@ refusal metrics catch drift in both directions after model upgrades.</p></sectio
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Evaluate generation with retrieval frozen. Measure claim-level faithfulness and refusal behaviour, not how fluent the answer sounds.</p></div>
     <div><span class="k">Follow-up to expect</span><p>Why measure false refusals as well as hallucinations?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-runtime-prompt-only">
   <header class="ap-h">
-    <div class="ap-num">15.4</div>
+    <div class="ap-num">18.4</div>
     <div>
       <h2><a href="#harness-runtime-prompt-only">Agent runtime: the prompt treated as the whole agent</a></h2>
       <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-sec">Security</span></div>
@@ -509,12 +518,14 @@ safer, because behaviour is shaped by code as well as prompt.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>The model proposes and the harness disposes. Context, tools, sandboxing, hooks and budgets are where agent reliability and safety are actually engineered.</p></div>
     <div><span class="k">Follow-up to expect</span><p>When would you use a managed harness rather than building your own on a framework?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-final-answer-only">
   <header class="ap-h">
-    <div class="ap-num">15.5</div>
+    <div class="ap-num">18.5</div>
     <div>
       <h2><a href="#harness-final-answer-only">Agent evaluation: judging only the final answer, not the trajectory</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-sec">Security</span></div>
@@ -596,12 +607,14 @@ catches the conversational failures that single-turn tests miss.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>For agents, how matters as much as what. Evaluate trajectories and safety invariants in simulated multi-turn runs.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you build a realistic user simulator for agent testing?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-redteam-once">
   <header class="ap-h">
-    <div class="ap-num">15.6</div>
+    <div class="ap-num">18.6</div>
     <div>
       <h2><a href="#harness-redteam-once">Safety: red-teaming once before launch</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span></div>
@@ -679,12 +692,14 @@ discover new classes of attack that are then automated.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Red-teaming is a regression suite, not an event. Automate attacks, run them on every change, and turn every finding into a permanent test.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do canary tokens help measure data-exfiltration risk?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-cicd-stage">
   <header class="ap-h">
-    <div class="ap-num">15.7</div>
+    <div class="ap-num">18.7</div>
     <div>
       <h2><a href="#harness-cicd-stage">CI/CD: one big eval run instead of a tiered gate</a></h2>
       <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
@@ -760,12 +775,14 @@ caught per PR.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Tier your eval gates like your test pyramid: fast and targeted on every PR, full depth before release, live metrics in canary.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you map code changes to the eval segments they could affect?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="harness-production-stage">
   <header class="ap-h">
-    <div class="ap-num">15.8</div>
+    <div class="ap-num">18.8</div>
     <div>
       <h2><a href="#harness-production-stage">Production: no online evaluation, drift detection or feedback loop</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
@@ -849,10 +866,12 @@ complaints do, and the flywheel keeps offline evals representative, which closes
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Evaluation doesn&#x27;t end at deployment. Online evals, drift monitors and trace-linked feedback keep the harness honest as the world changes.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you evaluate online without ground-truth labels?</p></div>
+    
   </section>
+  
 </article>
 
-<div class="pn"><a class="prev" href="local-vs-cloud.html">← 14. Local LLMs vs Cloud Cost</a><a class="next" href="ai-tools.html">16. Claude &amp; AI Tools →</a></div>
+<div class="pn"><a class="prev" href="local-vs-cloud.html">← 17. Local LLMs vs Cloud Cost</a><a class="next" href="ai-tools.html">19. Claude &amp; AI Tools →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

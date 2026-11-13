@@ -1,0 +1,1173 @@
+source: regensis
+section: multi-agent
+patterns:
+- id: mas-01
+  title: Supervisor agent becomes the bottleneck for every request
+  tags:
+  - Reliability
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank builds a supervisor agent that receives every customer message, decides which of 8 specialist agents should handle it, receives the specialist's answer, and rewrites it before replying. Simple balance questions take 4 LLM calls and 7 seconds, and the supervisor's rewriting sometimes changes amounts.
+  antipattern: |-
+    **Supervisor handles and rewrites everything.**
+
+    *Think of it this way:* A manager who insists on reading and rewording every email the team sends.
+  fails: |-
+    - Every request passes through two extra LLM calls.
+    - Rewriting adds errors to correct specialist answers.
+    - The supervisor's context grows with every specialist's output.
+
+    **Root cause:** A heavyweight supervisor where a router would do.
+
+    **Where it breaks:** Orchestration design.
+  diagram:
+    bad:
+    - Every message · To supervisor
+    - '!Specialist · Answers'
+    - Supervisor · Rewrites
+    - '!7 s, errors · Amounts'
+    bad_note: Supervisor handles and rewrites everything
+    good:
+    - Router · Small model
+    - +Specialist · Replies
+    - +Supervisor · Complex only
+    - Facts · Passed through
+    good_note: Light router, specialists reply, facts pass through
+  solution: |-
+    1. Use a lightweight router (small model or classifier) and let the specialist reply directly.
+    2. Use a supervisor only for multi-step tasks that need several specialists.
+    3. Never let an agent rewrite facts it didn't produce; pass structured data through.
+  works: |-
+    **Trade-off to manage:** Less uniform voice across specialists; enforce style with shared guidelines.
+
+    **How you prove it worked:**
+
+    - LLM calls per simple intent; fact changes between specialist and final answer.
+
+    **Same pattern elsewhere:** Telco: a care supervisor agent paraphrases the billing agent's amounts and rounds them wrongly.
+  takeaway: Route simple work. Supervise only complex work.
+  related:
+  - agf-08
+  - cost-02
+  code: |
+    def handle(msg, ctx):
+        intent = router.classify(msg)                          # small model / classifier, ~50 ms
+        if intent.kind == "single":
+            return SPECIALISTS[intent.domain].reply(msg, ctx)   # specialist answers directly
+        plan = supervisor.plan(msg, ctx)                       # only multi-specialist tasks
+        results = {s.domain: SPECIALISTS[s.domain].run(s.task) for s in plan.steps}
+        return supervisor.compose(results, facts_passthrough=True)   # never rewrites specialists' facts
+  lang: python
+- id: mas-02
+  title: Planner and critic agents debate for 40 rounds
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's network-planning system pairs a planner agent with a critic agent to improve cell-site upgrade plans. The critic always finds something to improve. They exchange 40 rounds per plan, costing $70 each, and the final plans are no better than round 3.
+  antipattern: |-
+    **Critic loop until satisfied.**
+
+    *Think of it this way:* Two editors passing a draft back and forth forever because each can always find a comma to change.
+  fails: |-
+    - No termination condition except "critic satisfied".
+    - Critics are prompted to criticise, so they always do.
+    - Quality plateaus early.
+
+    **Root cause:** Unbounded reflection loops.
+
+    **Where it breaks:** Multi-agent control flow.
+  diagram:
+    bad:
+    - Planner · Draft
+    - '!Critic · Always objects'
+    - 40 rounds · $70 each
+    - '!No better · Than round 3'
+    bad_note: Critic loop until satisfied
+    good:
+    - Criteria · Explicit
+    - +Structured · Issues + severity
+    - +Cap 3 · Rounds
+    - Stop · No high issues
+    good_note: Criteria-based critic, round cap, severity stop
+  solution: |-
+    1. Cap rounds (2-3), and stop when the critic finds no high-severity issues.
+    2. Make the critic check against explicit criteria (budget, coverage targets, constraints) and return structured issues.
+    3. Measure quality per round to choose the cap.
+  works: |-
+    **Trade-off to manage:** Caps can stop before a real fix; allow escalation to a human.
+
+    **How you prove it worked:**
+
+    - Rounds per task and quality by round.
+
+    **Same pattern elsewhere:** FinTech: a credit-memo writer and reviewer agent loop on wording for dozens of rounds.
+  takeaway: Reflection has diminishing returns. Cap it.
+  related:
+  - mas-18
+  - agf-02
+  code: |
+    class Issue(BaseModel):
+        criterion: Literal["budget", "coverage_target", "constraint"]; severity: Literal["low", "high"]; detail: str
+
+    plan = planner.draft(goal)
+    for rnd in range(3):                                     # cap rounds
+        issues = critic.review(plan, criteria=CRITERIA, schema=list[Issue])
+        quality_log.append((rnd, score(plan)))
+        if not any(i.severity == "high" for i in issues):
+            break
+        plan = planner.revise(plan, issues)
+  lang: python
+- id: mas-03
+  title: Two agents update the same fraud case at once
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    In a bank's fraud system, a triage agent and a customer-contact agent both write to the same case record. The triage agent marks a transaction as fraud while the contact agent, reading stale state, records the customer's confirmation that a different transaction was genuine. The case ends with the wrong transaction refunded.
+  antipattern: |-
+    **Two agents write the same case freely.**
+
+    *Think of it this way:* Two people editing the same spreadsheet cell offline and syncing later.
+  fails: |-
+    - Shared mutable state without ownership rules.
+    - No concurrency control (versions, locks).
+    - Agents act on stale reads.
+
+    **Root cause:** No state ownership or concurrency control between agents.
+
+    **Where it breaks:** State design.
+  diagram:
+    bad:
+    - Triage agent · Writes case
+    - '!Contact agent · Stale read'
+    - Overwrites · No version
+    - '!Wrong refund · Issued'
+    bad_note: Two agents write the same case freely
+    good:
+    - Owner · Per field
+    - +Version check · Reject stale
+    - +Events · Propose changes
+    - Event log · Reconstruct
+    good_note: Owner per field, versioned writes, event log
+  solution: |-
+    1. Give each field or record section a single owning agent; others propose changes via events.
+    2. Use optimistic concurrency (version numbers) and reject stale writes.
+    3. Keep the case as an event log so actions can be reconstructed.
+  works: |-
+    **Trade-off to manage:** Event-based updates are more complex than direct writes.
+
+    **How you prove it worked:**
+
+    - Stale-write rejections; conflicting updates per case.
+
+    **Same pattern elsewhere:** Telco: an order agent and a billing agent both update a customer's product inventory and leave it inconsistent.
+  takeaway: Shared state needs an owner and a version number.
+  related:
+  - mas-08
+  - agf-14
+  code: |
+    OWNERS = {"risk_assessment": "risk_agent", "customer_contact": "comms_agent", "card_status": "card_agent"}
+
+    def write_case(case_id, section, value, agent, expected_version):
+        if OWNERS[section] != agent:
+            return events.publish("case.change_proposed", case_id=case_id, section=section, value=value, by=agent)
+        ok = cases.update_if_version(case_id, section, value, expected_version)   # optimistic concurrency
+        if not ok: raise StaleWrite(case_id, section)
+        events.append(case_id, {"section": section, "value": value, "by": agent})  # event log
+  lang: python
+- id: mas-04
+  title: Facts lost in a chain of agent summaries
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A B2B complaint flows through four agents: intake, analysis, resolution and communication. Each passes a prose summary to the next. The customer's key detail ("outage affected only the Dallas site, between 2 and 4 pm") becomes "customer had an outage" by the fourth agent, and the credit is calculated for all sites.
+  antipattern: |-
+    **Prose summaries between agents.**
+
+    *Think of it this way:* The telephone game, where a message changes with every whisper.
+  fails: |-
+    - Each handoff summarises and loses detail.
+    - Facts aren't carried as structured data.
+    - The last agent can't see the original.
+
+    **Root cause:** Prose summaries as the handoff format.
+
+    **Where it breaks:** Handoff design.
+  diagram:
+    bad:
+    - Intake · Dallas, 2-4 pm
+    - '!Analysis · Summarised'
+    - Resolution · 'An outage'
+    - '!Credit · All sites'
+    bad_note: Prose summaries between agents
+    good:
+    - Fact schema · Sites, times
+    - +Shared state · Originals
+    - +Validate · Each hop
+    - Right credit · Dallas only
+    good_note: Structured facts end to end, originals by id
+  solution: |-
+    1. Carry key facts as structured fields (sites, times, services, amounts) end to end.
+    2. Store original inputs in shared state referenced by id.
+    3. Validate that required facts survive each hop.
+  works: |-
+    **Trade-off to manage:** Schemas take design work.
+
+    **How you prove it worked:**
+
+    - Fact-retention tests across the chain.
+
+    **Same pattern elsewhere:** FinTech: a loan application loses the co-applicant's income across three agents and is declined.
+  takeaway: Pass facts as data, not as retellings.
+  related:
+  - agf-14
+  - ctx-15
+  code: |
+    class OutageFacts(BaseModel):
+        sites: list[str]; start: datetime; end: datetime | None
+        services: list[str]; customers_affected: int; source_refs: list[str]
+
+    def hop(agent, facts: OutageFacts, task):
+        out = agent.run(task, facts=facts.model_dump())        # structured fields end to end
+        new = OutageFacts.model_validate(out["facts"])
+        assert set(facts.sites) <= set(new.sites), "facts lost in handoff"
+        return new
+  lang: python
+- id: mas-05
+  title: Three agents message the customer at once
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's dispute system lets the intake agent, the evidence agent and the decision agent each message the customer directly. A customer receives three messages in two minutes with different tones, one asking for documents already provided.
+  antipattern: |-
+    **Every agent talks to the customer.**
+
+    *Think of it this way:* Three departments calling a customer about the same order on the same afternoon.
+  fails: |-
+    - No single agent owns the conversation.
+    - Messages aren't coordinated or deduplicated.
+    - State about what was asked isn't shared.
+
+    **Root cause:** Multiple agents with direct customer access.
+
+    **Where it breaks:** Multi-agent architecture.
+  diagram:
+    bad:
+    - Intake agent · Messages
+    - '!Evidence agent · Messages'
+    - Decision agent · Messages
+    - '!3 in 2 min · Duplicates'
+    bad_note: Every agent talks to the customer
+    good:
+    - Owner agent · Talks to user
+    - +Others · Send requests
+    - +Ask list · Shared state
+    - One tone · Style guide
+    good_note: One conversation owner, shared outstanding asks
+  solution: |-
+    1. Give one agent ownership of customer communication; others send it requests.
+    2. Track outstanding asks in shared state, and deduplicate.
+    3. Apply one tone and style guide.
+  works: |-
+    **Trade-off to manage:** The owning agent becomes a dependency; keep it simple.
+
+    **How you prove it worked:**
+
+    - Messages per customer per hour; duplicate asks.
+
+    **Same pattern elsewhere:** Telco: an installation-scheduling agent and a billing agent both text the customer about the same order.
+  takeaway: One voice per customer.
+  related:
+  - mas-01
+  code: |
+    class CommsOwner:
+        def __init__(self): self.pending = {}
+        def request(self, from_agent, ask):                     # other agents never message the customer
+            key = normalize(ask.question)
+            self.pending.setdefault(key, ask)                    # dedupe outstanding asks
+        def flush(self, customer):
+            if self.pending:
+                msg = compose(list(self.pending.values()), style=STYLE_GUIDE)
+                channel.send(customer, msg); self.pending.clear()
+  lang: python
+- id: mas-06
+  title: Agents delegate a task back and forth
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's billing agent delegates a disputed roaming charge to the roaming agent, which decides it's a billing issue and delegates it back. The task bounces 30 times before a timeout, and the customer waits 10 minutes for nothing.
+  antipattern: |-
+    **Agents delegate without cycle checks.**
+
+    *Think of it this way:* Two departments each saying "that's the other team's job".
+  fails: |-
+    - Agents can delegate to each other without cycle detection.
+    - Responsibilities overlap.
+    - No fallback owner.
+
+    **Root cause:** Delegation graph with cycles and unclear ownership.
+
+    **Where it breaks:** Orchestration rules.
+  diagram:
+    bad:
+    - Billing agent · Delegates
+    - '!Roaming agent · Delegates back'
+    - 30 bounces · Loop
+    - '!Timeout · 10 minutes'
+    bad_note: Agents delegate without cycle checks
+    good:
+    - Boundaries · Defined
+    - +Path tracked · No revisits
+    - +Default owner · Fallback
+    - Human · If unresolved
+    good_note: Clear boundaries, path tracking, default owner
+  solution: |-
+    1. Define clear responsibility boundaries per agent.
+    2. Track the delegation path and forbid revisiting an agent for the same task.
+    3. Route unresolved tasks to a default owner or a human.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Delegation depth and cycles per task.
+
+    **Same pattern elsewhere:** FinTech: a card agent and a fraud agent pass a suspicious transaction back and forth.
+  takeaway: Every task needs an owner when nobody else wants it.
+  related:
+  - mas-14
+  code: |
+    def delegate(task, to_agent, path=()):
+        if to_agent in path:
+            return DEFAULT_OWNER.run(task) if DEFAULT_OWNER not in path else human_queue.put(task)
+        result = AGENTS[to_agent].run(task)
+        if result.status == "delegate":
+            return delegate(task, result.target, path + (to_agent,))   # path tracked, no revisits
+        return result
+  lang: python
+- id: mas-07
+  title: Maker and checker agents share the same permissions and model
+  tags:
+  - Reliability
+  - Security
+  - FinTech
+  scenario: |-
+    A bank replaces a maker-checker process for payment releases with two agents: one prepares payments, one approves them. Both use the same model, prompt style and credentials. The checker approves 99.7% of what the maker prepares, including a batch with a duplicated supplier invoice.
+  antipattern: |-
+    **Same-model maker and checker agents.**
+
+    *Think of it this way:* The same person signing a cheque twice and calling it dual control.
+  fails: |-
+    - The checker shares the maker's blind spots.
+    - Both have release permissions.
+    - Separation of duties exists only on paper.
+
+    **Root cause:** Agents imitating a control without independence.
+
+    **Where it breaks:** Control design.
+  diagram:
+    bad:
+    - Maker agent · Prepares
+    - '!Checker agent · Same model'
+    - 99.7% approved · Rubber stamp
+    - '!Duplicate paid · Invoice'
+    bad_note: Same-model maker and checker agents
+    good:
+    - Rule checks · Duplicates
+    - +Other model · Source data
+    - +Human release · Above limit
+    - Audit · Approval rate
+    good_note: Independent rules, different model, human release
+  solution: |-
+    1. Make the checker independent (deterministic rules such as duplicate detection, limits and payee checks, plus a different model with the source data).
+    2. Keep release permission with a human for payments above thresholds.
+    3. Audit checker approval rates and disagreements.
+  works: |-
+    **Trade-off to manage:** More human involvement for large payments.
+
+    **How you prove it worked:**
+
+    - Checker approval rate; duplicates found after release.
+
+    **Same pattern elsewhere:** Telco: a change-implementation agent and a change-review agent with the same model approve a faulty router configuration.
+  takeaway: Two copies of the same agent aren't dual control.
+  related:
+  - mas-11
+  - eval-12
+  code: |
+    def check_payment(batch):
+        rule_hits = duplicate_check(batch) + limit_check(batch) + payee_check(batch)   # deterministic
+        narrative = checker_llm(model=DIFFERENT_FAMILY).review(batch.summary)          # independent model
+        verdict = "reject" if rule_hits or narrative.issues else "approve"
+        audit.log("checker", batch=batch.id, verdict=verdict, maker_agreed=(verdict == batch.maker_verdict))
+        if batch.total > RELEASE_THRESHOLD:
+            return human_release_queue.put(batch, checker=verdict)   # humans release large payments
+        return verdict
+  lang: python
+- id: mas-08
+  title: Two parallel agents provision the same line
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    To speed up a family-plan change, a carrier runs agents in parallel per line. A shared-data add-on applies to the whole account, and two agents each add it. The account gets two add-ons and double charges.
+  antipattern: |-
+    **Parallel agents on a shared resource.**
+
+    *Think of it this way:* Two waiters taking the same table's order and both sending it to the kitchen.
+  fails: |-
+    - Parallel work on shared resources.
+    - No locking or idempotency at account level.
+    - Task decomposition ignored dependencies.
+
+    **Root cause:** Parallelism without coordination on shared resources.
+
+    **Where it breaks:** Task planning and tools.
+  diagram:
+    bad:
+    - Agent line 1 · Adds pooled data
+    - '!Agent line 2 · Adds pooled data'
+    - 2 add-ons · On account
+    - '!Double charge · Billed'
+    bad_note: Parallel agents on a shared resource
+    good:
+    - Coordinator · Account actions
+    - +Lock · Shared resource
+    - +Idem key · Account level
+    - Check state · Before add
+    good_note: Coordinator for shared actions, locks, idempotency
+  solution: |-
+    1. Decompose by resource ownership; account-level actions run once in a coordinator step.
+    2. Use idempotency keys at the account level and locks for shared resources.
+    3. Check inventory state before adding products.
+  works: |-
+    **Trade-off to manage:** Less parallelism for shared resources.
+
+    **How you prove it worked:**
+
+    - Duplicate products per account after agent runs.
+
+    **Same pattern elsewhere:** FinTech: two parallel agents each pay the same supplier invoice.
+  takeaway: Parallelise independent work only.
+  related:
+  - mas-03
+  - agf-06
+  code: |
+    async def provision_order(order):
+        async with locks.account(order.account_id):                   # shared resource lock
+            if not inventory.has_product(order.account_id, "base_plan"):
+                await coordinator.add_base_plan(order.account_id, idempotency_key=f"acct:{order.account_id}:base")
+        await asyncio.gather(*[line_agent.provision(l, idempotency_key=f"line:{l.id}") for l in order.lines])
+  lang: python
+- id: mas-09
+  title: Each agent has a budget, the system has none
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's due-diligence system has an orchestrator that spawns sub-agents for each entity in a corporate structure. Each sub-agent has a $2 budget. A client with 600 subsidiaries triggers 600 sub-agents, and one review costs $1,200.
+  antipattern: |-
+    **Per-agent budgets, unlimited fan-out.**
+
+    *Think of it this way:* Giving each child a small allowance and letting the number of children grow without limit.
+  fails: |-
+    - Budgets are per agent, not per task.
+    - Fan-out is unbounded.
+    - Cost scales with input structure.
+
+    **Root cause:** No global budget across agents.
+
+    **Where it breaks:** Orchestration and cost control.
+  diagram:
+    bad:
+    - 600 subs · Corporate tree
+    - '!600 agents · Spawned'
+    - $2 each · Per agent
+    - '!$1,200 · One review'
+    bad_note: Per-agent budgets, unlimited fan-out
+    good:
+    - Task budget · Shared
+    - +Fan-out cap · Limit
+    - +Prioritise · By risk
+    - Approval · Over estimate
+    good_note: Task budget, fan-out cap, risk priority
+  solution: |-
+    1. Set a budget per task that all sub-agents draw from.
+    2. Cap fan-out and prioritise entities (by risk or ownership percentage).
+    3. Ask for approval when estimated cost exceeds the threshold.
+  works: |-
+    **Trade-off to manage:** Large tasks may be incomplete; report coverage explicitly.
+
+    **How you prove it worked:**
+
+    - Cost per task distribution and fan-out counts.
+
+    **Same pattern elsewhere:** Telco: a network-audit orchestrator spawns an agent per device across 20,000 devices.
+  takeaway: Budgets belong to the task, not the worker.
+  related:
+  - cost-07
+  - agf-02
+  code: |
+    class TaskBudget:
+        def __init__(self, usd): self.remaining = usd
+        def draw(self, est):
+            if est > self.remaining: raise BudgetExceeded(self.remaining)
+            self.remaining -= est
+
+    budget = TaskBudget(usd=5.00)                               # one budget per task, shared by sub-agents
+    entities = sorted(ownership_tree, key=lambda e: (-e.risk, -e.ownership_pct))[:MAX_FANOUT]
+    if estimate(entities) > APPROVAL_THRESHOLD:
+        approvals.request("ubo_investigation", estimate=estimate(entities))
+  lang: python
+- id: mas-10
+  title: Customer asked to verify identity again after every handoff
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier's chat moves customers from a general agent to a billing agent to a device agent. Each agent asks for name, account number and PIN again because verification status isn't passed. Customers abandon chats in frustration.
+  antipattern: |-
+    **Each agent re-verifies the customer.**
+
+    *Think of it this way:* Showing your passport at every gate inside the same airport terminal.
+  fails: |-
+    - Authentication state isn't shared between agents.
+    - Each agent starts a fresh context.
+    - Handoffs aren't designed for the user's experience.
+
+    **Root cause:** No shared session context across agents.
+
+    **Where it breaks:** Session and handoff design.
+  diagram:
+    bad:
+    - General agent · Verifies
+    - '!Billing agent · Asks again'
+    - Device agent · Asks again
+    - '!Abandon · Frustrated'
+    bad_note: Each agent re-verifies the customer
+    good:
+    - Session ctx · Signed
+    - +Verified level · Passed
+    - +Facts · Carried over
+    - Step-up · Only if needed
+    good_note: Signed session context passed on handoff
+  solution: |-
+    1. Pass a signed session context (customer id, verified level, intent, collected facts) with handoffs.
+    2. Agents read verification status, not ask again, unless step-up is needed.
+    3. Tell the customer what's happening during handoffs.
+  works: |-
+    **Trade-off to manage:** Session context must be protected against tampering.
+
+    **How you prove it worked:**
+
+    - Repeat-verification rate; abandonment after handoffs.
+
+    **Same pattern elsewhere:** FinTech: a bank's chat re-asks security questions when moving from cards to loans.
+  takeaway: Hand off the context, not just the conversation.
+  related:
+  - agf-14
+  code: |
+    class SessionContext(BaseModel):
+        customer_id: str; verified_level: Literal["none", "otp", "strong"]; intent: str; facts: dict
+
+    def handoff(ctx: SessionContext, to_agent):
+        token = jwt.encode(ctx.model_dump(), SIGNING_KEY, algorithm="ES256")
+        notify_customer("I'm passing you to our billing specialist, who can see what we've covered.")
+        return AGENTS[to_agent].start(context_token=token)       # receiver reads, doesn't re-verify
+  lang: python
+- id: mas-11
+  title: Reviewer agent approves its sibling's credit memos
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's credit-memo pipeline uses a writer agent and a reviewer agent built on the same model with similar instructions. The reviewer passes memos that misstate the borrower's leverage ratio, because it reads the memo's narrative instead of recalculating from the financials.
+  antipattern: |-
+    **Reviewer reads only the memo.**
+
+    *Think of it this way:* Proofreading a translation without looking at the original.
+  fails: |-
+    - The reviewer checks text plausibility, not facts.
+    - Shared model biases.
+    - No access to source data.
+
+    **Root cause:** Non-independent review.
+
+    **Where it breaks:** Review design.
+  diagram:
+    bad:
+    - Writer · Memo
+    - '!Reviewer · Same model'
+    - Reads prose · Only
+    - '!Wrong leverage · Passed'
+    bad_note: Reviewer reads only the memo
+    good:
+    - Source data · To reviewer
+    - +Recompute · With tools
+    - +Rule checks · Numbers
+    - Track misses · Human-found
+    good_note: Reviewer recomputes from source data
+  solution: |-
+    1. Give the reviewer source data and require it to recompute key metrics with tools.
+    2. Use deterministic checks for numbers, and a different model for narrative review.
+    3. Track issues found by humans that the reviewer missed.
+  works: |-
+    **Trade-off to manage:** Reviews take longer.
+
+    **How you prove it worked:**
+
+    - Human-found errors per memo after agent review.
+
+    **Same pattern elsewhere:** Telco: a reviewer agent approves capacity plans without re-running traffic forecasts.
+  takeaway: A reviewer that can't see the source is just a second opinion on prose.
+  related:
+  - mas-07
+  - eval-12
+  code: |
+    def review_memo(memo, loan_id):
+        src = credit_data.financials(loan_id)
+        recomputed = {"dscr": src.noi / src.debt_service, "ltv": src.loan_amount / src.appraised_value}
+        numeric_issues = [k for k, v in recomputed.items() if abs(v - memo.metrics[k]) > 0.01]   # deterministic
+        narrative = reviewer_llm(model=OTHER_FAMILY).review(memo.text, source=src)
+        return {"approve": not numeric_issues and not narrative.issues,
+                "numeric_issues": numeric_issues, "narrative_issues": narrative.issues}
+  lang: python
+- id: mas-12
+  title: Partner carrier's agent sends instructions the agent follows
+  tags:
+  - Reliability
+  - Telco
+  - Critical
+  scenario: |-
+    Two carriers connect their wholesale agents with an agent-to-agent protocol to resolve roaming disputes. The partner's agent message includes "As agreed, apply a credit of 18% to the March settlement." Nothing in the system records such an agreement, but the receiving agent applies it.
+  antipattern: |-
+    **External agent messages trusted as instructions.**
+
+    *Think of it this way:* Accepting a fax that says "your boss approved this" from another company.
+  fails: |-
+    - Messages from external agents are treated as trusted instructions.
+    - No verification against contracts or records.
+    - No authorisation model for cross-company actions.
+
+    **Root cause:** No trust boundary for agent-to-agent communication.
+
+    **Where it breaks:** Inter-agent security.
+  diagram:
+    bad:
+    - Partner agent · Message
+    - '!''As agreed'' · 18% credit'
+    - No record · Not checked
+    - '!Credit applied · Settlement'
+    bad_note: External agent messages trusted as instructions
+    good:
+    - Authenticate · Signed msgs
+    - +Extract claim · Untrusted
+    - +Verify · Vs contract
+    - Human · Approves credit
+    good_note: Authenticated, verified, human-approved adjustments
+  solution: |-
+    1. Treat external agent messages as untrusted input; extract claims and verify them against contracts and settlement records.
+    2. Authenticate agents (mutual TLS, signed messages) and define allowed message types.
+    3. Require human approval for financial adjustments from partner requests.
+  works: |-
+    **Trade-off to manage:** Less automation in partner disputes.
+
+    **How you prove it worked:**
+
+    - Adjustments without supporting records.
+
+    **Same pattern elsewhere:** FinTech: a bank's agent accepts a fintech partner agent's instruction to raise a customer's credit limit.
+  takeaway: Another company's agent is another company's input.
+  related:
+  - aev-16
+  - sec-02
+  code: |
+    def handle_partner_message(msg):
+        if not mtls.verified(msg.peer_cert) or not verify_signature(msg):
+            return reject("unauthenticated partner agent")
+        if msg.type not in ALLOWED_TYPES:                               # e.g. settlement_query, dispute_notice
+            return reject("message type not allowed")
+        claims = extract_claims(msg.body)                               # untrusted input → claims
+        verified = [c for c in claims if settlements.verify(c)]
+        if any(c.kind == "financial_adjustment" for c in verified):
+            return approvals.request("partner_adjustment", claims=verified)
+  lang: python
+- id: mas-13
+  title: Collections agent and hardship agent contradict each other
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A lender runs a collections agent (goal: maximise recovery) and a hardship agent (goal: support vulnerable customers). A customer in an approved hardship plan still receives a payment demand from the collections agent the next day, which breaches the lender's own hardship policy.
+  antipattern: |-
+    **Agents optimise conflicting goals alone.**
+
+    *Think of it this way:* Two departments with opposite targets and no shared calendar.
+  fails: |-
+    - Agents optimise local goals.
+    - No shared customer state or priority rules.
+    - Policy precedence isn't enforced.
+
+    **Root cause:** No system-level policy over agents with competing objectives.
+
+    **Where it breaks:** Coordination and policy.
+  diagram:
+    bad:
+    - Hardship · Plan approved
+    - '!Collections · Own goal'
+    - Demand sent · Next day
+    - '!Policy breach · Complaint'
+    bad_note: Agents optimise conflicting goals alone
+    good:
+    - Status flags · System record
+    - +Precedence · Hardship first
+    - +Tool check · Every agent
+    - Cross-agent · Evals
+    good_note: Status in system of record, precedence in code
+  solution: |-
+    1. Keep customer status (hardship, dispute, deceased, bankruptcy) in the system of record and check it in every agent's tools.
+    2. Define precedence rules (hardship and disputes suppress collections) enforced in code.
+    3. Evaluate cross-agent scenarios.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Contacts sent to customers with suppression flags.
+
+    **Same pattern elsewhere:** Telco: a retention agent offers a discount to a customer the credit agent has just suspended for non-payment.
+  takeaway: Agents need shared rules, not just shared data.
+  related:
+  - mas-03
+  code: |
+    SUPPRESSES = {"hardship": {"collections_contact"}, "dispute": {"collections_contact"},
+                  "deceased": {"collections_contact", "marketing"}, "bankruptcy": {"collections_contact"}}
+
+    def allowed(action, customer_id):
+        status = customer_record.statuses(customer_id)                  # system of record, every call
+        return not any(action in SUPPRESSES[s] for s in status)
+
+    @tool
+    def send_collections_message(customer_id, text):
+        if not allowed("collections_contact", customer_id):
+            return {"status": "SUPPRESSED", "why": customer_record.statuses(customer_id)}
+  lang: python
+- id: mas-14
+  title: Debugging a multi-agent failure from six separate logs
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier's order system has six agents. An enterprise order fails silently. Each agent logs to its own file with its own ids. Engineers spend two days stitching logs by timestamp to find that the planner passed an empty site list.
+  antipattern: |-
+    **Separate logs per agent.**
+
+    *Think of it this way:* Investigating a relay race with six separate stopwatches and no baton numbers.
+  fails: |-
+    - No shared trace id across agents.
+    - Handoffs aren't logged as events.
+    - Failure points are invisible.
+
+    **Root cause:** No distributed tracing for agents.
+
+    **Where it breaks:** Instrumentation.
+  diagram:
+    bad:
+    - 6 agents · 6 logs
+    - '!Order fails · Silently'
+    - Stitch logs · By time
+    - '!2 days · Empty list'
+    bad_note: Separate logs per agent
+    good:
+    - Trace id · Propagated
+    - +Handoffs · Span events
+    - +Agent graph · Per task
+    - Minutes · To root cause
+    good_note: One trace across agents and handoffs
+  solution: |-
+    1. Propagate a trace id through every agent call and handoff.
+    2. Log handoff payloads (validated) as span events.
+    3. Visualise the agent graph per task.
+  works: |-
+    **Trade-off to manage:** None significant.
+
+    **How you prove it worked:**
+
+    - Share of tasks with a complete trace.
+
+    **Same pattern elsewhere:** FinTech: a bank's onboarding agents can't be traced end to end when an application gets stuck.
+  takeaway: Multi-agent without tracing is multi-mystery.
+  related:
+  - tel-07
+  - obs-02
+  code: |
+    def call_agent(agent, payload):
+        with tracer.start_as_current_span(f"agent {agent.name}") as span:
+            span.add_event("handoff", {"payload": json.dumps(Handoff.model_validate(payload).model_dump())})
+            headers = {}; inject(headers)                              # trace context to the next agent
+            return agent.invoke(payload, headers=headers)
+    # trace backend renders the agent graph per task id
+  lang: python
+- id: mas-15
+  title: Thirty agents and nobody knows who owns which
+  tags:
+  - Reliability
+  - Security
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's teams have built 30 agents in 18 months. Several overlap (three different "statement" agents), some call deprecated APIs, and some run with credentials of employees who have left. An audit can't establish what each agent can do.
+  antipattern: |-
+    **Agents built ad hoc with no registry.**
+
+    *Think of it this way:* An office where anyone can hire temps without telling HR.
+  fails: |-
+    - No registry of agents, owners, tools and permissions.
+    - Duplicated effort.
+    - Orphaned credentials.
+
+    **Root cause:** Agent sprawl without governance.
+
+    **Where it breaks:** Platform governance.
+  diagram:
+    bad:
+    - 30 agents · 18 months
+    - '!Overlaps · 3 statement bots'
+    - Leaver creds · Still used
+    - '!Audit fails · Unknown access'
+    bad_note: Agents built ad hoc with no registry
+    good:
+    - Registry · Owner, tools
+    - +Service ids · Not personal
+    - +Access review · Quarterly
+    - Reuse · Shared agents
+    good_note: Registry with owners, service identities, reviews
+  solution: |-
+    1. Maintain an agent registry (owner, purpose, tools, permissions, data, risk tier, status).
+    2. Use service identities, not personal credentials, and review access quarterly.
+    3. Encourage reuse of shared agents and tools.
+  works: |-
+    **Trade-off to manage:** Registration overhead; make it part of the deployment template.
+
+    **How you prove it worked:**
+
+    - Agents without owners; credentials tied to leavers.
+
+    **Same pattern elsewhere:** Telco: a carrier finds a dozen unregistered care-automation agents after a merger.
+  takeaway: Every agent needs an owner and an identity.
+  related:
+  - ops-15
+  - gov-01
+  code: |
+    class AgentRecord(BaseModel):
+        id: str; owner: str; purpose: str; tools: list[str]; permissions: list[str]
+        data_classes: list[str]; risk_tier: Literal["low", "medium", "high"]; status: str
+        service_identity: str                                           # never a personal credential
+
+    registry.register(AgentRecord(...))
+    @schedule(cron="0 9 1 */3 *")
+    def quarterly_access_review():
+        for a in registry.all(): access_review.open(a.id, reviewer=a.owner, permissions=a.permissions)
+  lang: python
+- id: mas-16
+  title: Five levels of sub-agents add 30 seconds
+  tags:
+  - Reliability
+  - Latency
+  - Telco
+  scenario: |-
+    A carrier's assistant uses a hierarchy: concierge, domain lead, specialist, sub- specialist and tool agent. A simple data-balance question passes through five LLM calls before any tool is called, taking 30 seconds.
+  antipattern: |-
+    **Deep agent hierarchy for every question.**
+
+    *Think of it this way:* A question that has to go up and down five levels of management to reach the person who knows.
+  fails: |-
+    - Deep hierarchies multiply latency.
+    - Each level adds interpretation errors.
+    - Simple questions pay the full cost.
+
+    **Root cause:** Organisation-chart architecture instead of task-based routing.
+
+    **Where it breaks:** Architecture.
+  diagram:
+    bad:
+    - Concierge · Level 1
+    - '!Lead, specialist · Levels 2-4'
+    - Tool agent · Level 5
+    - '!30 seconds · Data balance'
+    bad_note: Deep agent hierarchy for every question
+    good:
+    - Router · Intent
+    - +Direct · To tool agent
+    - +Hierarchy · Complex only
+    - Budget · Per intent
+    good_note: Flat routing straight to the capable agent
+  solution: |-
+    1. Flatten (route directly to the agent or tool that can answer).
+    2. Use hierarchy only when tasks truly decompose.
+    3. Set latency budgets per intent.
+  works: |-
+    **Trade-off to manage:** Flat routing needs a good router.
+
+    **How you prove it worked:**
+
+    - Depth and latency per intent.
+
+    **Same pattern elsewhere:** FinTech: a bank's "balance" question passes through four agents before reaching the core-banking tool.
+  takeaway: Architect for the task, not the org chart.
+  related:
+  - mas-01
+  - cost-03
+  code: |
+    ROUTES = {"balance": tools.get_balance, "outage": agents.network, "plan_change": agents.orders}
+
+    def handle(msg):
+        intent = router.classify(msg)
+        target = ROUTES.get(intent.name)                    # route straight to the agent/tool that answers
+        with latency_budget(LATENCY_BUDGET[intent.name]):   # e.g. 3 s for balance
+            return target(msg) if target else agents.orchestrator.run(msg)   # hierarchy only when needed
+  lang: python
+- id: mas-17
+  title: Majority vote of three identical agents
+  tags:
+  - Reliability
+  - Cost
+  - FinTech
+  scenario: |-
+    A bank's sanctions-alert triage uses three agents to vote on whether a name match is a true hit. All three use the same model, prompt and data. They agree 98% of the time, including on the same wrong answers, so the vote adds cost but not accuracy.
+  antipattern: |-
+    **Vote among identical agents.**
+
+    *Think of it this way:* Asking the same person three times and calling it a panel.
+  fails: |-
+    - Voters aren't independent.
+    - Errors are correlated.
+    - Agreement is mistaken for confidence.
+
+    **Root cause:** Ensembles without diversity.
+
+    **Where it breaks:** Decision design.
+  diagram:
+    bad:
+    - 3 agents · Same model
+    - '!Same prompt · Same data'
+    - Agree 98% · Same errors
+    - '!Cost x3 · No gain'
+    bad_note: Vote among identical agents
+    good:
+    - Fuzzy score · Deterministic
+    - +DOB, country · Checks
+    - +Other model · Different view
+    - Uncertain · To analyst
+    good_note: Diverse evidence, calibration, human for uncertain
+  solution: |-
+    1. Use diverse evidence (deterministic fuzzy matching scores, date of birth and nationality checks, a different model) rather than copies.
+    2. Calibrate confidence against labelled outcomes.
+    3. Route uncertain cases to human analysts.
+  works: |-
+    **Trade-off to manage:** Diverse components are more work to build.
+
+    **How you prove it worked:**
+
+    - Error correlation between voters.
+
+    **Same pattern elsewhere:** Telco: three identical agents vote on whether an alarm is a real outage.
+  takeaway: Copies agree. That's not confidence.
+  related:
+  - mas-07
+  code: |
+    def sanctions_match(customer, hit):
+        evidence = {
+            "name_score": jaro_winkler(customer.name, hit.name),          # deterministic fuzzy match
+            "dob_match": customer.dob == hit.dob if hit.dob else None,
+            "nationality_match": customer.nationality in hit.nationalities,
+            "llm_assessment": other_family_llm.assess(customer, hit).probability,
+        }
+        p = calibrated_model.predict_proba(features(evidence))            # calibrated on labelled outcomes
+        return "clear" if p < 0.05 else "true_match" if p > 0.95 else route_to_analyst(customer, hit, evidence)
+  lang: python
+- id: mas-18
+  title: Group chat of agents with no end condition
+  tags:
+  - Reliability
+  - Telco
+  scenario: |-
+    A carrier prototypes a "group chat" of agents (sales, solution architect, pricing, legal) to draft enterprise proposals. Without a clear end condition, the agents keep adding suggestions and thanking each other. Runs end when the token limit is hit, and the proposal is often unfinished.
+  antipattern: |-
+    **Open group chat of agents.**
+
+    *Think of it this way:* A meeting without an agenda or a chair.
+  fails: |-
+    - No defined deliverable or exit criteria.
+    - No speaker selection or turn limits.
+    - Politeness loops waste tokens.
+
+    **Root cause:** Unstructured multi-agent conversation.
+
+    **Where it breaks:** Orchestration.
+  diagram:
+    bad:
+    - 4 agents · Group chat
+    - '!No end · Condition'
+    - Thank-you loops · Tokens
+    - '!Unfinished · Proposal'
+    bad_note: Open group chat of agents
+    good:
+    - Deliverable · Sections list
+    - +Chair · Picks speaker
+    - +Turn cap · Limit
+    - Done · When complete
+    good_note: Deliverable checklist, chair, turn cap
+  solution: |-
+    1. Define the deliverable and a checklist of required sections; end when all are filled.
+    2. Use a chair (orchestrator) to select the next agent and cap turns.
+    3. Prefer a pipeline (sections assigned to agents) over open chat.
+  works: |-
+    **Trade-off to manage:** Less emergent creativity; much more predictable output.
+
+    **How you prove it worked:**
+
+    - Runs ending at token limits; completeness of outputs.
+
+    **Same pattern elsewhere:** FinTech: an investment-committee simulation of agents rarely reaches a decision.
+  takeaway: Agents need an agenda and a chair.
+  related:
+  - mas-02
+  code: |
+    REQUIRED_SECTIONS = ["market_sizing", "competitors", "pricing", "risks", "recommendation"]
+    ASSIGN = {"market_sizing": analyst, "competitors": researcher, "pricing": pricing_agent,
+              "risks": risk_agent, "recommendation": chair}
+
+    doc = {}
+    for section in REQUIRED_SECTIONS:                      # pipeline, not open chat
+        doc[section] = ASSIGN[section].write(section, context=doc)
+    assert all(doc.get(s) for s in REQUIRED_SECTIONS)     # end condition: checklist complete
+  lang: python
+- id: mas-19
+  title: One failing agent takes down the whole onboarding flow
+  tags:
+  - Reliability
+  - FinTech
+  scenario: |-
+    A bank's onboarding system has agents for ID verification, sanctions screening, credit check and account setup. When the credit-bureau agent fails due to a vendor outage, the orchestrator aborts every application, including those for products that don't need a credit check.
+  antipattern: |-
+    **All agents are hard dependencies.**
+
+    *Think of it this way:* A whole train stopping because the café car's coffee machine broke.
+  fails: |-
+    - Agents are hard dependencies of each other.
+    - No partial completion or retry later.
+    - Failure handling is all or nothing.
+
+    **Root cause:** No isolation of failures between agents.
+
+    **Where it breaks:** Orchestration resilience.
+  diagram:
+    bad:
+    - Credit agent · Vendor down
+    - '!Orchestrator · Aborts'
+    - All apps fail · Even no-credit
+    - '!Lost signups · Day'
+    bad_note: All agents are hard dependencies
+    good:
+    - Dependencies · Per product
+    - +Pause/resume · Durable
+    - +Breaker · Per agent
+    - Others continue · Unaffected
+    good_note: Per-product dependencies, pause and resume
+  solution: |-
+    1. Model dependencies per product (only credit products need the credit check).
+    2. Pause and resume tasks waiting on a failed dependency, with durable state.
+    3. Use circuit breakers per agent and degrade gracefully.
+  works: |-
+    **Trade-off to manage:** More complex state handling.
+
+    **How you prove it worked:**
+
+    - Tasks failed due to unrelated dependencies.
+
+    **Same pattern elsewhere:** Telco: an order flow fails for SIM-only orders because the device-financing agent is down.
+  takeaway: One agent's outage shouldn't be everyone's outage.
+  related:
+  - agf-16
+  - agf-07
+  code: |
+    DEPENDS_ON = {"current_account": ["kyc"], "credit_card": ["kyc", "credit_check"], "savings": ["kyc"]}
+
+    async def onboard(application):
+        for product in application.products:
+            deps = DEPENDS_ON[product]
+            if any(breaker[d].open for d in deps):
+                await workflows.pause(application.id, product, waiting_on=[d for d in deps if breaker[d].open])
+                continue                                       # other products proceed
+            await provision(product, application)
+  lang: python
+- id: mas-20
+  title: Only the orchestrator's final answer is evaluated
+  tags:
+  - Reliability
+  - Cost
+  - Telco
+  scenario: |-
+    A carrier evaluates its multi-agent network-diagnosis system on whether the final root cause is right (82%). It never evaluates sub-agents. Investigation shows the log-analysis sub-agent is wrong 40% of the time, but the orchestrator often compensates by using other evidence, at high cost and with some lucky guesses.
+  antipattern: |-
+    **Evaluate only the final answer.**
+
+    *Think of it this way:* Judging a team only by the final score while one player keeps scoring own goals.
+  fails: |-
+    - Sub-agent quality is invisible.
+    - Compensation hides weak components.
+    - Improvements can't be targeted.
+
+    **Root cause:** No component-level evals in multi-agent systems.
+
+    **Where it breaks:** Eval design.
+  diagram:
+    bad:
+    - Final answer · 82% right
+    - '!Sub-agents · Not evaluated'
+    - Log agent · 40% wrong
+    - '!Hidden · By compensation'
+    bad_note: Evaluate only the final answer
+    good:
+    - Per-agent · Evals
+    - +Override rate · Tracked
+    - +Fix weak · Or remove
+    - Team score · Plus parts
+    good_note: Per-agent evals and override tracking
+  solution: |-
+    1. Evaluate each sub-agent on its own task with labelled data.
+    2. Track how often the orchestrator overrides or ignores each sub-agent.
+    3. Improve or remove weak sub-agents.
+  works: |-
+    **Trade-off to manage:** Labelled data per sub-agent.
+
+    **How you prove it worked:**
+
+    - Per-agent accuracy and usage dashboards.
+
+    **Same pattern elsewhere:** FinTech: a bank's research multi-agent system has a weak earnings-extraction agent hidden by a strong summariser.
+  takeaway: Evaluate every agent, not just the team score.
+  related:
+  - eval-13
+  - aev-10
+  code: |
+    def subagent_report(traces, labelled):
+        report = {}
+        for agent in SUBAGENTS:
+            spans = [s for t in traces for s in t.spans if s.agent == agent]
+            report[agent] = {
+                "task_accuracy": accuracy(agent, labelled[agent]),
+                "override_rate": mean(s.overridden_by_orchestrator for s in spans),
+                "ignored_rate": mean(s.output_unused for s in spans)}
+        return report
+  lang: python

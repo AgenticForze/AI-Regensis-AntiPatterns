@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Leadership Anti-Patterns · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,45 +20,48 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="active" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="active" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part H · Leadership &amp; Reference Architecture</div>
-  <h1><span class="sn">17</span>AI Leadership Anti-Patterns</h1>
+  <h1><span class="sn">20</span>AI Leadership Anti-Patterns</h1>
   <p class="lede">Most enterprise AI value is lost in operating models, not architectures. These are the organizational patterns that keep good technology from reaching production.</p>
-  <span class="pill">5 anti-patterns</span>
+  <span class="pill">12 anti-patterns</span>
 </div>
 
-<div class="toc"><div class="toc-h">In this section</div><a href="#poc-purgatory"><span>17.1</span>Proof-of-concept purgatory</a><a href="#tech-first-use-cases"><span>17.2</span>Technology-first use-case selection</a><a href="#no-platform-team"><span>17.3</span>Every team builds its own AI stack</a><a href="#accuracy-not-kpis"><span>17.4</span>Measuring success by model accuracy instead of business KPIs</a><a href="#ignoring-change-management"><span>17.5</span>Ignoring change management and workforce impact</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#poc-purgatory"><span>20.1</span>Proof-of-concept purgatory</a><a href="#tech-first-use-cases"><span>20.2</span>Technology-first use-case selection</a><a href="#no-platform-team"><span>20.3</span>Every team builds its own AI stack</a><a href="#accuracy-not-kpis"><span>20.4</span>Measuring success by model accuracy instead of business KPIs</a><a href="#ignoring-change-management"><span>20.5</span>Ignoring change management and workforce impact</a><a href="#build-everything-or-buy-everything"><span>20.6</span>Building everything, or buying everything</a><a href="#leaderboard-churn"><span>20.7</span>Chasing leaderboards and model churn</a><a href="#governance-bolted-on"><span>20.8</span>Governance bolted on at the end</a><a href="#wrong-team-shape"><span>20.9</span>The wrong team shape for applied AI</a><a href="#launch-and-leave"><span>20.10</span>Launch and leave</a><a href="#overpromising-to-executives"><span>20.11</span>Overpromising to executives</a><a href="#design-starts-with-the-model"><span>20.12</span>System design that starts with the model</a></div>
 
 <article class="ap" id="poc-purgatory">
   <header class="ap-h">
-    <div class="ap-num">17.1</div>
+    <div class="ap-num">20.1</div>
     <div>
       <h2><a href="#poc-purgatory">Proof-of-concept purgatory</a></h2>
       <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
@@ -132,12 +135,14 @@ criteria kill weak ideas early and free capacity, and the shared platform makes 
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Run pilots that are designed to graduate: production platform, agreed exit criteria, and a scale-or-stop decision on a fixed date.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you triage a portfolio of 60 stalled PoCs?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="tech-first-use-cases">
   <header class="ap-h">
-    <div class="ap-num">17.2</div>
+    <div class="ap-num">20.2</div>
     <div>
       <h2><a href="#tech-first-use-cases">Technology-first use-case selection</a></h2>
       <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
@@ -208,12 +213,14 @@ technique to problem avoids over-engineering, which keeps sponsors confident and
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Start from value pools, not technology. Score by value, feasibility and risk, then use the simplest technique that works.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What would a 6-week use-case discovery look like at a new client?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="no-platform-team">
   <header class="ap-h">
-    <div class="ap-num">17.3</div>
+    <div class="ap-num">20.3</div>
     <div>
       <h2><a href="#no-platform-team">Every team builds its own AI stack</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-scale">Scale</span><span class="tag t-sec">Security</span></div>
@@ -295,12 +302,14 @@ platform once and the patterns many times. Costs fall through shared capacity an
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Build the paved road once. A shared AI platform turns every new use case into configuration plus domain work, and makes security reviews fast.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you staff and fund an AI platform team?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="accuracy-not-kpis">
   <header class="ap-h">
-    <div class="ap-num">17.4</div>
+    <div class="ap-num">20.4</div>
     <div>
       <h2><a href="#accuracy-not-kpis">Measuring success by model accuracy instead of business KPIs</a></h2>
       <div class="tags"><span class="tag t-adopt">Adoption</span></div>
@@ -375,12 +384,14 @@ actually move the business. Process redesign is where the value is realized.</p>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Accuracy is an input, not an outcome. Tie model metrics to business KPIs through a value tree, and redesign the process to capture the value.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you report AI value to a board?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="ignoring-change-management">
   <header class="ap-h">
-    <div class="ap-num">17.5</div>
+    <div class="ap-num">20.5</div>
     <div>
       <h2><a href="#ignoring-change-management">Ignoring change management and workforce impact</a></h2>
       <div class="tags"><span class="tag t-adopt">Adoption</span></div>
@@ -457,10 +468,644 @@ feedback loops keep improving the tool, which increases trust further.</p></sect
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>AI adoption is a people change. Co-design, communicate, train, and realign incentives, or the best tool goes unused.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you address workforce concerns in a unionized environment?</p></div>
+    
   </section>
+  
 </article>
 
-<div class="pn"><a class="prev" href="ai-tools.html">← 16. Claude &amp; AI Tools</a><a class="next" href="capstone.html">18. Reference Architecture →</a></div>
+<article class="ap" id="build-everything-or-buy-everything">
+  <header class="ap-h">
+    <div class="ap-num">20.6</div>
+    <div>
+      <h2><a href="#build-everything-or-buy-everything">Building everything, or buying everything</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The steering committee asks whether to build an in-house RAG platform or buy a vendor product. Two camps argue
+"always build for control" versus "always buy for speed".</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>A blanket build-or-buy preference applied to the whole AI stack.</strong></p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Build-vs-buy is a portfolio decision per layer, not one decision.</li>
+<li>Building commodity layers wastes scarce engineers on undifferentiated work.</li>
+<li>Buying the differentiating layer hands the advantage to a vendor and creates lock-in.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-build-everything-or-buy-everything" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="108.4" font-size="12.5" text-anchor="middle">Whole AI stack</text>
+<rect class="dg-node dg-bad" x="305.5" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="108.4" font-size="12.5" text-anchor="middle">One blanket decision</text>
+<circle class="dg-badge-bad" cx="489.0" cy="85.0" r="8"/><text class="dg-badge-t" x="489.0" y="89.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Build commodity</text>
+<rect class="dg-node dg-std" x="527.0" y="108.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="135.4" font-size="12.5" text-anchor="middle">Buy differentiation</text>
+<rect class="dg-node dg-std" x="748.5" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="108.4" font-size="12.5" text-anchor="middle">Wasted talent or lock-in</text>
+<line class="dg-edge" x1="274.5" y1="104.0" x2="301.5" y2="104.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<line class="dg-edge" x1="496.0" y1="104.0" x2="523.0" y2="104.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<line class="dg-edge" x1="717.5" y1="104.0" x2="744.5" y2="104.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<text class="dg-note dg-note-bad" x="28" y="175.0" font-size="12.5">One answer for every layer</text>
+<rect class="dg-band dg-band-good" x="8" y="202.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="222.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="286.4" font-size="12.5" text-anchor="middle">Each layer</text>
+<rect class="dg-node dg-new" x="305.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="272.9" font-size="11" text-anchor="middle">Score: differentiation,</text>
+<text class="dg-t dg-t-new" x="399.2" y="285.9" font-size="11" text-anchor="middle">time-to-value, TCO,</text>
+<text class="dg-t dg-t-new" x="399.2" y="298.9" font-size="11" text-anchor="middle">control, risk</text>
+<circle class="dg-badge-new" cx="489.0" cy="263.0" r="8"/><text class="dg-badge-t" x="489.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Buy: models, vector DB,</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">observability</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="306.1" font-size="12.5" text-anchor="middle">Build: data pipelines,</text>
+<text class="dg-t dg-t-std" x="620.8" y="320.6" font-size="12.5" text-anchor="middle">retrieval, evals</text>
+<rect class="dg-node dg-new" x="748.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="279.1" font-size="12.5" text-anchor="middle">Abstractions + annual</text>
+<text class="dg-t dg-t-new" x="842.2" y="293.6" font-size="12.5" text-anchor="middle">review</text>
+<circle class="dg-badge-new" cx="932.0" cy="263.0" r="8"/><text class="dg-badge-t" x="932.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="282.0" x2="301.5" y2="282.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<line class="dg-edge" x1="496.0" y1="282.0" x2="523.0" y2="282.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<line class="dg-edge" x1="717.5" y1="282.0" x2="744.5" y2="282.0" marker-end="url(#ah-leadership-build-everything-or-buy-everything)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Per-layer build / buy / partner with optionality</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Decide <strong>per layer</strong> using differentiation, time-to-value, total cost of ownership (TCO), control and risk:</p>
+<ul>
+<li><strong>Buy or use managed</strong> for commodity infrastructure: foundation models, vector DB, observability.</li>
+<li><strong>Build</strong> what encodes proprietary advantage: domain data pipelines, retrieval tuned to your corpus, evals that define quality for your business, workflow integration.</li>
+<li><strong>Partner</strong> where speed matters but customization is needed.</li>
+<li>Protect optionality with abstraction layers and data portability, and revisit annually.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Engineers spend their time on what differentiates the business, while commodity layers improve with the market. In one
+example, the team bought a managed vector DB and observability tool, and built the ingestion pipeline, permission-aware
+retrieval service and eval suite because those encoded the company's data and quality definitions.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">CRITERIA</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"differentiation"</span><span class="p">:</span> <span class="mf">.3</span><span class="p">,</span> <span class="s2">"time_to_value"</span><span class="p">:</span> <span class="mf">.2</span><span class="p">,</span> <span class="s2">"tco"</span><span class="p">:</span> <span class="mf">.2</span><span class="p">,</span> <span class="s2">"control"</span><span class="p">:</span> <span class="mf">.15</span><span class="p">,</span> <span class="s2">"risk"</span><span class="p">:</span> <span class="mf">.15</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="n">layer_scores</span><span class="p">):</span>                  <span class="c1"># scores 1–5; high differentiation favours build</span>
+    <span class="n">build</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">CRITERIA</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">*</span> <span class="n">s</span><span class="p">[</span><span class="s2">"build"</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">layer_scores</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="n">buy</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">CRITERIA</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">*</span> <span class="n">s</span><span class="p">[</span><span class="s2">"buy"</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">layer_scores</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">return</span> <span class="s2">"build"</span> <span class="k">if</span> <span class="n">build</span> <span class="o">-</span> <span class="n">buy</span> <span class="o">&gt;</span> <span class="mf">0.5</span> <span class="k">else</span> <span class="s2">"buy"</span> <span class="k">if</span> <span class="n">buy</span> <span class="o">-</span> <span class="n">build</span> <span class="o">&gt;</span> <span class="mf">0.5</span> <span class="k">else</span> <span class="s2">"partner"</span>
+
+<span class="n">decisions</span> <span class="o">=</span> <span class="p">{</span><span class="n">layer</span><span class="p">:</span> <span class="n">decide</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span> <span class="k">for</span> <span class="n">layer</span><span class="p">,</span> <span class="n">scores</span> <span class="ow">in</span> <span class="n">workshop_scores</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Build what differentiates, buy what&#x27;s commodity, and keep the seams portable. Decide per layer, not once for the stack.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Should we build our own RAG platform or buy a vendor product?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="leaderboard-churn">
+  <header class="ap-h">
+    <div class="ap-num">20.7</div>
+    <div>
+      <h2><a href="#leaderboard-churn">Chasing leaderboards and model churn</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A new model just topped the public benchmarks. The team wants to switch every workload to it this sprint.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Model choice driven by headlines</strong>: either switch everything immediately, or refuse to switch at all.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Public benchmarks rarely match your task, data or constraints.</li>
+<li>Switching on headlines causes regressions in formats, refusals and tool-calling behaviour, and constant churn.</li>
+<li>Refusing to switch leaves cost and quality on the table.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-leaderboard-churn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">New #1 model</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Switch every route</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Format / refusal</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">regressions</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Churn</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Headline-driven model changes</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Candidate model</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="225.1" font-size="12.5" text-anchor="middle">LLM gateway (swap</text>
+<text class="dg-t dg-t-new" x="332.8" y="239.6" font-size="12.5" text-anchor="middle">by config)</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="225.1" font-size="12.5" text-anchor="middle">Task-specific evals</text>
+<text class="dg-t dg-t-new" x="510.0" y="239.6" font-size="12.5" text-anchor="middle">per route</text>
+<circle class="dg-badge-new" cx="577.6" cy="209.0" r="8"/><text class="dg-badge-t" x="577.6" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Switch winners via</text>
+<text class="dg-t dg-t-std" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">canary</text>
+<rect class="dg-node dg-std" x="615.6" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="259.4" font-size="12.5" text-anchor="middle">Keep incumbents</text>
+<rect class="dg-node dg-new" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="225.1" font-size="12.5" text-anchor="middle">Pinned versions +</text>
+<text class="dg-t dg-t-new" x="864.4" y="239.6" font-size="12.5" text-anchor="middle">fallback</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-leadership-leaderboard-churn)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Model choice is a cheap, evidence-based, per-route decision</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Make model choice an <strong>evidence-based, low-cost decision</strong>:</p>
+<ul>
+<li>Put all calls behind an <strong>LLM gateway</strong> so models are swappable by configuration.</li>
+<li>Run every candidate through your own <strong>task-specific eval suite</strong>, comparing quality, latency, cost and safety per use case.</li>
+<li>Roll out winners <strong>per route via canary</strong>; pin versions in production; track deprecations; keep a fallback model.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Gains are captured where they're real and regressions are avoided where they aren't. In one example, the new model won on
+reasoning-heavy analysis (+6 points) but regressed JSON compliance for extraction; the team switched one route, kept the
+other, and saved 30% on a third by moving it to a smaller model with equal scores.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_candidate</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">routes</span><span class="p">):</span>
+    <span class="n">decisions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">route</span> <span class="ow">in</span> <span class="n">routes</span><span class="p">:</span>
+        <span class="n">cur</span><span class="p">,</span> <span class="n">new</span> <span class="o">=</span> <span class="n">run_evals</span><span class="p">(</span><span class="n">route</span><span class="p">,</span> <span class="n">ROUTE_MODEL</span><span class="p">[</span><span class="n">route</span><span class="p">]),</span> <span class="n">run_evals</span><span class="p">(</span><span class="n">route</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span>
+        <span class="n">better</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">quality</span> <span class="o">&gt;=</span> <span class="n">cur</span><span class="o">.</span><span class="n">quality</span> <span class="o">+</span> <span class="mf">0.02</span> <span class="ow">and</span> <span class="n">new</span><span class="o">.</span><span class="n">safety</span> <span class="o">&gt;=</span> <span class="n">cur</span><span class="o">.</span><span class="n">safety</span> <span class="ow">and</span> <span class="n">new</span><span class="o">.</span><span class="n">format_ok</span> <span class="o">&gt;=</span> <span class="n">cur</span><span class="o">.</span><span class="n">format_ok</span>
+        <span class="n">cheaper</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">quality</span> <span class="o">&gt;=</span> <span class="n">cur</span><span class="o">.</span><span class="n">quality</span> <span class="o">-</span> <span class="mf">0.005</span> <span class="ow">and</span> <span class="n">new</span><span class="o">.</span><span class="n">cost</span> <span class="o">&lt;</span> <span class="n">cur</span><span class="o">.</span><span class="n">cost</span> <span class="o">*</span> <span class="mf">0.8</span>
+        <span class="n">decisions</span><span class="p">[</span><span class="n">route</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"canary"</span> <span class="k">if</span> <span class="n">better</span> <span class="ow">or</span> <span class="n">cheaper</span> <span class="k">else</span> <span class="s2">"keep"</span>
+    <span class="k">return</span> <span class="n">decisions</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Treat new models as candidates, not upgrades. A gateway plus your own evals turns model churn into routine, per-route decisions.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>A new model just topped the benchmarks. The team wants to switch everything. Your call?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="governance-bolted-on">
+  <header class="ap-h">
+    <div class="ap-num">20.8</div>
+    <div>
+      <h2><a href="#governance-bolted-on">Governance bolted on at the end</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Legal blocked a customer-facing AI launch two weeks before go-live over data and safety concerns. The team had never
+engaged them during the build.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Risk review is a single gate at the end of delivery</strong>, after design decisions are locked in.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Late surprises cause rework and adversarial relationships between delivery and risk teams.</li>
+<li>Real risks (prompt injection, data leakage, biased outcomes, IP, regulatory duties) go unmanaged during pilots.</li>
+<li>Every use case gets the same heavy review, so low-risk work queues behind high-risk work.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-governance-bolted-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Build</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Pilot</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Risk review at the end</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Launch blocked</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Governance as a late gate</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-new" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Risk tiering at</text>
+<text class="dg-t dg-t-new" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">intake</text>
+<circle class="dg-badge-new" cx="223.2" cy="182.0" r="8"/><text class="dg-badge-t" x="223.2" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="191.8" font-size="11" text-anchor="middle">Paved-road controls</text>
+<text class="dg-t dg-t-new" x="332.8" y="204.8" font-size="11" text-anchor="middle">(PII, guardrails,</text>
+<text class="dg-t dg-t-new" x="332.8" y="217.8" font-size="11" text-anchor="middle">logging)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Tier-specific</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">evidence (system</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">card, red team)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Governance council</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">with SLA</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">On-time launch</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-leadership-governance-bolted-on)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Governance by design, proportional to risk</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Make governance <strong>part of delivery, scaled to risk</strong>:</p>
+<ul>
+<li><strong>Risk tiering at intake</strong> (internal productivity vs customer-facing vs consequential decisions about people), with proportionate controls per tier.</li>
+<li>Bake controls into the paved road: data classification and PII redaction, approved models with agreed data terms, guardrails, logging and audit trails.</li>
+<li>For higher tiers: a <strong>system card</strong>, red-team results against the OWASP LLM Top 10, an impact assessment, human-oversight design and incident playbooks.</li>
+<li>Align to a framework (NIST AI RMF, ISO/IEC 42001) and map EU AI Act obligations with Legal.</li>
+<li>Run an <strong>AI governance council</strong> (Legal, Security, Privacy, business) that approves within an SLA.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Most use cases clear quickly through standard controls, freeing review capacity for the few high-risk ones. In one
+example, 70% of use cases (internal, low-risk) were cleared in days.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">TIERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"internal_productivity"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"controls"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"pii_redaction"</span><span class="p">,</span> <span class="s2">"approved_models"</span><span class="p">,</span> <span class="s2">"logging"</span><span class="p">],</span> <span class="s2">"review_days"</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span>
+    <span class="s2">"customer_facing"</span><span class="p">:</span>       <span class="p">{</span><span class="s2">"controls"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"+guardrails"</span><span class="p">,</span> <span class="s2">"+red_team"</span><span class="p">,</span> <span class="s2">"+system_card"</span><span class="p">],</span> <span class="s2">"review_days"</span><span class="p">:</span> <span class="mi">10</span><span class="p">},</span>
+    <span class="s2">"consequential"</span><span class="p">:</span>         <span class="p">{</span><span class="s2">"controls"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"+impact_assessment"</span><span class="p">,</span> <span class="s2">"+human_oversight"</span><span class="p">,</span> <span class="s2">"+incident_playbook"</span><span class="p">],</span> <span class="s2">"review_days"</span><span class="p">:</span> <span class="mi">20</span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">intake</span><span class="p">(</span><span class="n">use_case</span><span class="p">):</span>
+    <span class="n">tier</span> <span class="o">=</span> <span class="n">classify_tier</span><span class="p">(</span><span class="n">use_case</span><span class="p">)</span>       <span class="c1"># at intake, not at launch</span>
+    <span class="k">return</span> <span class="n">governance</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">use_case</span><span class="p">,</span> <span class="n">tier</span><span class="o">=</span><span class="n">tier</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="n">TIERS</span><span class="p">[</span><span class="n">tier</span><span class="p">][</span><span class="s2">"controls"</span><span class="p">],</span> <span class="n">sla_days</span><span class="o">=</span><span class="n">TIERS</span><span class="p">[</span><span class="n">tier</span><span class="p">][</span><span class="s2">"review_days"</span><span class="p">])</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Governance that arrives at the end blocks launches. Tier risk at intake and build the controls into the paved road.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Legal blocked your launch two weeks before go-live. How do you prevent that next time?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="wrong-team-shape">
+  <header class="ap-h">
+    <div class="ap-num">20.9</div>
+    <div>
+      <h2><a href="#wrong-team-shape">The wrong team shape for applied AI</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>You have headcount for 10 people to build applied AI products. One proposal is ten ML PhDs; another is ten full-stack
+engineers who know prompting.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Staffing an applied AI team as either a research lab or a pure app team.</strong></p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Applied AI value comes mostly from data, integration, evaluation and product judgment, not model research.</li>
+<li>A research-heavy team builds impressive prototypes nobody ships.</li>
+<li>A team with no ML depth can't debug quality or design evaluations.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-wrong-team-shape" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="108.4" font-size="12.5" text-anchor="middle">10 hires</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">All researchers</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="305.5" y="108.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="135.4" font-size="12.5" text-anchor="middle">All app engineers</text>
+<rect class="dg-node dg-std" x="527.0" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="101.1" font-size="12.5" text-anchor="middle">Prototypes or quality</text>
+<text class="dg-t dg-t-std" x="620.8" y="115.6" font-size="12.5" text-anchor="middle">gaps</text>
+<rect class="dg-node dg-std" x="748.5" y="81.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="108.4" font-size="12.5" text-anchor="middle">Nothing reliable ships</text>
+<line class="dg-edge" x1="274.5" y1="104.0" x2="301.5" y2="104.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<line class="dg-edge" x1="496.0" y1="104.0" x2="523.0" y2="104.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<line class="dg-edge" x1="717.5" y1="104.0" x2="744.5" y2="104.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<text class="dg-note dg-note-bad" x="28" y="175.0" font-size="12.5">One skill profile for a multi-skill job</text>
+<rect class="dg-band dg-band-good" x="8" y="202.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="222.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="313.4" font-size="12.5" text-anchor="middle">10 hires</text>
+<rect class="dg-node dg-new" x="261.2" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="259.4" font-size="12.5" text-anchor="middle">AI engineers ×4</text>
+<circle class="dg-badge-new" cx="400.4" cy="236.0" r="8"/><text class="dg-badge-t" x="400.4" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="261.2" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="313.4" font-size="12.5" text-anchor="middle">Platform ×2</text>
+<rect class="dg-node dg-std" x="261.2" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="367.4" font-size="12.5" text-anchor="middle">Data eng ×1</text>
+<rect class="dg-node dg-new" x="438.4" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="259.4" font-size="12.5" text-anchor="middle">AI PM ×1</text>
+<circle class="dg-badge-new" cx="577.6" cy="236.0" r="8"/><text class="dg-badge-t" x="577.6" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="313.4" font-size="12.5" text-anchor="middle">Eval lead ×1</text>
+<rect class="dg-node dg-std" x="438.4" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="367.4" font-size="12.5" text-anchor="middle">Designer (shared)</text>
+<rect class="dg-node dg-new" x="615.6" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="306.1" font-size="12.5" text-anchor="middle">SME time from each</text>
+<text class="dg-t dg-t-new" x="687.2" y="320.6" font-size="12.5" text-anchor="middle">BU</text>
+<circle class="dg-badge-new" cx="754.8" cy="290.0" r="8"/><text class="dg-badge-t" x="754.8" y="294.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="313.4" font-size="12.5" text-anchor="middle">Full delivery loop</text>
+<line class="dg-edge" x1="230.2" y1="309.0" x2="257.2" y2="309.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<line class="dg-edge" x1="407.4" y1="309.0" x2="434.4" y2="309.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<line class="dg-edge" x1="584.6" y1="309.0" x2="611.6" y2="309.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<line class="dg-edge" x1="761.8" y1="309.0" x2="788.8" y2="309.0" marker-end="url(#ah-leadership-wrong-team-shape)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Hire for the whole loop from data to adoption</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Hire for the <strong>full delivery loop</strong>:</p>
+<ul>
+<li>AI/ML engineers who build LLM systems end to end (retrieval, agents, evals).</li>
+<li>A data engineer for pipelines, connectors and quality; a platform engineer for the gateway, reliability and scale.</li>
+<li>An <strong>AI product manager</strong> who owns outcomes; an <strong>evaluation lead</strong> who owns golden sets and error analysis.</li>
+<li>Access to domain experts for rubrics and labeling, and a design partner for trust-building UX.</li>
+<li>Hire T-shaped people with shipping records, set up a career ladder, and upskill existing engineers through pairing.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Every stage from data to adoption has an owner, so prototypes become products. Example shape: 4 AI engineers, 2 platform,
+1 data engineer, 1 AI PM, 1 eval lead, 1 designer at 50%, plus 3 SME hours a week from each business unit served.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">TEAM</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"ai_engineer"</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">"platform_engineer"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"data_engineer"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">"ai_product_manager"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"eval_lead"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"designer"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">}</span>
+<span class="n">SME_HOURS_PER_WEEK</span> <span class="o">=</span> <span class="p">{</span><span class="n">bu</span><span class="p">:</span> <span class="mi">3</span> <span class="k">for</span> <span class="n">bu</span> <span class="ow">in</span> <span class="n">BUSINESS_UNITS_SERVED</span><span class="p">}</span>
+
+<span class="n">LOOP</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"data"</span><span class="p">,</span> <span class="s2">"retrieval/agents"</span><span class="p">,</span> <span class="s2">"evaluation"</span><span class="p">,</span> <span class="s2">"platform/reliability"</span><span class="p">,</span> <span class="s2">"product/outcomes"</span><span class="p">,</span> <span class="s2">"ux/adoption"</span><span class="p">]</span>
+<span class="n">coverage</span> <span class="o">=</span> <span class="p">{</span><span class="n">stage</span><span class="p">:</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">owns</span> <span class="ow">in</span> <span class="n">ROLE_OWNS</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">owns</span> <span class="ow">and</span> <span class="n">TEAM</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">r</span><span class="p">)]</span> <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">LOOP</span><span class="p">}</span>
+<span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">coverage</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="sa">f</span><span class="s2">"unowned stages: </span><span class="si">{</span><span class="p">[</span><span class="n">s</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">coverage</span><span class="o">.</span><span class="n">items</span><span class="p">()</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="n">r</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Applied AI is a delivery loop, not a research problem. Staff every stage, from data and evals to product and adoption.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>You have headcount for 10. Who do you hire to build applied AI products?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="launch-and-leave">
+  <header class="ap-h">
+    <div class="ap-num">20.10</div>
+    <div>
+      <h2><a href="#launch-and-leave">Launch and leave</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Six months after launch, usage dropped and answers got worse. Nobody changed any code. The proposed fix is to retrain
+the model.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>The AI feature is treated as a finished project after launch</strong>, with no owner, monitoring or feedback loop.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>AI systems drift even when code doesn't: content changes, user behaviour shifts, providers update models, new edge cases appear.</li>
+<li>Without ownership and online monitoring, quality decays silently and trust erodes.</li>
+<li>Retraining is proposed without any evidence of what changed.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 310" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-launch-and-leave" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Launch</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">No owner / monitoring</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Content + usage drift</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Quality and usage decline</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Silent decay after launch</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="144.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Launch</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Named owner +</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">on-call</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Online quality SLOs</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Weekly failure</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">review → eval set</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Sustained quality</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<path class="dg-loop" d="M864.4,226.0 V246.0 H155.6 V230.0" marker-end="url(#ah-leadership-launch-and-leave)"/>
+<text class="dg-loop-t" x="510.0" y="241.0" text-anchor="middle" font-size="11.5">Failures feed the golden set every week</text>
+<text class="dg-note dg-note-good" x="28" y="279.0" font-size="12.5">AI features run as living products with LLMOps</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Treat AI features as <strong>living products with LLMOps</strong>:</p>
+<ul>
+<li>A named owner and on-call rotation.</li>
+<li>Online monitoring of quality (sampled judge scores, feedback, escalation and reformulation rates), freshness, latency and cost, with <strong>SLOs and alerts</strong>.</li>
+<li>A <strong>feedback loop</strong>: weekly failure triage into the eval set, monthly metric reviews with business owners, re-evaluation whenever providers update models.</li>
+<li><strong>Change management</strong>: training, champions, in-product guidance and release notes.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Drift is detected and fixed continuously instead of discovered by users. In one example, a weekly 30-minute failure
+review fed 40 new cases a month into the golden set; online quality recovered from 81% to 90% and usage regained its peak
+within a quarter.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@schedule</span><span class="p">(</span><span class="n">cron</span><span class="o">=</span><span class="s2">"0 10 * * MON"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">weekly_failure_review</span><span class="p">():</span>
+    <span class="n">failures</span> <span class="o">=</span> <span class="n">traces</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">feedback</span><span class="o">=</span><span class="s2">"down"</span><span class="p">,</span> <span class="n">days</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">40</span><span class="p">)</span> <span class="o">+</span> <span class="n">traces</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">escalated</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">days</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">triage_session</span><span class="p">(</span><span class="n">failures</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="n">OWNER</span><span class="p">):</span>
+        <span class="n">golden</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">as_eval_case</span><span class="p">())</span>
+    <span class="n">report</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">channel</span><span class="o">=</span><span class="s2">"#ai-assistant"</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="n">online_quality</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">7</span><span class="p">),</span> <span class="n">new_cases</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">failures</span><span class="p">))</span>
+
+<span class="n">provider</span><span class="o">.</span><span class="n">on_model_update</span><span class="p">(</span><span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="n">run_full_evals</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">m</span><span class="p">))</span>      <span class="c1"># re-evaluate on provider changes</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>AI quality decays without ownership. Run AI features as products with SLOs, a weekly failure review and change management.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Six months after launch, usage dropped and answers got worse. Nobody changed anything. Why?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="overpromising-to-executives">
+  <header class="ap-h">
+    <div class="ap-num">20.11</div>
+    <div>
+      <h2><a href="#overpromising-to-executives">Overpromising to executives</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The CEO announced that the AI assistant will handle 80% of customer queries by Q2. Your data says 45% is realistic at
+the current quality bar.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Committing to deterministic targets for a probabilistic system</strong>, either by trying to hit the number anyway or by
+telling the CEO they're wrong.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Pressure to hit the target leads to cutting corners on quality and safety.</li>
+<li>When the target slips, the AI program loses credibility and budget.</li>
+<li>A flat "you're wrong" damages trust without offering a path.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-overpromising-to-executives" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">CEO: 80% by Q2</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Commit to the number</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Quality / safety corners</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">cut</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Credibility crisis</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Deterministic promise, probabilistic system</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Containment data by</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">query type</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="191.8" font-size="11" text-anchor="middle">Scenarios with</text>
+<text class="dg-t dg-t-new" x="332.8" y="204.8" font-size="11" text-anchor="middle">trade-offs (45% /</text>
+<text class="dg-t dg-t-new" x="332.8" y="217.8" font-size="11" text-anchor="middle">60% / 80%)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Error budget +</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">guardrail metrics</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Regular progress</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">reporting</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Credible roadmap</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-leadership-overpromising-to-executives)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Reset expectations early with evidence and a path</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Reset expectations early, <strong>with evidence and a path</strong>:</p>
+<ul>
+<li>Show containment by query type, error rate at each automation level and the customer impact of wrong answers.</li>
+<li>Offer <strong>scenarios with trade-offs</strong>: 45% at today's quality bar by Q2; 60% by Q3 with listed investments; 80% only with a higher error rate or narrower scope.</li>
+<li>Agree an <strong>error budget</strong> and <strong>guardrail metrics</strong> (CSAT, compliance) that can't be traded away.</li>
+<li>Report progress on a regular cadence with the same metrics.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Leadership gets a choice instead of a surprise, and quality guardrails are protected. In one example, the executive
+team agreed to "50% by Q2, 70% by Q4, CSAT ≥ 4.3"; the team beat the Q2 number, which built the credibility to win budget
+for the next phase.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">scenarios</span><span class="p">(</span><span class="n">by_query_type</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">target_quality</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.95</span><span class="p">,</span> <span class="mf">0.92</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">):</span>            <span class="c1"># stricter → lower containment</span>
+        <span class="n">contained</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">volume</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">by_query_type</span> <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">accuracy</span> <span class="o">&gt;=</span> <span class="n">target_quality</span><span class="p">)</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"quality_bar"</span><span class="p">:</span> <span class="n">target_quality</span><span class="p">,</span> <span class="s2">"containment"</span><span class="p">:</span> <span class="n">contained</span> <span class="o">/</span> <span class="n">total_volume</span><span class="p">(</span><span class="n">by_query_type</span><span class="p">),</span>
+                    <span class="s2">"investments"</span><span class="p">:</span> <span class="n">investments_needed</span><span class="p">(</span><span class="n">target_quality</span><span class="p">)})</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+<span class="n">GUARDRAILS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"csat_min"</span><span class="p">:</span> <span class="mf">4.3</span><span class="p">,</span> <span class="s2">"compliance_violations"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>   <span class="c1"># not tradeable for containment</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Probabilistic systems need scenario-based commitments. Offer trade-offs with evidence, agree guardrail metrics, and report against them.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Your CEO announced 80% automation by Q2; your data says 45%. What do you do?</p></div>
+    
+  </section>
+  
+</article>
+
+<article class="ap" id="design-starts-with-the-model">
+  <header class="ap-h">
+    <div class="ap-num">20.12</div>
+    <div>
+      <h2><a href="#design-starts-with-the-model">System design that starts with the model</a></h2>
+      <div class="tags"><span class="tag t-lead">Leadership</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>In an architecture review (or a design interview), the first sentence is "I'd use a frontier model with LangChain",
+before anyone has asked about users, scale, data or risk.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>The design starts from a model and framework choice</strong> instead of requirements and constraints.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li>Requirements such as latency, cost, permissions and risk end up retrofitted around an early tool choice.</li>
+<li>Model and framework choices are the most volatile part of the stack, so the design ages fastest where it began.</li>
+<li>Reviewers and interviewers read it as a lack of systems thinking.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-design-starts-with-the-model" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">&quot;Use model X + framework</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">Y&quot;</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Requirements retrofitted</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Gaps in data / risk / ops</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Weak design</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Tool-first design</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-new" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="155.6" y="191.8" font-size="11" text-anchor="middle">Users, scale,</text>
+<text class="dg-t dg-t-new" x="155.6" y="204.8" font-size="11" text-anchor="middle">latency &amp; cost</text>
+<text class="dg-t dg-t-new" x="155.6" y="217.8" font-size="11" text-anchor="middle">targets</text>
+<circle class="dg-badge-new" cx="223.2" cy="182.0" r="8"/><text class="dg-badge-t" x="223.2" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Data, permissions,</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">risk level</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="191.8" font-size="11" text-anchor="middle">Retrieval ·</text>
+<text class="dg-t dg-t-std" x="510.0" y="204.8" font-size="11" text-anchor="middle">workflow vs agent ·</text>
+<text class="dg-t dg-t-std" x="510.0" y="217.8" font-size="11" text-anchor="middle">guardrails</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Evaluation +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">operations</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Model choice last</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-leadership-design-starts-with-the-model)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Every requirement traced to a component</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use a <strong>six-step design template</strong>:</p>
+<ol>
+<li>Clarify users, scale (documents, QPS), latency and cost targets, and risk level.</li>
+<li>Data: sources, ingestion, chunking, metadata, freshness, permissions.</li>
+<li>Retrieval: hybrid + rerank + compression, and why each.</li>
+<li>Generation or agent: workflow vs agent, tools, guardrails, human approval.</li>
+<li>Evaluation: golden set, offline metrics, online feedback, tracing.</li>
+<li>Operations: latency and cost budget, caching, monitoring, failure modes, rollout.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The design is anchored in durable requirements, so model and framework become replaceable details chosen last. Tracing
+every requirement to a component makes gaps visible during review rather than in production.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">DESIGN_TEMPLATE</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"requirements"</span><span class="p">,</span> <span class="s2">"data"</span><span class="p">,</span> <span class="s2">"retrieval"</span><span class="p">,</span> <span class="s2">"generation_or_agent"</span><span class="p">,</span> <span class="s2">"evaluation"</span><span class="p">,</span> <span class="s2">"operations"</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">review</span><span class="p">(</span><span class="n">design</span><span class="p">):</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">DESIGN_TEMPLATE</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">design</span><span class="o">.</span><span class="n">sections</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+    <span class="n">untraced</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">design</span><span class="o">.</span><span class="n">requirements</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">c</span><span class="o">.</span><span class="n">satisfies</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">design</span><span class="o">.</span><span class="n">components</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"missing_sections"</span><span class="p">:</span> <span class="n">missing</span><span class="p">,</span> <span class="s2">"untraced_requirements"</span><span class="p">:</span> <span class="n">untraced</span><span class="p">,</span>
+            <span class="s2">"model_chosen_before_requirements"</span><span class="p">:</span> <span class="n">design</span><span class="o">.</span><span class="n">first_decision</span> <span class="o">==</span> <span class="s2">"model"</span><span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Start from requirements and risk, and choose the model last. A design should trace every requirement to a component.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Walk me through how you&#x27;d design an enterprise document Q&amp;A system over 5 million documents with strict permissions.</p></div>
+    
+  </section>
+  
+</article>
+
+<div class="pn"><a class="prev" href="ai-tools.html">← 19. Claude &amp; AI Tools</a><a class="next" href="capstone.html">21. Reference Architecture →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

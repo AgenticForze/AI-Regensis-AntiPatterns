@@ -1,0 +1,48 @@
+source: rag-agentic-prep
+section: protocols
+patterns:
+  - id: provider-specific-tool-code
+    title: Provider-specific tool code in every app
+    tags: [Cost, Scale]
+    scenario: |
+      The document-search and ticketing tools were written inside one assistant using one provider's function-calling format.
+      Moving them to a second app means rewriting them, along with their auth and audit.
+    antipattern: |
+      **Tools are implemented inside each application, in each model provider's tool-calling format**, with their own
+      credentials and logging.
+    fails: |
+      - Every new app or model provider means rewriting the same tools.
+      - Auth, rate limits and audit logic are duplicated and drift apart.
+      - Nobody owns the tool as a product, so quality depends on which app copy you use.
+    diagram:
+      bad: ["App A | App B | App C", "!Tool code per app + per provider", "Duplicated auth & audit", "Rewrite to reuse"]
+      bad_note: "Tools trapped inside applications"
+      good: ["App A | App B | App C", "+MCP clients", "+Platform-owned MCP servers", "+Auth + audit in one place", "Reuse in hours"]
+      good_note: "Tools packaged once as MCP servers and reused everywhere"
+    solution: |
+      - Package shared tools as **MCP servers owned by the platform team**, so any MCP-capable app or agent reuses them.
+      - Centralize authentication, authorization and audit in the server or an MCP gateway.
+      - Write thin clients per host application instead of re-implementing tools.
+      - Track reuse: number of apps using each server and time to add a tool to a new app.
+    works: |
+      A tool is built and secured once and reused by every app and model, so adding a new channel takes hours instead of a
+      rewrite. One owner keeps descriptions, schemas and controls consistent.
+    code: |
+      from mcp.server.fastmcp import FastMCP
+
+      mcp = FastMCP("support-tools")
+
+      @mcp.tool()
+      def search_docs(query: str, k: int = 5) -> list[dict]:
+          """Search the support knowledge base. Returns titles, snippets and doc ids."""
+          return [{"id": h.id, "title": h.title, "snippet": h.text[:300]} for h in kb.search(query, k=k)]
+
+      @mcp.tool()
+      def create_ticket(summary: str, priority: str = "P3") -> dict:
+          """Open a support ticket for the signed-in user."""
+          return tickets.create(summary=summary, priority=priority, requester=current_user())
+
+      if __name__ == "__main__":
+          mcp.run()            # any MCP-capable assistant or agent can now connect
+    takeaway: "Build a tool once, as an MCP server with its own owner, auth and audit. Don't rewrite it inside every app."
+    followup: "How long does it take your teams to give a new assistant access to an existing tool?"

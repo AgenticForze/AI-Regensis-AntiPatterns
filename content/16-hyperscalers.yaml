@@ -1,5 +1,5 @@
 id: hyperscalers
-num: 13
+num: 16
 short: Hyperscaler Platforms
 title: "Hyperscaler Platforms: AWS, Google Cloud & Microsoft"
 summary: All three clouds now offer a full agent platform with models, managed RAG, agent runtimes, guardrails, evaluation and identity. The failure modes are platform-specific, and so are the fixes.
@@ -627,7 +627,7 @@ patterns:
     solution: |
       - Choose a **primary AI platform** aligned with the client's data, identity and operations estate.
       - Add a second provider only for a **named reason**: a model unavailable elsewhere, regulatory or sovereignty requirements, or a proven resilience need.
-      - Keep the portability seams from 13.14 so the choice stays reversible.
+      - Keep the portability seams from 16.14 so the choice stays reversible.
       - Centralize governance (gateway, policy-as-code, evals) so any secondary provider plugs into the same controls.
     works: |
       Depth on one platform speeds delivery and strengthens security. Targeted multi-provider use captures

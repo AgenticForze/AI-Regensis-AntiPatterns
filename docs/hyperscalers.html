@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hyperscaler Platforms: AWS, Google Cloud &amp; Microsoft · Applied AI Anti-Patterns</title>
-<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, evaluation, observability, delivery, governance, the major cloud platforms, cost, and harness engineering, with 360 production scenarios from telecom and financial services.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/code.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
@@ -20,36 +20,39 @@
 <div class="layout">
   <aside class="side"><nav class="nav">
 <div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
-<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Data Pipelines</a>
 <a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
 <a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
 <a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
 <div class="nav-part">Part B · Model &amp; Prompt Layer</div>
 <a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
-<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<a class="" href="models.html"><span class="nn">6</span>Models, Cost &amp; Latency</a>
 <div class="nav-part">Part C · Agentic AI</div>
-<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Frameworks</a>
 <a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
 <a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
-<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Tools, MCP &amp; A2A</a>
 <div class="nav-part">Part D · Production &amp; Trust</div>
-<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
-<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<a class="" href="evals-ops.html"><span class="nn">11</span>LLM &amp; Agent Evaluation</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Guardrails &amp; AI Security</a>
+<a class="" href="observability.html"><span class="nn">13</span>Observability &amp; Telemetry</a>
+<a class="" href="llmops-cicd.html"><span class="nn">14</span>LLMOps &amp; CI/CD</a>
+<a class="" href="governance.html"><span class="nn">15</span>Human Oversight &amp; Governance</a>
 <div class="nav-part">Part E · Platforms &amp; Economics</div>
-<a class="active" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
-<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<a class="active" href="hyperscalers.html"><span class="nn">16</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">17</span>Local LLMs vs Cloud Cost</a>
 <div class="nav-part">Part F · Harness Engineering</div>
-<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<a class="" href="harness.html"><span class="nn">18</span>Harness Engineering</a>
 <div class="nav-part">Part G · Claude &amp; AI Tools</div>
-<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<a class="" href="ai-tools.html"><span class="nn">19</span>Claude &amp; AI Tools</a>
 <div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
-<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
-<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+<a class="" href="leadership.html"><span class="nn">20</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">21</span>Reference Architecture</a>
 </nav></aside>
   <main class="main">
 <div class="hero-s">
   <div class="crumb">Part E · Platforms &amp; Economics</div>
-  <h1><span class="sn">13</span>Hyperscaler Platforms: AWS, Google Cloud &amp; Microsoft</h1>
+  <h1><span class="sn">16</span>Hyperscaler Platforms: AWS, Google Cloud &amp; Microsoft</h1>
   <p class="lede">All three clouds now offer a full agent platform with models, managed RAG, agent runtimes, guardrails, evaluation and identity. The failure modes are platform-specific, and so are the fixes.</p>
   <span class="pill">16 anti-patterns</span>
 </div>
@@ -127,11 +130,11 @@ in mid-2026.</p>
 </table>
 <p>Product names and feature status change quickly. Confirm the exact SKU, region availability and GA status
 before committing to a client architecture.</p></div>
-<div class="toc"><div class="toc-h">In this section</div><a href="#aws-kb-defaults"><span>13.1</span>AWS: Bedrock Knowledge Bases with default settings for complex documents</a><a href="#aws-agents-classic"><span>13.2</span>AWS: New agents built on legacy Bedrock Agents with monolithic action groups</a><a href="#aws-guardrails-partial"><span>13.3</span>AWS: Guardrails on the input only, or not attached at all</a><a href="#aws-capacity-misfit"><span>13.4</span>AWS: Provisioned Throughput bought too early, batch never used</a><a href="#aws-cross-region-residency"><span>13.5</span>AWS: Cross-region inference enabled without a data-residency review</a><a href="#gcp-search-grounding-regulated"><span>13.6</span>Google Cloud: Grounding with Google Search for regulated internal answers</a><a href="#gcp-long-context-no-cache"><span>13.7</span>Google Cloud: Long-context prompts re-sent without context caching</a><a href="#gcp-no-vpcsc"><span>13.8</span>Google Cloud: No VPC Service Controls perimeter around AI services</a><a href="#gcp-adk-no-evals"><span>13.9</span>Google Cloud: ADK agents deployed without evaluation in the release path</a><a href="#azure-ptu-throttling"><span>13.10</span>Microsoft: PTU sizing guesses and no 429 handling</a><a href="#azure-on-your-data"><span>13.11</span>Microsoft: Quick-start &quot;chat with your data&quot; treated as the production RAG platform</a><a href="#azure-key-auth"><span>13.12</span>Microsoft: API keys instead of Entra ID and managed identities</a><a href="#azure-content-safety-defaults"><span>13.13</span>Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists</a><a href="#cloud-sdk-lockin"><span>13.14</span>Cross-cloud: Hard lock-in to one platform&#x27;s agent SDK</a><a href="#multicloud-by-default"><span>13.15</span>Cross-cloud: Multi-cloud AI just because</a><a href="#platform-by-benchmark"><span>13.16</span>Cross-cloud: Choosing a platform by model benchmarks alone</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#aws-kb-defaults"><span>16.1</span>AWS: Bedrock Knowledge Bases with default settings for complex documents</a><a href="#aws-agents-classic"><span>16.2</span>AWS: New agents built on legacy Bedrock Agents with monolithic action groups</a><a href="#aws-guardrails-partial"><span>16.3</span>AWS: Guardrails on the input only, or not attached at all</a><a href="#aws-capacity-misfit"><span>16.4</span>AWS: Provisioned Throughput bought too early, batch never used</a><a href="#aws-cross-region-residency"><span>16.5</span>AWS: Cross-region inference enabled without a data-residency review</a><a href="#gcp-search-grounding-regulated"><span>16.6</span>Google Cloud: Grounding with Google Search for regulated internal answers</a><a href="#gcp-long-context-no-cache"><span>16.7</span>Google Cloud: Long-context prompts re-sent without context caching</a><a href="#gcp-no-vpcsc"><span>16.8</span>Google Cloud: No VPC Service Controls perimeter around AI services</a><a href="#gcp-adk-no-evals"><span>16.9</span>Google Cloud: ADK agents deployed without evaluation in the release path</a><a href="#azure-ptu-throttling"><span>16.10</span>Microsoft: PTU sizing guesses and no 429 handling</a><a href="#azure-on-your-data"><span>16.11</span>Microsoft: Quick-start &quot;chat with your data&quot; treated as the production RAG platform</a><a href="#azure-key-auth"><span>16.12</span>Microsoft: API keys instead of Entra ID and managed identities</a><a href="#azure-content-safety-defaults"><span>16.13</span>Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists</a><a href="#cloud-sdk-lockin"><span>16.14</span>Cross-cloud: Hard lock-in to one platform&#x27;s agent SDK</a><a href="#multicloud-by-default"><span>16.15</span>Cross-cloud: Multi-cloud AI just because</a><a href="#platform-by-benchmark"><span>16.16</span>Cross-cloud: Choosing a platform by model benchmarks alone</a></div>
 
 <article class="ap" id="aws-kb-defaults">
   <header class="ap-h">
-    <div class="ap-num">13.1</div>
+    <div class="ap-num">16.1</div>
     <div>
       <h2><a href="#aws-kb-defaults">AWS: Bedrock Knowledge Bases with default settings for complex documents</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span></div>
@@ -226,12 +229,14 @@ enterprise failures, and evaluation makes configuration changes evidence-based.<
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>A managed RAG service removes the plumbing, not the design decisions. Configure parsing, chunking, metadata and hybrid retrieval, then evaluate.</p></div>
     <div><span class="k">Follow-up to expect</span><p>When would you outgrow Bedrock Knowledge Bases and build a custom pipeline on OpenSearch?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="aws-agents-classic">
   <header class="ap-h">
-    <div class="ap-num">13.2</div>
+    <div class="ap-num">16.2</div>
     <div>
       <h2><a href="#aws-agents-classic">AWS: New agents built on legacy Bedrock Agents with monolithic action groups</a></h2>
       <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-sec">Security</span><span class="tag t-scale">Scale</span></div>
@@ -324,12 +329,14 @@ evidence a risk committee needs.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>On AWS, new agent work belongs on AgentCore: any framework, MCP tools through Gateway, and deterministic Cedar policies outside the model.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you migrate an existing legacy Bedrock agent to AgentCore with no downtime?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="aws-guardrails-partial">
   <header class="ap-h">
-    <div class="ap-num">13.3</div>
+    <div class="ap-num">16.3</div>
     <div>
       <h2><a href="#aws-guardrails-partial">AWS: Guardrails on the input only, or not attached at all</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
@@ -408,12 +415,14 @@ removes opt-in gaps, and versioning gives guardrails the same change control as 
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>A guardrail that only checks one direction is half a control. Cover input and output, check grounding, version it, and enforce it centrally.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you tune guardrail thresholds without blocking legitimate clinical terms?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="aws-capacity-misfit">
   <header class="ap-h">
-    <div class="ap-num">13.4</div>
+    <div class="ap-num">16.4</div>
     <div>
       <h2><a href="#aws-capacity-misfit">AWS: Provisioned Throughput bought too early, batch never used</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span></div>
@@ -483,12 +492,14 @@ and measured sizing avoids paying for idle capacity.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Pick capacity modes from measured workload shape: on-demand for spiky, provisioned for steady, batch for anything that can wait.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you forecast token demand for a new use case with no history?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="aws-cross-region-residency">
   <header class="ap-h">
-    <div class="ap-num">13.5</div>
+    <div class="ap-num">16.5</div>
     <div>
       <h2><a href="#aws-cross-region-residency">AWS: Cross-region inference enabled without a data-residency review</a></h2>
       <div class="tags"><span class="tag t-comp">Compliance</span></div>
@@ -564,12 +575,14 @@ within approved geographies. Preventive policy controls make the guarantee audit
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Inference routing is a data-residency decision. Map profiles to data classification and enforce it with policy, not convention.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you explain cross-region inference trade-offs to a data-protection officer?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="gcp-search-grounding-regulated">
   <header class="ap-h">
-    <div class="ap-num">13.6</div>
+    <div class="ap-num">16.6</div>
     <div>
       <h2><a href="#gcp-search-grounding-regulated">Google Cloud: Grounding with Google Search for regulated internal answers</a></h2>
       <div class="tags"><span class="tag t-comp">Compliance</span><span class="tag t-quality">Quality</span></div>
@@ -645,12 +658,14 @@ it's appropriate. Labelled sources let users judge evidence quality.</p></sectio
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Choose grounding sources deliberately. Internal policy answers should only ever be grounded in governed internal data.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you present internal and external sources in one answer without confusing users?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="gcp-long-context-no-cache">
   <header class="ap-h">
-    <div class="ap-num">13.7</div>
+    <div class="ap-num">16.7</div>
     <div>
       <h2><a href="#gcp-long-context-no-cache">Google Cloud: Long-context prompts re-sent without context caching</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
@@ -718,12 +733,14 @@ uses each where it's strongest.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>A large context window without caching re-bills the same document on every call. Cache stable prefixes and keep retrieval for pinpoint questions.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What&#x27;s the break-even between context caching and building a RAG index for a document?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="gcp-no-vpcsc">
   <header class="ap-h">
-    <div class="ap-num">13.8</div>
+    <div class="ap-num">16.8</div>
     <div>
       <h2><a href="#gcp-no-vpcsc">Google Cloud: No VPC Service Controls perimeter around AI services</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
@@ -798,12 +815,14 @@ pipelines during rollout.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>On Google Cloud, IAM decides who can call AI APIs. VPC Service Controls decides from where, and what data can leave. Regulated workloads need both.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you let a managed agent runtime call external APIs from inside a perimeter?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="gcp-adk-no-evals">
   <header class="ap-h">
-    <div class="ap-num">13.9</div>
+    <div class="ap-num">16.9</div>
     <div>
       <h2><a href="#gcp-adk-no-evals">Google Cloud: ADK agents deployed without evaluation in the release path</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
@@ -880,12 +899,14 @@ Pipeline-only deployment makes releases reproducible and reversible.</p></sectio
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Easy deployment makes evaluation gates more important, not less. Evaluate agent trajectories in CI before anything reaches the runtime.</p></div>
     <div><span class="k">Follow-up to expect</span><p>What&#x27;s the difference between trajectory evaluation and response evaluation, and why do you need both?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="azure-ptu-throttling">
   <header class="ap-h">
-    <div class="ap-num">13.10</div>
+    <div class="ap-num">16.10</div>
     <div>
       <h2><a href="#azure-ptu-throttling">Microsoft: PTU sizing guesses and no 429 handling</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
@@ -967,12 +988,14 @@ aligns capacity with compliance.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Size PTUs for the baseline, spill peaks to pay-as-you-go through a gateway, and pick deployment types for residency first, capacity second.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you benchmark PTU capacity for a new agent with long tool-calling sessions?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="azure-on-your-data">
   <header class="ap-h">
-    <div class="ap-num">13.11</div>
+    <div class="ap-num">16.11</div>
     <div>
       <h2><a href="#azure-on-your-data">Microsoft: Quick-start &quot;chat with your data&quot; treated as the production RAG platform</a></h2>
       <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-scale">Scale</span></div>
@@ -1051,12 +1074,14 @@ heterogeneous corpora.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Wizard-generated RAG gets you a demo. Production needs a designed index, hybrid plus semantic ranking, and security trimming tied to Entra ID.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you sync SharePoint permissions into the search index at scale?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="azure-key-auth">
   <header class="ap-h">
-    <div class="ap-num">13.12</div>
+    <div class="ap-num">16.12</div>
     <div>
       <h2><a href="#azure-key-auth">Microsoft: API keys instead of Entra ID and managed identities</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span></div>
@@ -1134,12 +1159,14 @@ instantly, and governed by the same identity controls as the rest of the enterpr
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>On Azure, every AI caller (app or agent) should be an Entra identity with least-privilege RBAC. Disable keys.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How does Entra Agent ID change the audit story for autonomous agents?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="azure-content-safety-defaults">
   <header class="ap-h">
-    <div class="ap-num">13.13</div>
+    <div class="ap-num">16.13</div>
     <div>
       <h2><a href="#azure-content-safety-defaults">Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists</a></h2>
       <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
@@ -1218,12 +1245,14 @@ guesswork.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Default safety settings are a starting point. Tune filters per domain, shield documents as well as prompts, and measure false positives.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How do you justify safety-filter thresholds to a medical-affairs team?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="cloud-sdk-lockin">
   <header class="ap-h">
-    <div class="ap-num">13.14</div>
+    <div class="ap-num">16.14</div>
     <div>
       <h2><a href="#cloud-sdk-lockin">Cross-cloud: Hard lock-in to one platform&#x27;s agent SDK</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-scale">Scale</span></div>
@@ -1296,12 +1325,14 @@ industry is converging.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Use managed runtimes, but own the seams. Open frameworks, MCP tools and OpenTelemetry keep agents portable across clouds.</p></div>
     <div><span class="k">Follow-up to expect</span><p>Where is accepting lock-in the right call?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="multicloud-by-default">
   <header class="ap-h">
-    <div class="ap-num">13.15</div>
+    <div class="ap-num">16.15</div>
     <div>
       <h2><a href="#multicloud-by-default">Cross-cloud: Multi-cloud AI just because</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-comp">Compliance</span></div>
@@ -1358,7 +1389,7 @@ skills and controls.</p></section>
   <section class="card c-sol"><h3>Recommended solution</h3><ul>
 <li>Choose a <strong>primary AI platform</strong> aligned with the client's data, identity and operations estate.</li>
 <li>Add a second provider only for a <strong>named reason</strong>: a model unavailable elsewhere, regulatory or sovereignty requirements, or a proven resilience need.</li>
-<li>Keep the portability seams from 13.14 so the choice stays reversible.</li>
+<li>Keep the portability seams from 16.14 so the choice stays reversible.</li>
 <li>Centralize governance (gateway, policy-as-code, evals) so any secondary provider plugs into the same controls.</li>
 </ul></section>
   <section class="card c-why"><h3>Why it succeeds</h3><p>Depth on one platform speeds delivery and strengthens security. Targeted multi-provider use captures
@@ -1374,12 +1405,14 @@ running everything everywhere.</p></section>
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Multi-cloud should be a justified exception, not a default. Pick a primary platform by data gravity and add others only for named reasons.</p></div>
     <div><span class="k">Follow-up to expect</span><p>How would you advise a client whose business units have already chosen different clouds?</p></div>
+    
   </section>
+  
 </article>
 
 <article class="ap" id="platform-by-benchmark">
   <header class="ap-h">
-    <div class="ap-num">13.16</div>
+    <div class="ap-num">16.16</div>
     <div>
       <h2><a href="#platform-by-benchmark">Cross-cloud: Choosing a platform by model benchmarks alone</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-adopt">Adoption</span></div>
@@ -1489,7 +1522,9 @@ because model catalogs overlap. The client's eval set, not a public leaderboard,
   <section class="takeaway">
     <div><span class="k">Key takeaway</span><p>Choose an AI platform for its data, identity and operating fit. Models move every month; your data estate doesn&#x27;t.</p></div>
     <div><span class="k">Follow-up to expect</span><p>Walk me through how you&#x27;d run a two-week platform-selection PoC for a client.</p></div>
+    
   </section>
+  
 </article>
 <div class="prose"><h3>Platform selection at a glance</h3>
 <table>
@@ -1523,7 +1558,7 @@ because model catalogs overlap. The client's eval set, not a public leaderboard,
 </tr>
 </tbody>
 </table></div>
-<div class="pn"><a class="prev" href="security-gov.html">← 12. Security &amp; Governance</a><a class="next" href="local-vs-cloud.html">14. Local LLMs vs Cloud Cost →</a></div>
+<div class="pn"><a class="prev" href="governance.html">← 15. Human Oversight &amp; Governance</a><a class="next" href="local-vs-cloud.html">17. Local LLMs vs Cloud Cost →</a></div>
   <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
   </main>
 </div>

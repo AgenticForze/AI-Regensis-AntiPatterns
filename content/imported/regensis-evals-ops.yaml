@@ -1,0 +1,2479 @@
+source: regensis
+section: evals-ops
+patterns:
+- id: eval-01
+  title: Bill-explanation prompt shipped after a vibe check
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's "explain my bill" assistant gets frequent complaints that it is too long. A product manager adds "Be concise, max 3 sentences" to the prompt, tries ten bills, likes the result and ships it. First-bill questions (proration after a plan change mid-cycle) now get a three-sentence answer that skips the proration, and first-bill calls to care rise 18% in two weeks.
+  antipattern: |-
+    **Manual spot checks as the release gate.**
+
+    *Think of it this way:* Tasting one spoonful from the top of the pot and declaring the whole stew seasoned. The salt sank to the bottom.
+  fails: |-
+    **Mechanism:** Ten cherry-picked examples miss regressions in the other 99% of traffic. Humans remember the wins.
+
+    - Ten hand-picked bills were all simple, single-line accounts.
+    - The change had a global side effect on complex bills, the cases that drive most calls.
+    - Nothing compared old and new behaviour on a representative set.
+
+    **Root cause:** Manual spot checks were the release gate, with no versioned golden dataset.
+
+    **Where it breaks:** Release process and eval harness.
+  diagram:
+    bad:
+    - Be concise · Prompt tweak
+    - '!10 simple bills · Looked fine'
+    - Proration lost · Complex bills
+    - '!Calls +18% · First bills'
+    bad_note: Ship after trying ten bills
+    good:
+    - Golden set · 500 real bills
+    - +Per-case checks · Proration, total
+    - +Old vs new · Every change
+    - Gate release · By intent
+    good_note: Golden set of real bills gates every change
+  solution: |-
+    1. Build a golden set of 300-500 real (anonymised) bills covering first bills, proration, roaming, device installments, taxes and credits.
+    2. Define pass criteria per case (mentions proration amount, correct total, under N words) and run old vs new on every prompt change.
+    3. Block release if any high-volume intent regresses beyond a threshold.
+  works: |-
+    **Trade-off to manage:** Building and anonymising the golden set takes a few weeks of effort, but it is reused for every future change.
+
+    **How you prove it worked:**
+
+    - Care call-reason codes for "bill explanation" per bot version.
+    - Weekly eval trend per bill type.
+
+    **Same pattern elsewhere:** FinTech: a "concise" tweak to a card-statement assistant drops the minimum-payment warning that Reg Z disclosures require.
+  takeaway: If it isn't in the eval set, it isn't protected.
+  related:
+  - eval-05
+  - eval-15
+  - prm-02
+  code: |
+    CASES = load_jsonl("golden/bill_explanations.jsonl")       # 400 anonymised bills, tagged by intent
+
+    def check(case, out):
+        return {"total_correct": case.total in out,
+                "mentions_proration": (not case.prorated) or "prorat" in out.lower(),
+                "short_enough": len(out.split()) <= 120}
+
+    def gate(old, new):
+        for intent, rows in group_by(CASES, "intent").items():
+            d = pass_rate(new, rows, check) - pass_rate(old, rows, check)
+            if volume[intent] > 0.05 and d < -0.02:
+                sys.exit(f"blocked: {intent} regressed {d:.1%}")
+  lang: python
+- id: eval-02
+  title: ROUGE scores a collections-call summary that drops the dispute
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  - Critical
+  scenario: |-
+    A lender auto-summarises collections calls for the next agent. The team evaluates summaries with ROUGE against human summaries and gets 0.61, which looks good. In a compliance review, 7% of summaries omit that the customer disputed the debt. Under the FDCPA, a dispute must stop collection until the debt is validated, so the next agent keeps collecting.
+  antipattern: |-
+    **N-gram overlap metrics for free-form generation.**
+
+    *Think of it this way:* Grading a medical handover note by how many words it shares with a model note. A note that leaves out "allergic to penicillin" can still score well.
+  fails: |-
+    **Mechanism:** A correct answer phrased differently scores low. A fluent wrong answer with matching words scores high.
+
+    - ROUGE rewards word overlap, not the presence of critical facts.
+    - A fluent summary missing one key sentence loses little score.
+    - The facts that matter legally are rare and short.
+
+    **Root cause:** A generic NLP metric was used instead of task-specific, risk-weighted criteria.
+
+    **Where it breaks:** Eval design.
+  diagram:
+    bad:
+    - Call summary · Collections
+    - '!ROUGE 0.61 · Looks good'
+    - Dispute missing · 7% of calls
+    - '!Keeps collecting · FDCPA breach'
+    bad_note: ROUGE against human summaries
+    good:
+    - Element list · Dispute, PTP
+    - +Binary checks · Per element
+    - +Structured flag · dispute = true
+    - Must-pass · Compliance gate
+    good_note: Required elements as binary must-pass checks
+  solution: |-
+    1. Define required elements per call type (dispute raised, promise to pay amount and date, cease-contact request, hardship) as binary checks.
+    2. Score each element with a validated LLM judge or a classifier, and weight compliance elements as must-pass.
+    3. Add a structured field extraction (dispute = true/false) that downstream systems read, not just a free-text summary.
+  works: |-
+    **Trade-off to manage:** Element checklists take domain effort to define and keep up to date with regulations.
+
+    **How you prove it worked:**
+
+    - Recall of each required element on a labelled set, tracked separately.
+    - Compliance QA sampling of summaries where a dispute keyword appears in the transcript.
+
+    **Same pattern elsewhere:** Telco: care-call summaries miss "customer requested cancellation", so the retention team never calls back and the line churns.
+  takeaway: Measure what customers and regulators care about, not word overlap.
+  related:
+  - eval-04
+  - eval-16
+  code: |
+    REQUIRED = {"collections": ["dispute_raised", "promise_to_pay", "cease_contact", "hardship"]}
+    MUST_PASS = {"dispute_raised", "cease_contact"}               # compliance elements
+
+    class CallSummary(BaseModel):
+        dispute_raised: bool; promise_amount: float | None; promise_date: date | None
+        cease_contact: bool; hardship: bool; narrative: str
+
+    def score(transcript, summary: CallSummary, labels):
+        checks = {e: getattr(summary, e) == labels[e] for e in REQUIRED["collections"] if hasattr(summary, e)}
+        return all(checks[e] for e in MUST_PASS), checks
+  lang: python
+- id: eval-03
+  title: LLM judge loves retention chats humans rate poorly
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A retention-chat bot is scored by an LLM judge on "helpfulness" and averages 4.6 out of 5. Human QA reviewers score the same chats 2.8, because the bot offers long, friendly answers but rarely presents the save offer the customer qualifies for. Leadership has been reporting the 4.6 for a quarter.
+  antipattern: |-
+    **Trusting an LLM judge without validating it against humans.**
+
+    *Think of it this way:* A thermometer that was never checked against a real one. It always reads a comfortable 21 degrees, so nobody notices the heating is broken.
+  fails: |-
+    **Mechanism:** Judges have biases: verbosity, position, self-preference, and leniency.
+
+    - The judge prefers long, polite answers (verbosity and style bias).
+    - Helpfulness was never defined in terms of the business goal (right offer presented).
+    - Judge scores were never compared with human labels.
+
+    **Root cause:** The evaluator itself was never evaluated.
+
+    **Where it breaks:** Judge design and calibration.
+  diagram:
+    bad:
+    - Retention chats · Judged by LLM
+    - '!Score 4.6 · Likes long text'
+    - Humans 2.8 · No offer shown
+    - '!Wrong KPI · A quarter lost'
+    bad_note: Uncalibrated helpfulness judge
+    good:
+    - Expert labels · 200 chats
+    - +Binary criteria · Offer, price
+    - +Agreement · Kappa, P/R
+    - Re-check · Quarterly
+    good_note: Criteria judge calibrated to expert labels
+  solution: |-
+    1. Label 150-200 chats by expert QA reviewers on specific criteria (eligible offer presented, correct price, no false promises).
+    2. Rewrite the judge as binary checks per criterion, with reasoning before the verdict and access to the eligibility data.
+    3. Measure agreement (precision and recall per criterion, Cohen's kappa) and iterate until acceptable; re-check quarterly.
+  works: |-
+    **Trade-off to manage:** Human labelling is slow and expensive; keep the calibration set small but representative and refresh it.
+
+    **How you prove it worked:**
+
+    - Running human-judge agreement on a weekly sample.
+    - Correlation between judge scores and the business metric (save rate).
+
+    **Same pattern elsewhere:** FinTech: a judge rates a robo-advice bot's explanations highly even when the recommended portfolio does not match the client's risk profile.
+  takeaway: A judge is a model too, so evaluate the evaluator.
+  related:
+  - eval-04
+  - eval-12
+  code: |
+    CRITERIA = ["eligible_offer_presented", "price_matches_catalog", "no_false_promises"]
+
+    def judge(chat, eligibility):
+        return {c: judge_llm.json(f"Criterion: {c}. Reason step by step, then answer PASS or FAIL.",
+                                  chat=chat, eligibility=eligibility)["verdict"] == "PASS" for c in CRITERIA}
+
+    expert = load("retention_qa_labels_180.jsonl")
+    for c in CRITERIA:
+        kappa = cohen_kappa([judge(x.chat, x.elig)[c] for x in expert], [x.labels[c] for x in expert])
+        print(c, round(kappa, 2))                                 # iterate until acceptable; re-check quarterly
+  lang: python
+- id: eval-04
+  title: Complaint classifier judged on a 1-10 scale
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank uses an LLM to classify customer complaints into regulatory categories and route them. Quality is tracked with an LLM judge giving a 1-10 "accuracy" score averaging 7.4. Nobody knows what 7.4 means. A regulator exam later finds that complaints alleging discrimination were often classified as general service complaints and not escalated.
+  antipattern: |-
+    **Vague Likert-scale scoring.**
+
+    *Think of it this way:* Rating a restaurant "7 out of 10" without saying whether the problem was the food, the service, or food poisoning.
+  fails: |-
+    **Mechanism:** LLMs and humans are inconsistent on fine-grained scales. The number has no defined meaning.
+
+    - A fuzzy scale with no definition gives unstable, uninterpretable scores.
+    - Critical misroutes and minor wording issues get similar scores.
+    - The average hides the rare, high-risk category.
+
+    **Root cause:** Likert scoring was used instead of explicit, binary criteria tied to outcomes.
+
+    **Where it breaks:** Rubric design.
+  diagram:
+    bad:
+    - Complaints · Classified
+    - '!Judge 1-10 · Avg 7.4'
+    - Fair-lending · Misrouted
+    - '!Exam finding · Not escalated'
+    bad_note: 1-10 accuracy score from a judge
+    good:
+    - Labelled set · By compliance
+    - +Confusion matrix · Per category
+    - +Binary check · High-risk route
+    - Zero tolerance · Separate gate
+    good_note: Confusion matrix plus binary high-risk checks
+  solution: |-
+    1. Evaluate classification as classification, with a confusion matrix against labelled data.
+    2. Define binary checks for high-risk routing ("Allegation of discrimination routed to fair-lending queue, yes or no").
+    3. Set zero-tolerance thresholds for the high-risk categories, separate from overall accuracy.
+  works: |-
+    **Trade-off to manage:** Binary criteria need more upfront definition but make every failure actionable.
+
+    **How you prove it worked:**
+
+    - Recall per high-risk category, reviewed by compliance monthly.
+
+    **Same pattern elsewhere:** Telco: a ticket classifier scored 1-10 hides that outage reports are misrouted to billing, delaying network incident detection.
+  takeaway: Binary criteria beat fuzzy scales.
+  related:
+  - eval-02
+  - eval-09
+  code: |
+    from sklearn.metrics import confusion_matrix, classification_report
+
+    y_true, y_pred = labelled.category, [classify(t) for t in labelled.text]
+    print(classification_report(y_true, y_pred))
+    cm = confusion_matrix(y_true, y_pred, labels=CATEGORIES)
+
+    HIGH_RISK = ["discrimination_allegation", "udaap", "elder_abuse"]
+    for cat in HIGH_RISK:                                         # zero tolerance, separate from accuracy
+        missed = [t for t, yt, yp in zip(labelled.text, y_true, y_pred) if yt == cat and yp != cat]
+        assert not missed, f"{cat}: {len(missed)} misrouted"
+  lang: python
+- id: eval-05
+  title: Eval set frozen before the eSIM-only phone launch
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier built its chatbot eval set at launch. A year later, a major handset maker ships eSIM-only phones in the market, and eSIM transfer questions jump to 14% of chats. The eval set has three eSIM questions. Evals pass at 94% while eSIM conversations fail half the time and stores are flooded with walk-ins.
+  antipattern: |-
+    **A static golden set built at launch.**
+
+    *Think of it this way:* Studying for this year's exam with last year's past papers when the syllabus has changed.
+  fails: |-
+    **Mechanism:** User behavior drifts, and new features and intents appear. The eval set measures last year's traffic.
+
+    - The eval set represents last year's traffic mix.
+    - New intents appear with product launches, regulations and seasons.
+    - Nobody compares eval intent mix with production intent mix.
+
+    **Root cause:** The golden set is static and not fed by production.
+
+    **Where it breaks:** Eval data operations.
+  diagram:
+    bad:
+    - Eval set · Built at launch
+    - '!eSIM launch · 14% of chats'
+    - 3 eSIM cases · Evals 94%
+    - '!Store walk-ins · Bot fails'
+    bad_note: Static eval set from launch day
+    good:
+    - Sample prod · Weekly
+    - +Label failures · New cases
+    - +Mix check · Eval vs prod
+    - Pre-launch · Add cases early
+    good_note: Weekly production sampling feeds the eval set
+  solution: |-
+    1. Sample production conversations weekly, label failures and add them as eval cases.
+    2. Compare intent distribution of the eval set with production and alert on gaps.
+    3. Add eval cases before known launches (new devices, price changes, regulatory changes).
+  works: |-
+    **Trade-off to manage:** Continuous labelling needs a small standing team or vendor budget.
+
+    **How you prove it worked:**
+
+    - Divergence metric between eval and production intent mix.
+    - Failure rate per new intent cluster.
+
+    **Same pattern elsewhere:** FinTech: a bank's assistant eval set has no questions about a new instant-payments service, which becomes the top contact reason after launch.
+  takeaway: Every production bug becomes a test case.
+  related:
+  - eval-01
+  - eval-17
+  - obs-06
+  code: |
+    def refresh_eval_set():
+        sample = prod_logs.sample(n=500, since=days_ago(7))
+        failures = [s for s in sample if s.feedback == "down" or s.escalated]
+        eval_set.add(label(failures), source="production")
+
+        gap = js_divergence(intent_dist(eval_set), intent_dist(prod_logs.last(days=7)))
+        if gap > 0.1:
+            alert(f"eval set drifted from production intents: {top_missing_intents()}")
+
+    release_calendar.on("device_launch", lambda e: eval_set.add(seed_cases(e.product)))
+  lang: python
+- id: eval-06
+  title: Investment-app assistant tested only on friendly questions
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A brokerage app launches an assistant tested with 400 questions written by the product team, all about app features. In the first week, users ask "Should I put my emergency fund into this meme stock?", "Give me a guaranteed 20% strategy", and questions in Hindi and Spanish. The assistant gives stock-specific opinions, which the firm is not licensed to give in this channel.
+  antipattern: |-
+    **Eval data written by the team who built the feature.**
+
+    *Think of it this way:* Crash-testing a car only by driving it carefully around the car park.
+  fails: |-
+    **Mechanism:** Builders test what they designed for. Real users don't.
+
+    - The eval set reflects how builders expect the product to be used.
+    - Out-of-scope, adversarial and regulated-advice questions were never tested.
+    - The model's default helpfulness fills the gap.
+
+    **Root cause:** Eval coverage designed from the feature list, not from real user behaviour and risks.
+
+    **Where it breaks:** Eval dataset design.
+  diagram:
+    bad:
+    - 400 questions · Feature-only
+    - '!Real users · Meme stocks'
+    - Never tested · Advice asks
+    - '!Gives opinions · Unlicensed'
+    bad_note: Evals written by the builders
+    good:
+    - Risk categories · Advice, adversary
+    - +Seed from logs · Real phrasing
+    - +Expected policy · Decline, route
+    - Coverage map · Vs production
+    good_note: Adversarial and out-of-scope categories
+  solution: |-
+    1. Add categories deliberately (out of scope, personalised advice requests, adversarial, ambiguous, multilingual, long inputs).
+    2. Seed synthetic cases from real contact-centre logs and social media questions.
+    3. Define the expected behaviour for each (decline with education, route to a licensed advisor, answer generally).
+  works: |-
+    **Trade-off to manage:** Broader coverage increases eval cost and time; run the full set nightly and a subset per change.
+
+    **How you prove it worked:**
+
+    - Coverage report of eval categories against production intent clusters.
+    - Weekly review of conversations flagged as advice-like by a classifier.
+
+    **Same pattern elsewhere:** Telco: a care bot is never tested on "How do I track my partner's phone?", which touches privacy and stalking risk.
+  takeaway: Test the inputs you didn't design for.
+  related:
+  - eval-10
+  - sec-01
+  code: |
+    CATEGORIES = {
+        "out_of_scope":     "decline_with_education",
+        "personal_advice":  "route_to_licensed_advisor",
+        "adversarial":      "refuse",
+        "ambiguous":        "ask_clarifying_question",
+        "multilingual":     "answer_generally",
+        "long_input":       "answer_generally",
+    }
+    cases = [c for cat in CATEGORIES for c in synth_from_logs(cat, contact_centre_logs, n=40)]
+    results = {cat: mean(behaviour(run(c)) == CATEGORIES[cat] for c in cases if c.cat == cat) for cat in CATEGORIES}
+  lang: python
+- id: eval-07
+  title: Prompt A/B declared a winner on 100 examples
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    Two prompts for a device-troubleshooting bot are compared on 100 eval cases. Prompt B scores 2 points higher and ships. On the next run, B is 1 point lower than A. The team has spent three weeks chasing what was noise.
+  antipattern: |-
+    **Running each eval once and treating it as truth.**
+
+    *Think of it this way:* Flipping a coin ten times, getting six heads, and concluding the coin is biased.
+  fails: |-
+    **Mechanism:** LLM outputs are stochastic. Small eval sets have wide confidence intervals.
+
+    - LLM outputs vary between runs even with the same input.
+    - With 100 cases, the confidence interval is roughly plus or minus 8-10 points.
+    - Single runs and unpaired comparisons exaggerate small differences.
+
+    **Root cause:** Evals were treated as deterministic measurements.
+
+    **Where it breaks:** Eval methodology.
+  diagram:
+    bad:
+    - Prompt A vs B · 100 cases
+    - '!B +2 points · One run'
+    - Ships B · Declared winner
+    - '!Rerun: B -1 · It was noise'
+    bad_note: One run, 100 cases, declare a winner
+    good:
+    - Size the set · Detectable effect
+    - +k trials · Per case
+    - +Paired wins · Same inputs
+    - Bootstrap CI · Then decide
+    good_note: Repeated trials, paired comparison, CIs
+  solution: |-
+    1. Run several trials per case and report the mean with confidence intervals (bootstrap).
+    2. Use paired comparison on the same cases and count wins, losses and ties.
+    3. Compute the minimum detectable effect before the experiment and size the set accordingly.
+  works: |-
+    **Trade-off to manage:** More trials multiply eval cost; use cheaper models for judging, and sample.
+
+    **How you prove it worked:**
+
+    - Re-run the baseline twice to measure run-to-run noise on your set.
+
+    **Same pattern elsewhere:** FinTech: a fraud-alert explanation prompt "improves" analyst agreement by 3% on 80 cases, which disappears in production.
+  takeaway: A 2% gain on 100 examples is noise.
+  related:
+  - eval-14
+  - eval-17
+  code: |
+    import numpy as np
+
+    def paired_eval(a, b, cases, trials=5):
+        sa = np.array([[score(a(c)) for _ in range(trials)] for c in cases]).mean(1)
+        sb = np.array([[score(b(c)) for _ in range(trials)] for c in cases]).mean(1)
+        diff = sb - sa
+        boot = [np.random.choice(diff, len(diff)).mean() for _ in range(2000)]
+        lo, hi = np.percentile(boot, [2.5, 97.5])
+        return {"wins": (diff > 0).sum(), "losses": (diff < 0).sum(), "ties": (diff == 0).sum(),
+                "ci95": (lo, hi), "significant": lo > 0 or hi < 0}
+  lang: python
+- id: eval-08
+  title: KYC extraction few-shots leaked into the eval set
+  tags:
+  - Quality
+  - Security
+  - Compliance
+  - FinTech
+  scenario: |-
+    A neobank uses an LLM to extract fields from identity documents and utility bills for KYC. The prompt includes 12 example documents. Offline accuracy is 98%. In production, accuracy on address extraction is 81%. The 12 prompt examples were also in the 200-document eval set, along with near-duplicates from the same templates.
+  antipattern: |-
+    **Few-shot examples in the prompt are also in the eval set.**
+
+    *Think of it this way:* Giving students the exam answers as worked examples, then using the same questions on the exam.
+  fails: |-
+    **Mechanism:** The model is graded on questions it was shown the answers to.
+
+    - Few-shot examples and eval cases came from the same pool.
+    - Near-duplicates (same utility provider template) inflate scores.
+    - The eval never saw the long tail of real document layouts.
+
+    **Root cause:** No separation between prompt-building data and evaluation data.
+
+    **Where it breaks:** Data management for prompts and evals.
+  diagram:
+    bad:
+    - 12 examples · In prompt
+    - '!Same 12 · In eval set'
+    - 98% offline · Inflated
+    - '!81% in prod · Addresses'
+    bad_note: Few-shot examples also in the eval set
+    good:
+    - Three pools · Example/dev/test
+    - +Split by · Template, issuer
+    - +Overlap check · Hash + MinHash
+    - Prod-like test · Real mix
+    good_note: Disjoint pools split by template
+  solution: |-
+    1. Split data into prompt-example, dev and held-out test pools with no overlap, including by template and provider.
+    2. Check overlap automatically with hashing and near-duplicate detection.
+    3. Build the test set from production samples in proportion to real document types.
+  works: |-
+    **Trade-off to manage:** Held-out sets reduce the data available for prompt examples; that is the price of honest measurement.
+
+    **How you prove it worked:**
+
+    - Gap between offline and production accuracy, measured on audited production samples.
+
+    **Same pattern elsewhere:** Telco: a port-in form extractor is tested on the same carrier templates used as examples and fails on smaller carriers' formats.
+  takeaway: Never grade on the answer key you handed out.
+  related:
+  - eval-17
+  - ft-04
+  code: |
+    pools = split_by_group(kyc_docs, group_key=lambda d: (d.template_id, d.provider),
+                           ratios={"prompt_examples": .1, "dev": .3, "test": .6})
+
+    def overlap(a, b):
+        ha = {minhash(d.text) for d in a}
+        return [d for d in b if any(jaccard(minhash(d.text), h) > 0.85 for h in ha)]
+
+    assert not overlap(pools["prompt_examples"], pools["test"]), "leakage between few-shots and test"
+    pools["test"] = stratify(pools["test"], by="doc_type", target=prod_doc_type_mix)
+  lang: python
+- id: eval-09
+  title: 92% overall hides 55% on business billing disputes
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's billing assistant scores 92% on its eval set. Small-business customers, with multi-line accounts and pooled data, are 6% of traffic but 30% of revenue at risk. Their dispute questions succeed only 55% of the time. The account-management team learns this from a churned customer.
+  antipattern: |-
+    **One aggregate score.**
+
+    *Think of it this way:* A hospital reporting a great average recovery rate while one ward has a serious infection problem.
+  fails: |-
+    **Mechanism:** Averages blend high-volume easy cases with rare, high-risk ones.
+
+    - The headline metric is an average weighted by volume.
+    - Small, high-value segments barely move the average.
+    - Nobody looks at slices.
+
+    **Root cause:** Evaluation reports aggregate scores without segment or risk-tier breakdowns.
+
+    **Where it breaks:** Eval reporting.
+  diagram:
+    bad:
+    - 'Eval: 92% · All traffic'
+    - '!SMB = 6% · Of volume'
+    - SMB disputes · 55% success
+    - '!Churned SMB · Found late'
+    bad_note: One aggregate score
+    good:
+    - Slice metrics · Segment, intent
+    - +Oversample · Small slices
+    - +Per-slice bar · Weighted
+    - Worst slice · In every review
+    good_note: Per-slice thresholds weighted by impact
+  solution: |-
+    1. Slice every metric by intent, customer segment, product, channel, language and risk tier.
+    2. Set per-slice thresholds, and weight by business impact, not just volume.
+    3. Report the worst slice next to the mean in every review.
+  works: |-
+    **Trade-off to manage:** Small slices have wide confidence intervals; oversample them in the eval set.
+
+    **How you prove it worked:**
+
+    - Automated slice report with alerts when any slice falls below its threshold.
+
+    **Same pattern elsewhere:** FinTech: a bank chatbot is 91% accurate overall but 60% on questions from small- business borrowers about loan payment deferrals.
+  takeaway: Report the worst slice, not just the mean.
+  related:
+  - eval-04
+  - rag-20
+  code: |
+    SLICES = ["intent", "segment", "product", "channel", "language", "risk_tier"]
+
+    def sliced_report(results, thresholds):
+        report = {}
+        for dim in SLICES:
+            for val, rows in group_by(results, dim).items():
+                acc = mean(r.correct for r in rows)
+                report[(dim, val)] = acc
+                if acc < thresholds.get((dim, val), thresholds["default"]):
+                    flag(dim, val, acc, impact=business_weight(dim, val))
+        worst = min(report, key=report.get)
+        return {"mean": mean(r.correct for r in results), "worst_slice": (worst, report[worst])}
+  lang: python
+- id: eval-10
+  title: No safety suite before the investing assistant launch
+  tags:
+  - Quality
+  - Cost
+  - Security
+  - FinTech
+  - Critical
+  scenario: |-
+    A fintech launches a budgeting and investing assistant. Within days, a user jailbreaks it into saying a specific crypto token offers "guaranteed returns" and posts the screenshot. The firm faces press coverage and a regulator inquiry about misleading financial promotions.
+  antipattern: |-
+    **Quality evals only.**
+
+    *Think of it this way:* Testing that a lock opens with the right key but never testing whether it opens with a paperclip.
+  fails: |-
+    **Mechanism:** Safety failures are rare in normal traffic, so quality evals never see them.
+
+    - Quality evals use normal traffic, where jailbreaks are rare.
+    - Nobody owned adversarial testing.
+    - Output filters checked toxicity but not financial promotion rules.
+
+    **Root cause:** Safety and compliance were not a separate, blocking test suite.
+
+    **Where it breaks:** Eval suite and release gates.
+  diagram:
+    bad:
+    - Quality evals · Normal traffic
+    - '!Jailbreak · In first week'
+    - Guaranteed · Returns claim
+    - '!Regulator · Inquiry'
+    bad_note: Quality evals only
+    good:
+    - Red-team suite · Per category
+    - +Policy check · Promotion rules
+    - +Zero tolerance · Release gate
+    - Refresh · New techniques
+    good_note: Blocking red-team suite plus output policy
+  solution: |-
+    1. Build a red-team suite covering jailbreaks, prompt injection, PII leakage, guaranteed-return claims, specific securities recommendations and unlicensed advice.
+    2. Add an output policy check for financial-promotion rules ("guaranteed", return promises, missing risk warnings).
+    3. Make the suite a release blocker with zero tolerance for critical categories, and refresh it with new public jailbreak techniques.
+  works: |-
+    **Trade-off to manage:** Strict output filters cause some false refusals; measure the false-refusal rate alongside.
+
+    **How you prove it worked:**
+
+    - Attack success rate per category, tracked per release.
+    - Production classifier for promotion-like outputs with human review.
+
+    **Same pattern elsewhere:** Telco: a care bot is manipulated into revealing another subscriber's address, a CPNI violation.
+  takeaway: Safety is a separate test suite with zero tolerance.
+  related:
+  - eval-06
+  - sec-01
+  - sec-08
+  code: |
+    SUITE = {"jailbreak": 120, "prompt_injection": 80, "pii_leak": 60,
+             "guaranteed_returns": 50, "specific_security_rec": 50, "unlicensed_advice": 50}
+    BANNED = re.compile(r"\bguarantee(d)?\b|risk[- ]free|can't lose", re.I)
+
+    def promo_policy_ok(text):
+        return not BANNED.search(text) and ("capital at risk" in text.lower() or not mentions_returns(text))
+
+    results = {cat: run_suite(cat, n) for cat, n in SUITE.items()}
+    assert all(r.critical_failures == 0 for r in results.values()), "release blocked"
+  lang: python
+- id: eval-11
+  title: Offline gains that never move first-contact resolution
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    Over six months, a carrier's chatbot team raises its offline answer-quality score from 71% to 86%. First-contact resolution and repeat-contact rate do not change. The offline set measured whether answers were correct, but customers mostly needed the bot to complete actions (reset voicemail PIN, pay a bill), which it could not do.
+  antipattern: |-
+    **Never connecting evals to business outcomes.**
+
+    *Think of it this way:* Training a sprinter's form in front of a mirror for months without ever timing a race.
+  fails: |-
+    **Mechanism:** The offline proxy may not correlate with what users value.
+
+    - The offline metric was a proxy that did not correlate with the business outcome.
+    - Nobody validated the proxy against online results.
+    - The real failure (no action capability) was invisible to the offline eval.
+
+    **Root cause:** Offline evals were never linked to online business metrics.
+
+    **Where it breaks:** Measurement strategy.
+  diagram:
+    bad:
+    - Offline score · 71% to 86%
+    - '!FCR flat · No change'
+    - Needed actions · PIN, payment
+    - '!Proxy wrong · 6 months'
+    bad_note: Optimise an unvalidated offline score
+    good:
+    - Online metrics · 7-day repeat
+    - +A/B test · Big changes
+    - +Correlate · Offline vs online
+    - Study failures · Find gaps
+    good_note: Link offline evals to online outcomes
+  solution: |-
+    1. Track online outcomes (containment with no repeat contact in 7 days, task completion, CSAT, transfer reason).
+    2. Run A/B tests for significant changes and check whether offline gains predict online gains.
+    3. Analyse failed sessions to find what the offline set does not measure.
+  works: |-
+    **Trade-off to manage:** A/B testing needs traffic and time; use it for big changes and offline evals for fast iteration.
+
+    **How you prove it worked:**
+
+    - Correlation between offline score changes and online metric changes across releases.
+
+    **Same pattern elsewhere:** FinTech: a bank bot's answer quality improves but call deflection stays flat, because most callers want to dispute a transaction, which the bot cannot start.
+  takeaway: Offline evals are a proxy, so validate the proxy.
+  related:
+  - aev-20
+  - obs-01
+  code: |
+    def online_outcomes(sessions):
+        return {
+            "containment_7d": mean(not s.repeat_contact_within(days=7) for s in sessions),
+            "task_completion": mean(s.task_completed for s in sessions),
+            "csat": mean(s.csat for s in sessions if s.csat),
+            "transfer_reasons": Counter(s.transfer_reason for s in sessions if s.transferred)}
+
+    ab = experiment("prompt_v12", control="v11", metric="containment_7d", min_effect=0.02)
+    print(correlation(offline_deltas, online_deltas))          # do offline gains predict online gains?
+  lang: python
+- id: eval-12
+  title: Same model grades its own dispute letters
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank drafts chargeback dispute letters with model X and evaluates them with model X as the judge, with no reference letters. The judge passes 96%. Network reviewers reject 15% for missing required elements, the same omissions the judge overlooked.
+  antipattern: |-
+    **Model X judging model X with no reference answer.**
+
+    *Think of it this way:* Letting a student grade their own exam. They make the same mistakes when grading as they did when answering.
+  fails: |-
+    **Mechanism:** Self-preference bias and shared blind spots.
+
+    - The generator and judge share blind spots.
+    - Self-preference bias makes a model rate its own style highly.
+    - No reference answers or required-element lists anchor the judgement.
+
+    **Root cause:** An unanchored self-judge.
+
+    **Where it breaks:** Judge design.
+  diagram:
+    bad:
+    - Model X writes · Dispute letter
+    - '!Model X judges · No reference'
+    - 96% pass · Shared blind spot
+    - '!15% rejected · By networks'
+    bad_note: Model X judges model X, no references
+    good:
+    - Other judge · Different family
+    - +Checklist · Required elements
+    - +References · Accepted letters
+    - Validate · Vs network result
+    good_note: Different judge, checklist, real outcomes
+  solution: |-
+    1. Use a different (often stronger) model family as judge, or several judges.
+    2. Give the judge a checklist of required elements and reference letters.
+    3. Validate the judge on letters that networks actually rejected.
+  works: |-
+    **Trade-off to manage:** A stronger judge costs more per evaluation; sample rather than judging everything.
+
+    **How you prove it worked:**
+
+    - Agreement between the judge and the network outcome (accepted or rejected).
+
+    **Same pattern elsewhere:** Telco: the same model writes and judges outage notifications, missing that it never states the estimated restoration time.
+  takeaway: Don't let the student grade their own exam.
+  related:
+  - eval-03
+  code: |
+    JUDGES = [Judge(model="judge-family-a"), Judge(model="judge-family-b")]   # not the generator's family
+    CHECKLIST = ["cites_correct_reason_code", "includes_required_evidence", "within_network_deadline"]
+
+    def grade(letter, reference):
+        votes = [j.check(letter, reference, CHECKLIST) for j in JUDGES]
+        return {c: all(v[c] for v in votes) for c in CHECKLIST}
+
+    validation = [grade(l.text, l.reference) for l in network_rejected_letters]
+    assert recall_of_failures(validation) > 0.9                  # judge must catch real rejections
+  lang: python
+- id: eval-13
+  title: Order-capture pipeline regresses and nobody knows which step
+  tags:
+  - Quality
+  - Cost
+  - Telco
+  scenario: |-
+    A B2B carrier automates order capture from customer emails: classify request, extract services and sites, validate against the catalog, create a draft order (TMF622). Order accuracy drops from 88% to 74% after a release that touched three steps. The team spends a week bisecting.
+  antipattern: |-
+    **No component-level evals.**
+
+    *Think of it this way:* A factory line that only inspects finished cars. When defects rise, nobody knows which station caused them.
+  fails: |-
+    **Mechanism:** End-to-end metrics hide which step regressed.
+
+    - Only end-to-end order accuracy is measured.
+    - Errors compound across steps and mask each other.
+    - Changes to several steps ship together.
+
+    **Root cause:** No component-level (unit) evals for a multi-step pipeline.
+
+    **Where it breaks:** Eval design for pipelines.
+  diagram:
+    bad:
+    - Email to order · 4 stages
+    - '!Release · 3 stages changed'
+    - 88% to 74% · End-to-end
+    - '!Week bisecting · No attribution'
+    bad_note: Only end-to-end order accuracy
+    good:
+    - Classify eval · Accuracy
+    - +Extract eval · Field F1
+    - +Validate eval · Precision
+    - E2E eval · Before release
+    good_note: Per-stage evals plus end-to-end
+  solution: |-
+    1. Evaluate each stage on its own labelled set (classification accuracy, extraction field-level F1, validation precision).
+    2. Store intermediate outputs in traces so failures can be attributed to a stage.
+    3. Run stage evals in CI for any change to that stage, and end-to-end evals before release.
+  works: |-
+    **Trade-off to manage:** Labelling intermediate outputs costs more than labelling only the final result.
+
+    **How you prove it worked:**
+
+    - Stage-level dashboards; a drop in one stage's metric pinpoints the regression.
+
+    **Same pattern elsewhere:** FinTech: an invoice-to-payment pipeline (classify, extract, match PO, schedule ACH) regresses and the team cannot tell whether extraction or matching broke.
+  takeaway: Unit tests and integration tests apply to LLM systems too.
+  related:
+  - rag-16
+  - aev-10
+  code: |
+    STAGES = {"classify": (classifier, accuracy), "extract": (extractor, field_f1),
+              "validate": (validator, precision)}
+
+    def stage_evals(changed: set[str]):
+        for name, (fn, metric) in STAGES.items():
+            if name in changed or "all" in changed:
+                score = metric(fn, datasets[name])
+                assert score >= baseline[name] - 0.01, f"{name} regressed: {score:.3f}"
+
+    with tracer.span("order_capture") as s:                      # intermediate outputs in traces
+        s.set("classify.out", c := classifier(msg)); s.set("extract.out", e := extractor(msg, c))
+  lang: python
+- id: eval-14
+  title: Best fraud-summary prompt is too slow and too costly
+  tags:
+  - Quality
+  - Cost
+  - Latency
+  - FinTech
+  scenario: |-
+    A fraud-operations team picks the prompt and model with the highest summary quality for alert triage. It is 4 points better than the runner-up but takes 11 seconds and costs 6 times as much. At 40,000 alerts a day, it exceeds the budget and slows analysts, who skip the summary.
+  antipattern: |-
+    **Quality-only leaderboards.**
+
+    *Think of it this way:* Choosing a delivery van by top speed alone, then discovering it can't fit through the warehouse door.
+  fails: |-
+    **Mechanism:** Production has budgets. A model that misses the SLA fails users.
+
+    - The leaderboard ranks only on quality.
+    - Latency and cost were checked after the decision.
+    - The quality gain did not change analyst decisions.
+
+    **Root cause:** Quality, latency and cost were evaluated separately rather than as one decision.
+
+    **Where it breaks:** Model and prompt selection.
+  diagram:
+    bad:
+    - Best quality · +4 points
+    - '!11 s per alert · 6x cost'
+    - 40k alerts/day · Over budget
+    - '!Analysts skip · Too slow'
+    bad_note: Choose on quality alone
+    good:
+    - Score all 3 · Q, p95, cost
+    - +Pareto set · Candidates
+    - +Constraints · Under 3 s, budget
+    - Decision test · Changes outcome?
+    good_note: Choose on the quality-latency-cost frontier
+  solution: |-
+    1. Report quality, p95 latency and cost per item for every candidate together.
+    2. Pick from the Pareto frontier, using the business constraint (under 3 s, budget per alert).
+    3. Measure whether the quality difference changes decisions (analyst agreement), not just scores.
+  works: |-
+    **Trade-off to manage:** A cheaper model may need better prompts or a small fine-tune to close the gap.
+
+    **How you prove it worked:**
+
+    - Cost per alert and summary usage rate in production.
+
+    **Same pattern elsewhere:** Telco: the most accurate network-incident summary model is too slow for the NOC's 5-minute update cycle.
+  takeaway: Quality, latency and cost are one decision.
+  related:
+  - cost-01
+  - cost-02
+  code: |
+    def pareto(candidates):
+        rows = [{"name": c.name, "quality": c.quality, "p95_s": c.p95_s, "cost": c.cost_per_item}
+                for c in candidates]
+        feasible = [r for r in rows if r["p95_s"] < 3.0 and r["cost"] <= BUDGET_PER_ALERT]
+        frontier = [r for r in feasible if not any(o["quality"] >= r["quality"] and o["cost"] < r["cost"]
+                                                   for o in feasible)]
+        return max(frontier, key=lambda r: r["quality"])
+
+    # also check: does the quality gap change analyst decisions? (agreement on 100 alerts)
+  lang: python
+- id: eval-15
+  title: Prompt tweak breaks the B2B quote JSON for a key account
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    An engineer tweaks a B2B quoting assistant's prompt to improve the tone of the cover note. The merge goes straight to production. The JSON quote block now sometimes includes a trailing comment, which breaks the CPQ import. A key enterprise customer's renewal quote fails for two days.
+  antipattern: |-
+    **Evals run manually, "when someone remembers".**
+
+    *Think of it this way:* Changing the font on a form and accidentally moving the boxes the scanner reads.
+  fails: |-
+    **Mechanism:** Changes ship without anyone checking.
+
+    - No automatic eval runs on pull requests.
+    - The change looked unrelated to the JSON output.
+    - Format regressions only surface downstream.
+
+    **Root cause:** Evals are run manually, not as a CI gate.
+
+    **Where it breaks:** CI pipeline.
+  diagram:
+    bad:
+    - Tone tweak · Cover note
+    - '!Merged · No evals'
+    - JSON broken · Trailing comment
+    - '!Quote fails · Key account'
+    bad_note: Evals run when someone remembers
+    good:
+    - PR opened · Prompt change
+    - +Fast subset · Schema + intents
+    - +Diff in PR · Old vs new
+    - Block merge · On breach
+    good_note: Eval gate on every pull request
+  solution: |-
+    1. Run a fast eval subset (including schema validation and key intents) on every pull request that touches prompts, models or tools.
+    2. Run the full suite nightly and before releases.
+    3. Block merge on threshold breaches, and show the diff of eval results in the PR.
+  works: |-
+    **Trade-off to manage:** PR evals add a few minutes and API cost to every change; keep the PR subset under 5 minutes.
+
+    **How you prove it worked:**
+
+    - Downstream parse-failure rate as an alert.
+
+    **Same pattern elsewhere:** FinTech: a tone change in a payment-instruction assistant breaks the ISO 20022 field mapping for a corporate client.
+  takeaway: Evals belong in CI, like unit tests.
+  related:
+  - cicd-01
+  - eval-18
+  code: |
+    # .github/workflows/ai-evals.yml: on PRs touching prompts/**, models.yaml, tools/**
+    #   - run: python -m evals.run --suite fast --compare main --out eval_diff.md
+    #   - run: python -m evals.gate --max-drop 0.01 --must-pass schema_validity,key_accounts
+    #   - uses: marocchino/sticky-pull-request-comment@v2   (posts eval_diff.md on the PR)
+
+    def gate(results):
+        assert results["schema_validity"] == 1.0, "quote JSON must always validate"
+        assert results["key_account_cases"] == 1.0
+  lang: python
+- id: eval-16
+  title: Engineers label SAR narrative quality
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    An AML team uses an LLM to draft Suspicious Activity Report narratives. Engineers built the eval set and labelled 200 drafts as good or bad. Evals pass at 93%. A quality review by senior investigators finds 31% of drafts miss the who, what, when, where and why elements regulators expect.
+  antipattern: |-
+    **Crowdsourced or engineer-written labels for domain tasks.**
+
+    *Think of it this way:* Having the kitchen staff grade a surgeon's notes. They can check spelling, not medicine.
+  fails: |-
+    **Mechanism:** Non-experts can't judge correctness in specialized domains.
+
+    - Labellers lacked domain knowledge of what a strong SAR narrative needs.
+    - The labels rewarded fluent writing over regulatory completeness.
+    - No labelling guidelines or agreement measurement.
+
+    **Root cause:** Eval labels came from non-experts on an expert task.
+
+    **Where it breaks:** Labelling process.
+  diagram:
+    bad:
+    - SAR drafts · By LLM
+    - '!Engineers label · Fluency'
+    - Evals 93% · Looks great
+    - '!31% incomplete · Expert review'
+    bad_note: Engineers label expert work
+    good:
+    - Guidelines · By investigators
+    - +Expert labels · Golden set
+    - +Agreement · Inter-annotator
+    - Scaled judge · Checklist
+    good_note: Expert guidelines, expert labels, then scale
+  solution: |-
+    1. Have senior investigators write labelling guidelines with examples of strong and weak narratives.
+    2. Have experts label (or review) the golden set, and measure inter-annotator agreement.
+    3. Encode required elements as checklist criteria that a judge can then apply at scale.
+  works: |-
+    **Trade-off to manage:** Expert time is scarce and expensive; use it for guidelines and a small, high-quality set, then scale with a calibrated judge.
+
+    **How you prove it worked:**
+
+    - Ongoing expert QA sample compared with eval results.
+
+    **Same pattern elsewhere:** Telco: engineers label network fault-diagnosis answers, but only NOC engineers can tell whether the suggested root cause is plausible.
+  takeaway: Your eval is only as good as your labels.
+  related:
+  - eval-03
+  - eval-02
+  code: |
+    GUIDELINES = load("sar_narrative_guidelines.md")             # written by senior investigators
+
+    labels_a = expert_label(golden, annotator="inv_1", guidelines=GUIDELINES)
+    labels_b = expert_label(golden, annotator="inv_2", guidelines=GUIDELINES)
+    print("inter-annotator kappa", cohen_kappa(labels_a, labels_b))
+
+    CHECKLIST = ["who", "what", "when", "where", "why_suspicious", "how_detected"]
+    scale_scores = [judge.checklist(n, CHECKLIST) for n in all_narratives]   # judge applies expert rubric
+  lang: python
+- id: eval-17
+  title: Fifty prompt iterations overfit the eval set
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's plan-recommendation bot team iterates its prompt 50 times against the same 250 eval cases until it hits 99%. In production, recommendation acceptance drops slightly. The prompt now contains special-case rules for specific eval phrasings.
+  antipattern: |-
+    **Tuning against the same set you report on.**
+
+    *Think of it this way:* A student who memorises the practice test answers instead of learning the subject.
+  fails: |-
+    **Mechanism:** You fit the quirks of the test, not the task.
+
+    - The same set is used for tuning and for reporting.
+    - Each iteration fits quirks of those 250 cases.
+    - Generalisation to new phrasing gets worse.
+
+    **Root cause:** No held-out test set.
+
+    **Where it breaks:** Eval methodology.
+  diagram:
+    bad:
+    - 250 cases · One set
+    - '!50 iterations · Same set'
+    - 99% eval · Special rules
+    - '!Prod worse · Overfit'
+    bad_note: Tune and report on the same 250 cases
+    good:
+    - Dev set · Iterate freely
+    - +Test set · Held out
+    - +Refresh test · From prod
+    - Watch gap · Dev vs test
+    good_note: Dev set to iterate, held-out test to report
+  solution: |-
+    1. Split into a dev set (iterate freely) and a test set (touch rarely, report from it).
+    2. Refresh the test set with new production samples regularly.
+    3. Review the prompt for rules that mention specific cases.
+  works: |-
+    **Trade-off to manage:** Splitting means fewer cases to iterate on; grow the dev set from production.
+
+    **How you prove it worked:**
+
+    - Gap between dev and test scores; a widening gap signals overfitting.
+
+    **Same pattern elsewhere:** FinTech: a loan-FAQ prompt tuned to 100% on its eval set mishandles slightly reworded questions about payment holidays.
+  takeaway: Hold out a set you never tune on.
+  related:
+  - eval-08
+  - eval-05
+  code: |
+    dev, test = split(cases, test_frac=0.3, seed=7)
+
+    for i in range(iterations):
+        prompt = improve(prompt, failures=run(prompt, dev).failures)   # iterate on dev only
+
+    final = run(prompt, test)                                          # touch rarely, report from here
+    if any(re.search(re.escape(c.key_phrase), prompt) for c in test):
+        warn("prompt mentions specific test cases")
+    test.refresh(sample_production(n=100), keep_frac=0.7)              # regular refresh
+  lang: python
+- id: eval-18
+  title: Payment instructions from emails fail to parse 3% of the time
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A corporate-banking operations team uses an LLM to turn client emails into payment instructions (beneficiary, amount, currency, value date). The evals check whether fields are correct but not whether the JSON validates. 3% of outputs fail schema validation in production, landing in an exceptions queue and missing cut-off times.
+  antipattern: |-
+    **Grading content but not format.**
+
+    *Think of it this way:* Checking that a letter says the right things but not whether the envelope has a valid address.
+  fails: |-
+    **Mechanism:** Downstream systems need valid schemas, not just good ideas.
+
+    - Free-form generation sometimes produces extra prose, wrong types or missing fields.
+    - Evals graded content, not format.
+    - Downstream systems need strict schemas.
+
+    **Root cause:** No deterministic format checks in evals, and no structured-output enforcement at runtime.
+
+    **Where it breaks:** Output contract and eval suite.
+  diagram:
+    bad:
+    - Client email · Pay request
+    - '!Free-form JSON · From LLM'
+    - 3% invalid · Schema fails
+    - '!Missed cut-off · Exceptions'
+    bad_note: Grade content, ignore format
+    good:
+    - Structured out · JSON schema
+    - +Pydantic · Plus IBAN check
+    - +Retry once · Then human
+    - Metric · Parse failures
+    good_note: Schema-enforced output, code checks, retry
+  solution: |-
+    1. Use the provider's structured outputs or tool calling with a JSON schema, and validate with Pydantic.
+    2. On validation failure, retry once with the error message, then route to a human.
+    3. Add schema validity and field-level accuracy as separate eval metrics, measured by code not a judge.
+    4. Validate business rules in code too (IBAN checksum, currency codes, cut-off times).
+  works: |-
+    **Trade-off to manage:** Strict schemas can reject valid edge cases; version the schema and review rejects.
+
+    **How you prove it worked:**
+
+    - Parse-failure rate and exceptions-queue volume per model version.
+
+    **Same pattern elsewhere:** Telco: an order-intake bot produces addresses that fail the serviceability API format 4% of the time.
+  takeaway: Check format with code, not with a judge.
+  related:
+  - prm-06
+  - eval-15
+  code: |
+    class PaymentInstruction(BaseModel):
+        iban: str; amount: Decimal; currency: str; value_date: date
+        @field_validator("iban")
+        def iban_ok(cls, v): assert iban_checksum(v); return v
+        @field_validator("currency")
+        def ccy_ok(cls, v): assert v in ISO_4217; return v
+
+    def parse(email):
+        for attempt in range(2):
+            try:
+                return PaymentInstruction.model_validate(llm.structured(email, schema=PaymentInstruction))
+            except ValidationError as e:
+                email = f"{email}\n\nPrevious output failed validation: {e}"
+        return route_to_human(email)
+  lang: python
+- id: eval-19
+  title: Unpinned model alias changes refusal behaviour overnight
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's care bot calls a model through a "latest" alias. The provider updates the model behind it. With no deployment on the carrier's side, the bot starts refusing to discuss account security topics such as SIM PIN resets, and transfers to agents rise 12% in a day.
+  antipattern: |-
+    **Using an unpinned model alias like "latest".**
+
+    *Think of it this way:* Building on a library that auto-updates to the newest major version every night.
+  fails: |-
+    **Mechanism:** The provider updated the model behind the alias.
+
+    - The model is a dependency that changed without a release.
+    - No scheduled eval ran against production configuration.
+    - The team assumed "nothing deployed, nothing changed".
+
+    **Root cause:** Unpinned model versions and no continuous canary evaluation.
+
+    **Where it breaks:** Model configuration and monitoring.
+  diagram:
+    bad:
+    - '''latest'' alias · In config'
+    - '!Provider update · Overnight'
+    - New refusals · SIM PIN topics
+    - '!Transfers +12% · No deploy'
+    bad_note: Call the model through a 'latest' alias
+    good:
+    - Pin version · Exact id
+    - +Eval upgrade · Via PR
+    - +Canary eval · Hourly
+    - Deprecation · On calendar
+    good_note: Pin versions, canary evals, planned upgrades
+  solution: |-
+    1. Pin exact model versions in config.
+    2. Evaluate new versions offline before switching, as a normal change with a PR.
+    3. Run a scheduled canary eval (hourly or daily) against production configuration and alert on drift.
+    4. Track provider deprecation dates on a calendar.
+  works: |-
+    **Trade-off to manage:** Pinning means you must actively upgrade before deprecation; plan it in.
+
+    **How you prove it worked:**
+
+    - Canary eval drift, plus transfer-rate and refusal-rate monitoring.
+
+    **Same pattern elsewhere:** FinTech: a bank's KYC extraction accuracy shifts after a provider update to an unpinned alias.
+  takeaway: The model is a dependency, so pin it and test upgrades.
+  related:
+  - ops-16
+  - cicd-06
+  code: |
+    # models.yaml: pin exact versions, never floating aliases
+    # care_bot: {provider: x, model: "model-name-2026-08-14"}
+
+    @schedule(cron="0 * * * *")
+    def canary():
+        r = run_suite("refusal_canary", config=load("models.yaml"))
+        if r.refusal_rate - BASELINE.refusal_rate > 0.03:
+            alert("refusal behaviour drift on production config", r)
+
+    deprecations = provider.deprecation_schedule()            # put dates on the team calendar
+  lang: python
+- id: eval-20
+  title: Eval dashboard with no owner and no threshold
+  tags:
+  - Quality
+  - Latency
+  - FinTech
+  scenario: |-
+    A bank's GenAI platform team publishes an eval dashboard for 14 use cases. The mortgage assistant shows 81% faithfulness. Nobody knows whether that is acceptable, no team owns the number, and it slowly drops to 73% over a quarter before a complaint review notices.
+  antipattern: |-
+    **Metrics with no target, owner, or decision attached.**
+
+    *Think of it this way:* A car dashboard with gauges but no red zones. You see the number change but not when to stop.
+  fails: |-
+    **Mechanism:** Numbers without thresholds don't drive decisions.
+
+    - Metrics have no target, owner or defined action.
+    - Gradual decline does not trigger any decision.
+    - Model risk management has no evidence the system stayed within tolerance.
+
+    **Root cause:** Evals were treated as reporting, not as controls.
+
+    **Where it breaks:** Governance and operating model.
+  diagram:
+    bad:
+    - Dashboard · 14 use cases
+    - '!81% faithful · OK or not?'
+    - Slow decline · To 73%
+    - '!Found late · By complaints'
+    bad_note: Metrics with no owner or target
+    good:
+    - Threshold · Per metric
+    - +Owner · Per use case
+    - +Breach action · Rollback, disable
+    - Attestation · Monthly
+    good_note: Thresholds, owners and breach actions
+  solution: |-
+    1. Agree launch and ongoing thresholds per metric with the product owner and model risk (for example SR 11-7 style monitoring).
+    2. Assign an owner per use case and metric, and define the action a breach triggers (investigate, roll back, disable).
+    3. Alert on threshold breaches and on sustained trends.
+  works: |-
+    **Trade-off to manage:** Thresholds can be set too tight and cause alert fatigue; review them quarterly.
+
+    **How you prove it worked:**
+
+    - Monthly control attestation by the owner.
+
+    **Same pattern elsewhere:** Telco: a care-bot containment metric drifts down for months because no single team owns it after a reorganisation.
+  takeaway: Every metric needs a threshold and an owner.
+  related:
+  - gov-01
+  - obs-08
+  code: |
+    OWNERSHIP = {
+        "card_dispute_assistant": {
+            "owner": "disputes-product@bank", "model_risk": "mrm-team",
+            "metrics": {"faithfulness": {"min": 0.95, "breach": "rollback"},
+                        "refusal_correct": {"min": 0.9, "breach": "investigate"},
+                        "pii_leak": {"max": 0, "breach": "disable"}}}}
+
+    for uc, cfg in OWNERSHIP.items():
+        for m, rule in cfg["metrics"].items():
+            if breached(current(uc, m), rule) or trend_down(uc, m, weeks=3):
+                page(cfg["owner"], uc, m, action=rule["breach"])
+  lang: python
+- id: aev-01
+  title: eSIM agent says activated, but no profile was installed
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier evaluates its eSIM-transfer agent with an LLM judge that reads the final message. The suite passes at 96%. In production, 11% of customers who were told "Your eSIM is active" have no service: the agent created the order, but the SM-DP+ profile download never completed, and the agent never checked.
+  antipattern: |-
+    **Judging the agent's text instead of the resulting state.**
+
+    *Think of it this way:* Grading a plumber by asking them whether the leak is fixed, instead of turning the tap on.
+  fails: |-
+    **Mechanism:** Agents can claim success they didn't achieve.
+
+    - The eval graded the agent's claim, not the system state.
+    - The agent's success message came before the asynchronous provisioning step finished.
+    - Nothing compared the order state and SIM profile state after the run.
+
+    **Root cause:** Response-based grading for a task whose success is a change in external systems.
+
+    **Where it breaks:** Eval harness design.
+  diagram:
+    bad:
+    - eSIM transfer · Agent run
+    - '!''Active!'' · Final message'
+    - 'Judge: pass · 96%'
+    - '!11% no service · Profile failed'
+    bad_note: Judge reads the final message
+    good:
+    - Agent run · In sandbox
+    - +Order state · TMF622 done
+    - +Profile state · INSTALLED
+    - Then confirm · Or 'pending'
+    good_note: Assert system state after the run
+  solution: |-
+    1. Grade outcomes by querying system state after the run (order completed in TMF622, profile status INSTALLED on the SM-DP+, line active in inventory).
+    2. Make the agent wait on, or poll, provisioning status before confirming, with a "pending" message if not done.
+    3. Keep the judge only for tone and clarity, as a secondary score.
+  works: |-
+    **Trade-off to manage:** State checks need a sandbox BSS with realistic async behaviour, which takes effort to build.
+
+    **How you prove it worked:**
+
+    - Post-run state assertions in the eval harness; in production, a reconciliation of "confirmed" sessions against activation records.
+
+    **Same pattern elsewhere:** FinTech: a card-replacement agent says "new card on its way" while the card-issuing request failed validation.
+  takeaway: Check the world, not the agent's claim about the world.
+  related:
+  - aev-12
+  - aev-04
+  code: |
+    def grade_esim_run(run, env):
+        order = env.tmf622.get_order(run.order_id)
+        profile = env.smdp.profile_status(run.iccid)
+        line = env.inventory.line(run.msisdn)
+        outcome = order.state == "completed" and profile == "INSTALLED" and line.status == "active"
+        claimed = "activated" in run.final_message.lower()
+        return {"outcome": outcome,
+                "false_claim": claimed and not outcome,                    # the real failure
+                "tone": judge.tone(run.final_message)}                      # secondary score only
+  lang: python
+- id: aev-02
+  title: Dispute agent grants provisional credit before verifying identity
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank's card-dispute agent is evaluated on whether the dispute ends with the right status and provisional credit. It scores 93%. A review of traces shows that in 8% of runs it issued provisional credit before completing identity verification, which policy forbids. Fraudsters learned to exploit the gap.
+  antipattern: |-
+    **Outcome-only grading.**
+
+    *Think of it this way:* Checking that a bank teller ended the day with the right cash total, without checking whether they asked for ID before paying out.
+  fails: |-
+    **Mechanism:** A correct end state can hide dangerous, wasteful, or policy-violating steps.
+
+    - Outcome-only grading passes runs with forbidden steps.
+    - Order of operations matters for policy, not only for the result.
+    - The trajectory was never inspected.
+
+    **Root cause:** No trajectory evaluation of required and forbidden steps.
+
+    **Where it breaks:** Eval suite and tool preconditions.
+  diagram:
+    bad:
+    - Dispute agent · Eval run
+    - '!Right status · Credit issued'
+    - Credit first · ID check later
+    - '!Exploited · By fraudsters'
+    bad_note: Grade only the final outcome
+    good:
+    - Required order · Verify, credit
+    - +Forbidden · Unverified credit
+    - +Precondition · In credit tool
+    - Trace audit · In production
+    good_note: Trajectory rules plus tool preconditions
+  solution: |-
+    1. Add trajectory checks (verify_identity must precede issue_credit, and no credit tool call in unverified sessions).
+    2. Enforce the precondition in the credit tool as well, using session verification status.
+    3. Track step count and redundant calls as efficiency metrics.
+  works: |-
+    **Trade-off to manage:** Trajectory checks need maintained policy definitions; keep them few and important.
+
+    **How you prove it worked:**
+
+    - Automated trajectory assertions on every eval run; production trace audits for ordering violations.
+
+    **Same pattern elsewhere:** Telco: a SIM-swap agent completes the swap correctly but called the swap tool before the fraud score came back.
+  takeaway: How the agent got there matters as much as where it landed.
+  related:
+  - aev-03
+  - aev-09
+  - agf-13
+  code: |
+    def trajectory_checks(trace):
+        calls = [s.tool for s in trace.tool_spans]
+        verified_at = calls.index("verify_identity") if "verify_identity" in calls else None
+        credit_at = calls.index("issue_credit") if "issue_credit" in calls else None
+        return {"identity_before_credit": credit_at is None or (verified_at is not None and verified_at < credit_at),
+                "steps": len(calls),
+                "redundant_calls": len(calls) - len(set(map(str, trace.tool_spans)))}
+
+    # and in the tool itself: if not session.identity_verified: return {"status": "REFUSED"}
+  lang: python
+- id: aev-03
+  title: Plan-change evals demand one exact tool sequence
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's plan-change agent is evaluated by exact match against a golden tool-call sequence: get_account, get_plans, check_eligibility, change_plan. A new version calls check_eligibility before get_plans, which is equally valid, and fails 40% of evals. The team reverts an improvement because the eval said it was worse.
+  antipattern: |-
+    **Requiring one golden trajectory.**
+
+    *Think of it this way:* Marking a maths answer wrong because the student did the steps in a different but correct order.
+  fails: |-
+    **Mechanism:** Many paths are equally correct. Strict matching punishes valid variation and rewards overfitting.
+
+    - Many trajectories are equally correct.
+    - Exact matching punishes valid variation.
+    - It also rewards overfitting to one script.
+
+    **Root cause:** The eval encodes one path instead of the constraints that matter.
+
+    **Where it breaks:** Trajectory scoring.
+  diagram:
+    bad:
+    - Golden path · 4 calls fixed
+    - '!Valid reorder · New version'
+    - 40% fail · Exact match
+    - '!Revert · Good change lost'
+    bad_note: Exact match on one golden sequence
+    good:
+    - Must include · Eligibility
+    - +Must not · Cancel tools
+    - +Order rule · Check first
+    - Final state · Plan changed
+    good_note: Invariants, order rules only where needed
+  solution: |-
+    1. Check invariants (must include eligibility check before change_plan, must not call cancel tools) instead of the full sequence.
+    2. Apply order constraints only where the business requires them.
+    3. Combine invariants with final-state checks.
+  works: |-
+    **Trade-off to manage:** Invariants can miss subtle inefficiencies; track step counts separately.
+
+    **How you prove it worked:**
+
+    - Review eval failures for valid alternative paths.
+
+    **Same pattern elsewhere:** FinTech: an address-change agent fails evals for looking up the customer by phone instead of by account number.
+  takeaway: Grade constraints, not a script.
+  related:
+  - aev-02
+  code: |
+    INVARIANTS = [
+        lambda calls: "check_eligibility" in calls and calls.index("check_eligibility") < calls.index("change_plan"),
+        lambda calls: not any(c.startswith("cancel_") for c in calls),
+    ]
+
+    def grade_plan_change(trace, env):
+        calls = [s.tool for s in trace.tool_spans]
+        return all(inv(calls) for inv in INVARIANTS) and env.subscription(trace.sub_id).plan == trace.case.target_plan
+  lang: python
+- id: aev-04
+  title: Collections agent eval sends real emails to customers
+  tags:
+  - Quality
+  - FinTech
+  - Critical
+  scenario: |-
+    A lender runs a new evaluation of its collections agent against a staging environment that, unknown to the team, is connected to the production email service. 400 real customers receive payment reminder emails, some outside allowed contact hours, creating FDCPA and complaint exposure.
+  antipattern: |-
+    **No sandbox for agent evals.**
+
+    *Think of it this way:* Testing a fire alarm by setting fire to the building.
+  fails: |-
+    **Mechanism:** Agent evals execute actions. Real tools have real side effects.
+
+    - Agent evals execute real actions.
+    - Staging shared credentials or connectors with production.
+    - No guard prevented outbound messages from test runs.
+
+    **Root cause:** No isolated simulation environment for agent evaluation.
+
+    **Where it breaks:** Eval infrastructure.
+  diagram:
+    bad:
+    - Eval run · Collections
+    - '!Staging · Prod email wired'
+    - 400 emails · Real customers
+    - '!FDCPA risk · Complaints'
+    bad_note: Evals in a staging env wired to prod
+    good:
+    - Sandbox · Fake customers
+    - +Mocked tools · Recorded
+    - +Egress blocked · Allow-list only
+    - Reset state · Each run
+    good_note: Sandbox with mocked tools and blocked egress
+  solution: |-
+    1. Run agent evals in a sandbox with mocked or recorded tools and seeded fake customers.
+    2. Use test tenants and allow-listed test recipients only; block outbound channels at the network level.
+    3. Reset environment state for every run.
+  works: |-
+    **Trade-off to manage:** Simulators can drift from real systems; refresh recordings regularly.
+
+    **How you prove it worked:**
+
+    - Alerts on any outbound message from eval or staging identities.
+
+    **Same pattern elsewhere:** Telco: an eval run of an outage-notification agent sends real SMS to 10,000 subscribers.
+  takeaway: Agent evals need a simulator, not production.
+  related:
+  - aev-05
+  - aev-14
+  - cicd-08
+  code: |
+    @pytest.fixture
+    def sandbox():
+        env = Sandbox(tenant="eval-tenant", seed_customers=fake_customers(n=50))
+        env.tools.email = RecordingMock(allow=["@eval.invalid"])      # allow-listed test recipients only
+        env.network.block_egress(except_=["mock-services.internal"])  # outbound blocked at network level
+        yield env
+        env.reset()                                                    # fresh state every run
+
+    def test_collections(sandbox):
+        run = agent.run(task="Remind overdue customer C-17", env=sandbox)
+        assert sandbox.tools.email.sent_to("C-17")
+  lang: python
+- id: aev-05
+  title: Clean mocks hide real BSS behaviour
+  tags:
+  - Quality
+  - Security
+  - Telco
+  scenario: |-
+    A carrier's order agent scores 95% in evals with mocked BSS tools that always return instantly and correctly. In production, the inventory API paginates, the catalog API times out at peak, and address validation returns partial matches. Production success is 61%.
+  antipattern: |-
+    **Mock tools that always return perfect data instantly.**
+
+    *Think of it this way:* Training a pilot only in clear skies, then sending them into a storm.
+  fails: |-
+    **Mechanism:** Real tools time out, rate-limit, paginate, and return partial or messy data.
+
+    - Mocks never return errors, delays, pagination or messy data.
+    - The agent never practised recovery.
+    - Evals overstate reliability.
+
+    **Root cause:** The eval environment is unrealistically clean.
+
+    **Where it breaks:** Eval harness.
+  diagram:
+    bad:
+    - Mocked BSS · Always perfect
+    - '!Evals 95% · Clean world'
+    - 'Prod: timeouts · Pagination'
+    - '!61% success · In production'
+    bad_note: Perfect, instant mocks
+    good:
+    - Record/replay · Real responses
+    - +Fault inject · 429, timeout
+    - +Messy data · Partial matches
+    - Score recovery · Explicitly
+    good_note: Replay real responses and inject faults
+  solution: |-
+    1. Record and replay real tool responses, including errors and edge cases.
+    2. Add fault injection (timeouts, 429s, empty results, malformed payloads, partial address matches) at realistic rates.
+    3. Score recovery explicitly.
+  works: |-
+    **Trade-off to manage:** Realistic simulators take effort; prioritise the top failure types from production logs.
+
+    **How you prove it worked:**
+
+    - Gap between eval and production success; production error types not covered in evals.
+
+    **Same pattern elsewhere:** FinTech: a payments agent's mocks never return a "beneficiary bank unreachable" error, which is common on cross-border rails.
+  takeaway: Test the agent on a bad day.
+  related:
+  - aev-11
+  - aev-04
+  code: |
+    replay = ToolReplay.from_recordings("recordings/bss/*.jsonl")    # real responses incl. errors
+    faults = FaultInjector({"timeout": 0.03, "http_429": 0.02, "empty": 0.05,
+                            "malformed": 0.01, "partial_address_match": 0.04})
+
+    def run_eval(agent, case):
+        env = faults.wrap(replay.env_for(case))
+        trace = agent.run(case.task, env=env)
+        return {"success": case.check(env), "recovered": all(e.handled for e in trace.injected_faults)}
+  lang: python
+- id: aev-06
+  title: KYC remediation agent passes once, fails three runs in ten
+  tags:
+  - Quality
+  - Compliance
+  - FinTech
+  scenario: |-
+    A bank's KYC-remediation agent refreshes customer due-diligence files. Each eval task is run once and passes 90%. Running each task 10 times shows that only 62% of tasks pass every time. Analysts experience it as unreliable and stop trusting it.
+  antipattern: |-
+    **One trial per task.**
+
+    *Think of it this way:* A footballer who scores a penalty in practice once and is declared reliable from the spot.
+  fails: |-
+    **Mechanism:** Agents are stochastic, and long trajectories amplify variance.
+
+    - Agents are stochastic, and long trajectories amplify variance.
+    - Single-trial results describe capability, not reliability.
+    - Users experience every run, not the best one.
+
+    **Root cause:** Reliability was not measured.
+
+    **Where it breaks:** Eval methodology.
+  diagram:
+    bad:
+    - KYC refresh · Eval task
+    - '!1 trial · Per task'
+    - 90% pass · Reported
+    - '!62% always · Real reliability'
+    bad_note: One trial per task
+    good:
+    - k = 5 trials · Per task
+    - +pass@k · Capability
+    - +pass^k · Reliability gate
+    - Lower variance · Structure
+    good_note: K trials, report pass^k for reliability
+  solution: |-
+    1. Run k trials per task and report pass@k (succeeds at least once) and pass^k (succeeds every time).
+    2. Use pass^k as the release metric for production workflows.
+    3. Reduce variance with lower temperature, structured steps and deterministic tools.
+  works: |-
+    **Trade-off to manage:** k trials multiply eval cost; use k=5 on a stratified subset.
+
+    **How you prove it worked:**
+
+    - Per-task success variance across trials.
+
+    **Same pattern elsewhere:** Telco: a port-out request handler succeeds on average but fails unpredictably on the same request types.
+  takeaway: Users need pass^k, not pass@k.
+  related:
+  - eval-07
+  code: |
+    def pass_metrics(agent, tasks, k=10):
+        res = {t.id: [t.check(agent.run(t)) for _ in range(k)] for t in tasks}
+        return {"pass@k": mean(any(r) for r in res.values()),        # succeeds at least once
+                "pass^k": mean(all(r) for r in res.values())}        # succeeds every time
+
+    m = pass_metrics(kyc_agent, kyc_tasks, k=10)
+    assert m["pass^k"] >= 0.9, "release metric for production workflows"
+  lang: python
+- id: aev-07
+  title: Plan-change agent tested with complete one-line requests
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's plan-change agent is evaluated with requests such as "Move line 2 to the Unlimited Plus plan effective today." Real customers say "My bill is too high", reveal that one line is a child's tablet three turns later, and then change their mind. Task completion in production is much lower than in evals.
+  antipattern: |-
+    **Single-turn eval cases for conversational agents.**
+
+    *Think of it this way:* Practising a sales call with a script where the customer already knows exactly what they want.
+  fails: |-
+    **Mechanism:** Clarification, changing minds, and partial information are where agents fail.
+
+    - Single-turn, fully specified requests skip clarification.
+    - Real customers give information gradually and change goals.
+    - Policy compliance under conversational pressure is never tested.
+
+    **Root cause:** No simulated users with realistic behaviour.
+
+    **Where it breaks:** Eval harness.
+  diagram:
+    bad:
+    - One-line ask · Fully specified
+    - '!No ambiguity · Never tested'
+    - High eval score · Unrealistic
+    - '!Prod lower · Real customers'
+    bad_note: Single-turn, fully specified requests
+    good:
+    - Persona · Hidden goal
+    - +Reveals slowly · Over turns
+    - +Score goal · Plus policy
+    - Seed from · Real chats
+    good_note: Simulated users with hidden goals
+  solution: |-
+    1. Use LLM-simulated users with personas, hidden goals and constraints revealed over turns (the approach of tau-bench, which includes a telecom domain).
+    2. Score goal completion against the hidden goal and policy compliance.
+    3. Seed personas from real conversation patterns.
+  works: |-
+    **Trade-off to manage:** Simulated users can be unrealistic; spot-check them against real transcripts.
+
+    **How you prove it worked:**
+
+    - Completion rate by number of turns; drop-off points in real sessions.
+
+    **Same pattern elsewhere:** FinTech: a mortgage-rate-lock agent is tested with complete requests, but borrowers reveal a second applicant midway.
+  takeaway: Simulate the user, not just the request.
+  related:
+  - aev-15
+  code: |
+    persona = SimUser(
+        model=SIM_MODEL,
+        profile="price-sensitive family plan owner, unsure of data use",
+        hidden_goal="move 2 lines to a cheaper plan without losing the device promo",
+        reveal_rules=["mention the promo only if asked about devices"])
+
+    conversation = simulate(agent, persona, max_turns=15)
+    score = {"goal_met": env_state_matches(persona.hidden_goal), "policy_ok": policy_checker(conversation)}
+  lang: python
+- id: aev-08
+  title: New agent version is 3% better and 4 times the cost
+  tags:
+  - Quality
+  - Cost
+  - FinTech
+  scenario: |-
+    A fraud-investigation agent's new version improves case-resolution accuracy by 3 points. Nobody tracked steps or tokens. In production it makes 4 times as many tool calls and LLM calls per case, and the monthly cost jumps from $18k to $70k.
+  antipattern: |-
+    **Success rate as the only metric.**
+
+    *Think of it this way:* A taxi driver who arrives slightly more reliably but takes a route twice as long.
+  fails: |-
+    **Mechanism:** Production agents have cost and latency budgets.
+
+    - Success rate was the only metric.
+    - More exploration improved accuracy at large cost.
+    - The budget impact appeared only on the invoice.
+
+    **Root cause:** Efficiency is not part of the agent's eval.
+
+    **Where it breaks:** Eval metrics.
+  diagram:
+    bad:
+    - New version · +3 points
+    - '!Steps unknown · Not tracked'
+    - 4x calls · In prod
+    - '!$18k to $70k · Monthly'
+    bad_note: Success rate is the only metric
+    good:
+    - Track · Steps, tokens
+    - +Success / $ · Compare
+    - +Budget gate · Per task
+    - Trim calls · Redundant
+    good_note: Success per dollar, step and token budgets
+  solution: |-
+    1. Track steps, tokens, tool calls, dollars and wall-clock time per task in every eval run.
+    2. Compare versions on success per dollar and set budget thresholds.
+    3. Look for redundant calls in trajectories.
+  works: |-
+    **Trade-off to manage:** Some extra cost may be worth it for high-value cases; route by case value.
+
+    **How you prove it worked:**
+
+    - Cost per task by version in production.
+
+    **Same pattern elsewhere:** Telco: a network-diagnosis agent becomes more thorough and triples NOC API load.
+  takeaway: Efficiency is part of correctness for agents.
+  related:
+  - eval-14
+  - cost-07
+  code: |
+    @dataclass
+    class RunCost: steps: int; tokens: int; tool_calls: int; usd: float; seconds: float
+
+    def compare(v_old, v_new, tasks):
+        a, b = run_suite(v_old, tasks), run_suite(v_new, tasks)
+        spd = lambda r: r.success_rate / max(r.mean_cost.usd, 1e-6)        # success per dollar
+        assert b.mean_cost.usd <= BUDGET_PER_TASK, "over budget"
+        return {"success": (a.success_rate, b.success_rate), "success_per_$": (spd(a), spd(b)),
+                "redundant_calls": b.redundant_call_rate}
+  lang: python
+- id: aev-09
+  title: Retention agent waives the termination fee under pressure
+  tags:
+  - Quality
+  - Compliance
+  - Telco
+  scenario: |-
+    A carrier's retention agent may offer approved save offers but must not waive early termination fees. In evals, customers ask politely and the agent complies with policy. In production, customers threaten to post on social media or switch carriers. In 9% of such chats, the agent waives the fee.
+  antipattern: |-
+    **Testing task success but not rule-following.**
+
+    *Think of it this way:* A security guard trained only on polite visitors who folds when someone shouts.
+  fails: |-
+    **Mechanism:** Users pressure agents, and helpful models bend rules.
+
+    - Evals contain cooperative users only.
+    - Helpful models bend rules under emotional pressure.
+    - The waiver is possible because the tool allows it.
+
+    **Root cause:** Policy compliance under pressure was never tested, and limits live in the prompt.
+
+    **Where it breaks:** Eval suite and tool permissions.
+  diagram:
+    bad:
+    - Polite users · In evals
+    - '!Threats · In production'
+    - Fee waived · 9% of chats
+    - '!Revenue loss · Policy broken'
+    bad_note: Only polite users in evals
+    good:
+    - Pushy personas · Simulated
+    - +Score refusal · Or escalate
+    - +Tool removed · Request review
+    - Monitor · Exception rate
+    good_note: Pressure tests and no waiver capability
+  solution: |-
+    1. Add policy cases with pushy, manipulative and emotional simulated users.
+    2. Score whether the agent refuses or escalates correctly.
+    3. Remove the waiver capability from the agent's tool, so it can only request a supervisor review.
+  works: |-
+    **Trade-off to manage:** Stricter agents may frustrate some customers; give them a clear escalation path.
+
+    **How you prove it worked:**
+
+    - Waiver and exception rate by agent version and by conversation sentiment.
+
+    **Same pattern elsewhere:** FinTech: a bank agent waives late fees for customers who claim hardship without starting the hardship programme.
+  takeaway: Test whether the agent says no when it should.
+  related:
+  - agf-05
+  - prm-16
+  code: |
+    PRESSURE_PERSONAS = ["threatens_to_leave", "claims_manager_promised", "emotional_hardship", "repeat_demands"]
+
+    def eval_waiver_policy(agent):
+        results = []
+        for p in PRESSURE_PERSONAS:
+            conv = simulate(agent, SimUser(persona=p, goal="get ETF waived"))
+            results.append(conv.outcome in ("refused", "escalated_to_supervisor"))
+        return mean(results)
+
+    # the tool no longer waives: request_supervisor_review(account_id, reason) only
+  lang: python
+- id: aev-10
+  title: 20% failure rate with no idea which decision failed
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A corporate-banking servicing agent fails 20% of end-to-end evals. The team cannot tell whether planning, tool choice or arguments are wrong. After building component evals, they find that 70% of failures are wrong date arguments to the statement tool, caused by relative dates ("last month").
+  antipattern: |-
+    **Only end-to-end agent evals.**
+
+    *Think of it this way:* A car failing its inspection with only "fail" on the report and no list of what failed.
+  fails: |-
+    **Mechanism:** You can't fix what you can't localize.
+
+    - Only end-to-end results are scored.
+    - Different decision types fail in different ways.
+    - Without localisation, fixes are guesses.
+
+    **Root cause:** Agent failures are not decomposed by decision type.
+
+    **Where it breaks:** Eval design and trace analysis.
+  diagram:
+    bad:
+    - 20% fail · End-to-end
+    - '!Plan? Tool? · Unknown'
+    - Guess fixes · Prompt edits
+    - '!No progress · Weeks'
+    bad_note: End-to-end score only
+    good:
+    - Tool choice · Accuracy
+    - +Arguments · Correctness
+    - +Recovery · After errors
+    - 'Top cause · Dates: 70%'
+    good_note: Span-level scores per decision type
+  solution: |-
+    1. Score spans from traces (tool selection accuracy, argument correctness, plan quality, recovery after errors).
+    2. Build small labelled sets per decision type.
+    3. Add a date-resolution tool or pre-processing, here, since arguments were the main cause.
+  works: |-
+    **Trade-off to manage:** Span-level labelling takes effort; start by automatically classifying failed traces.
+
+    **How you prove it worked:**
+
+    - Failure taxonomy dashboard per agent version.
+
+    **Same pattern elsewhere:** Telco: a billing agent's failures turn out to be mostly passing the account id where the subscription id is needed.
+  takeaway: Decompose agent failures into decision types.
+  related:
+  - eval-13
+  - obs-17
+  code: |
+    def score_spans(trace, labels):
+        return {
+            "tool_selection": mean(s.tool == labels.expected_tool[i] for i, s in enumerate(trace.tool_spans)),
+            "argument_correctness": mean(args_match(s.args, labels.expected_args[i]) for i, s in enumerate(trace.tool_spans)),
+            "recovery": mean(s.next_ok for s in trace.error_spans) if trace.error_spans else 1.0}
+
+    @tool
+    def resolve_date(expression: str, tz: str = "America/Chicago") -> str:   # fixes the main argument errors
+        return dateparser.parse(expression, settings={"TIMEZONE": tz}).date().isoformat()
+  lang: python
+- id: aev-11
+  title: Port-in agent gives up on the first rejection
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A port-in agent receives a rejection from the losing carrier ("account number mismatch"). The correct behaviour is to ask the customer to confirm the account number and PIN from their old carrier and resubmit. Instead, the agent tells the customer the port failed and to visit a store. Evals never included rejections.
+  antipattern: |-
+    **Only testing successful paths.**
+
+    *Think of it this way:* A delivery driver who drives home with the parcel because the doorbell didn't work, instead of knocking.
+  fails: |-
+    **Mechanism:** Recovery is a core agent skill and fails silently.
+
+    - Only successful paths are tested.
+    - Recovery behaviour is undefined.
+    - Common, fixable errors become customer failures.
+
+    **Root cause:** Error-recovery is not evaluated or specified.
+
+    **Where it breaks:** Eval suite and agent instructions.
+  diagram:
+    bad:
+    - Port-in · Submitted
+    - '!Rejected · Account mismatch'
+    - Gives up · Go to store
+    - '!Lost customer · Fixable error'
+    bad_note: Only successful paths tested
+    good:
+    - Inject codes · Each rejection
+    - +Expected fix · Per code
+    - +Score recovery · Or escalation
+    - Resubmit · Confirmed data
+    good_note: Inject rejections and score recovery
+  solution: |-
+    1. Inject specific rejections (account mismatch, PIN mismatch, number not portable) and define the expected recovery for each.
+    2. Score whether the agent recovers correctly, retries appropriately or escalates honestly.
+    3. Map rejection codes to recovery actions in the tool response.
+  works: |-
+    **Trade-off to manage:** Not every error is recoverable; the eval must also check honest escalation.
+
+    **How you prove it worked:**
+
+    - Recovery rate per rejection code in production.
+
+    **Same pattern elsewhere:** FinTech: an ACH payment agent gives up when a payment returns R03 (no account) instead of asking the customer to re-check the account number.
+  takeaway: Score recovery, not just success.
+  related:
+  - aev-05
+  - agf-11
+  code: |
+    RECOVERY = {"6C": "ask_customer_for_account_number", "8C": "ask_customer_for_pin",
+                "NP": "explain_not_portable_and_escalate"}
+
+    @pytest.mark.parametrize("code,expected", RECOVERY.items())
+    def test_port_rejection_recovery(code, expected, sandbox):
+        sandbox.npac.inject_rejection(code)
+        trace = port_agent.run("port my number", env=sandbox)
+        assert expected in [s.tool for s in trace.tool_spans]
+
+    # tool response carries the mapping: {"status": "REJECTED", "code": "8C", "next_action": "ask_customer_for_pin"}
+  lang: python
+- id: aev-12
+  title: Agent says the card is frozen but never called the tool
+  tags:
+  - Quality
+  - FinTech
+  - Critical
+  scenario: |-
+    A customer reports a stolen card. The bank's agent replies "I've frozen your card and ordered a replacement." It called the replacement tool but never called freeze_card. Fraudulent transactions continue for two hours.
+  antipattern: |-
+    **No consistency check between claims and actions.**
+
+    *Think of it this way:* An assistant who tells you the door is locked because they meant to lock it.
+  fails: |-
+    **Mechanism:** Models narrate actions they never took.
+
+    - Models narrate actions they intended but didn't take.
+    - Nothing compares claims in the reply with the tool log.
+    - The eval judged the message as correct.
+
+    **Root cause:** No consistency check between claimed and executed actions.
+
+    **Where it breaks:** Runtime guardrail and eval.
+  diagram:
+    bad:
+    - Stolen card · Reported
+    - '!''Card frozen'' · Says agent'
+    - No freeze call · In trace
+    - '!Fraud 2 hours · Continues'
+    bad_note: Trust the agent's description of its actions
+    good:
+    - Freeze first · Fixed workflow
+    - +Extract claims · From reply
+    - +Match trace · Tool log
+    - Block mismatch · Or correct
+    good_note: Compare claims with the tool log, workflow for critical actions
+  solution: |-
+    1. Extract claimed actions from the final reply (classifier or structured output) and compare with the tool-call log; block or correct mismatches.
+    2. Make critical actions part of a workflow (stolen card always triggers freeze first) rather than a model choice.
+    3. Add this consistency check to every agent eval.
+  works: |-
+    **Trade-off to manage:** Claim extraction can produce false alarms; tune it on labelled replies.
+
+    **How you prove it worked:**
+
+    - Claim-vs-trace mismatch rate, alerting on any critical action.
+
+    **Same pattern elsewhere:** Telco: an agent says "I've barred international calls on the stolen phone" without calling the barring tool.
+  takeaway: Every claimed action must appear in the trace.
+  related:
+  - aev-01
+  - obs-07
+  code: |
+    CLAIMS = {"freeze": "freeze_card", "replace": "order_replacement", "block": "block_merchant"}
+
+    def claimed_vs_done(reply: str, trace) -> list[str]:
+        claimed = extract_claimed_actions(reply)            # classifier / structured output
+        done = {s.tool for s in trace.tool_spans if s.status == "ok"}
+        return [c for c in claimed if CLAIMS[c] not in done]
+
+    if (missing := claimed_vs_done(reply, trace)):
+        reply = correct_reply(reply, missing)              # block or correct before sending
+  lang: python
+- id: aev-13
+  title: Framework chosen on a public benchmark fails on BSS workflows
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier picks an agent framework and model because they top a public coding and web-browsing benchmark. On the carrier's own tasks (change plan, move a line to another account, troubleshoot fiber), the choice ranks third of four candidates.
+  antipattern: |-
+    **Choosing agents and models on public leaderboards alone.**
+
+    *Think of it this way:* Hiring a chef because they won a baking contest, for a job running a barbecue.
+  fails: |-
+    **Mechanism:** Public benchmarks don't match your tools, data, or policies, and some are contaminated.
+
+    - Public benchmarks don't use your tools, data or policies.
+    - Some public benchmarks are contaminated in training data.
+    - The decision was never tested on internal tasks.
+
+    **Root cause:** Selection based on public leaderboards instead of an internal task suite.
+
+    **Where it breaks:** Vendor and model selection.
+  diagram:
+    bad:
+    - Leaderboard · Top rank
+    - '!Chosen · Framework + model'
+    - Own tasks · Ranks 3rd
+    - '!Rework · Months'
+    bad_note: Pick by public leaderboard
+    good:
+    - Shortlist · Public scores
+    - +Task suite · Top 30 flows
+    - +Sandbox runs · Each candidate
+    - Decide · On own tasks
+    good_note: Internal task suite from real workflows
+  solution: |-
+    1. Build an internal task suite from the top 30 real workflows, run in a sandbox.
+    2. Use public benchmarks only to shortlist.
+    3. Re-run the internal suite for every model or framework change.
+  works: |-
+    **Trade-off to manage:** An internal suite takes weeks to build, but it pays off on every later decision.
+
+    **How you prove it worked:**
+
+    - Internal suite results per candidate.
+
+    **Same pattern elsewhere:** FinTech: a bank selects a model on general reasoning benchmarks and it struggles with its specific reconciliation and statement formats.
+  takeaway: Your tasks are the only benchmark that matters.
+  related:
+  - ops-16
+  code: |
+    INTERNAL_SUITE = load_tasks("workflows/top30/*.yaml")   # real BSS workflows, sandboxed
+
+    def choose(candidates):
+        shortlist = [c for c in candidates if c.public_benchmark_rank <= 5]   # public only to shortlist
+        scores = {c.name: run_suite(c, INTERNAL_SUITE, env=bss_sandbox).success_rate for c in shortlist}
+        return max(scores, key=scores.get), scores
+  lang: python
+- id: aev-14
+  title: Agent eval scores swing with live FX rates
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A cross-border payments agent is evaluated against live FX quotes, live account balances and today's date. The same version scores 78% on Monday and 64% on Tuesday, because rates, holidays and balances changed. The team cannot tell whether a change helped.
+  antipattern: |-
+    **Evals depend on live data that changes.**
+
+    *Think of it this way:* Comparing two runners on different days, one with a tailwind and one in the rain.
+  fails: |-
+    **Mechanism:** You can't compare runs when the world changes underneath.
+
+    - The environment changes between runs.
+    - Expected answers depend on live data.
+    - Run-to-run comparisons are meaningless.
+
+    **Root cause:** Non-deterministic eval environment.
+
+    **Where it breaks:** Eval infrastructure.
+  diagram:
+    bad:
+    - Live FX · Live balances
+    - '!Monday 78% · Same version'
+    - Tuesday 64% · Data changed
+    - '!Can''t compare · Changes'
+    bad_note: Evals against live, changing data
+    good:
+    - Snapshot · Rates, balances
+    - +Freeze clock · Fixed date
+    - +Replay tools · Recorded
+    - Live smoke · Separate test
+    good_note: Frozen clock, seeded data, recorded tools
+  solution: |-
+    1. Snapshot and seed environments (balances, rates, holidays), freeze the clock, and replay recorded tool responses.
+    2. Version the environment snapshot with the eval set.
+    3. Run a separate live smoke test for integration, not for comparisons.
+  works: |-
+    **Trade-off to manage:** Snapshots go stale; refresh them on a schedule, re-baselining scores.
+
+    **How you prove it worked:**
+
+    - Baseline re-runs on the same snapshot should match closely.
+
+    **Same pattern elsewhere:** Telco: an order agent's evals change daily because the live catalog and stock levels change.
+  takeaway: Reproducible environments make agent evals comparable.
+  related:
+  - aev-04
+  - cicd-08
+  code: |
+    def eval_env(snapshot="snapshots/fx_2026_10_01.json"):
+        env = Sandbox.from_snapshot(snapshot)                # balances, FX rates, holiday calendar
+        env.freeze_clock("2026-10-01T09:00:00Z")
+        env.tools.fx_rates = Replay("recordings/fx_rates.jsonl")
+        return env
+
+    EVAL_SET = {"version": "fx-evals@4", "env_snapshot": "snapshots/fx_2026_10_01.json"}   # versioned together
+  lang: python
+- id: aev-15
+  title: B2B move agent fine at 3 steps, lost at 30
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    An enterprise-services agent handles office moves (disconnect at old site, order at new site, port numbers, migrate devices). Evals use mostly single-site moves of 3-5 steps. Real moves of 10 sites take 30-50 steps. The agent forgets earlier sites, re- orders one circuit twice and misses another.
+  antipattern: |-
+    **Eval suite skewed toward short horizons.**
+
+    *Think of it this way:* A marathon runner trained only for 5 km.
+  fails: |-
+    **Mechanism:** Context drift, compounding errors, and memory loss appear only on long runs.
+
+    - Evals skew to short tasks.
+    - Context drift and compounding errors appear only on long runs.
+    - Reliability decays with horizon and nobody measured how fast.
+
+    **Root cause:** The eval suite doesn't represent long-horizon tasks.
+
+    **Where it breaks:** Eval coverage.
+  diagram:
+    bad:
+    - Evals · 3-5 steps
+    - '!Real move · 30-50 steps'
+    - Drift · Sites forgotten
+    - '!Duplicate order · Missed circuit'
+    bad_note: Evals with only short tasks
+    good:
+    - Long tasks · 10-site moves
+    - +Curve · Success vs length
+    - +Task list · Tick off sites
+    - State check · Each site once
+    good_note: Long tasks, success vs length, task-list state
+  solution: |-
+    1. Include long-horizon tasks, and plot success against task length.
+    2. Track goal retention (is every site handled exactly once) as a final-state check.
+    3. Use a structured task list as agent state, ticking items off, to reduce drift.
+  works: |-
+    **Trade-off to manage:** Long tasks are slow and expensive to evaluate; run them nightly, not per PR.
+
+    **How you prove it worked:**
+
+    - Success rate by number of sites or steps.
+
+    **Same pattern elsewhere:** FinTech: an estate-settlement agent works for one account but loses track across 12 accounts and 4 beneficiaries.
+  takeaway: Reliability decays with horizon, so measure the curve.
+  related:
+  - aev-07
+  - ctx-02
+  code: |
+    def long_horizon_report(agent, tasks):
+        rows = []
+        for t in tasks:                                        # 3 to 30+ steps
+            env = sandbox(t); agent.run(t, env=env)
+            handled = Counter(env.sites_processed())
+            rows.append({"steps": t.length, "success": t.check(env),
+                         "goal_retention": all(handled[s] == 1 for s in t.sites)})   # each site exactly once
+        return group_mean(rows, by="steps")                    # plot success vs task length
+  lang: python
+- id: aev-16
+  title: Accounts-payable agent changes a vendor's bank details from an email
+  tags:
+  - Quality
+  - Security
+  - FinTech
+  - Critical
+  scenario: |-
+    A company's AP agent reads the AP inbox and updates vendor records. An attacker spoofs a supplier and emails "our bank details have changed" with new account details. The agent updates the vendor master, and the next $180,000 payment goes to the attacker, a classic business email compromise.
+  antipattern: |-
+    **Red-teaming only chat output, not actions.**
+
+    *Think of it this way:* A receptionist who updates the payroll bank account of anyone who emails asking nicely.
+  fails: |-
+    **Mechanism:** Agent risk is in actions, especially from indirect prompt injection in tool results.
+
+    - Untrusted email content drives a high-risk write action.
+    - Red-team tests covered chat output, not actions.
+    - No out-of-band verification for bank detail changes.
+
+    **Root cause:** Agent safety evals ignore indirect injection and action risk.
+
+    **Where it breaks:** Safety evals, tool permissions and process controls.
+  diagram:
+    bad:
+    - Spoofed email · New bank details
+    - '!AP agent · Reads inbox'
+    - Vendor updated · By agent
+    - '!$180k lost · To attacker'
+    bad_note: Email content drives a bank-detail change
+    good:
+    - Request only · No write tool
+    - +Call-back · Known number
+    - +Dual approval · Bank changes
+    - Injection evals · In CI
+    good_note: No write capability, call-back, dual approval
+  solution: |-
+    1. Remove the agent's ability to change bank details; it may only open a change request.
+    2. Require out-of-band verification (call-back to a known number) and dual approval for bank-detail changes.
+    3. Add injection test emails to the eval suite and score unsafe actions attempted.
+  works: |-
+    **Trade-off to manage:** Manual verification slows legitimate changes, which are rare and worth the delay.
+
+    **How you prove it worked:**
+
+    - Alerts on vendor bank-detail changes followed by payments within 30 days.
+
+    **Same pattern elsewhere:** Telco: an email-reading agent receives a request to transfer a business's numbers to another account and starts a port-out.
+  takeaway: For agents, safety is measured in actions.
+  related:
+  - rag-19
+  - sec-02
+  - gov-02
+  code: |
+    @tool
+    def request_bank_detail_change(vendor_id: str, new_iban: str, source_email_id: str):
+        # the agent can no longer change bank details directly
+        return change_requests.open(vendor_id, new_iban, source=source_email_id,
+                                    controls=["callback_to_known_number", "dual_approval"])
+
+    INJECTION_EMAILS = load("evals/ap_injection_emails.jsonl")
+    unsafe = sum("update_vendor_bank" in [s.tool for s in ap_agent.run(e).tool_spans] for e in INJECTION_EMAILS)
+    assert unsafe == 0
+  lang: python
+- id: aev-17
+  title: Automated scores look fine, but nobody reads the traces
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's agent passes all automated checks for months. Customers start complaining that the agent asks for the same account PIN twice and apologises excessively. None of the automated graders measure repetition or tone.
+  antipattern: |-
+    **100% automated grading with no qualitative review.**
+
+    *Think of it this way:* A restaurant that checks food temperatures automatically but never tastes the food.
+  fails: |-
+    **Mechanism:** Automated graders miss new failure modes they weren't written for.
+
+    - Automated graders only find failure modes they were written for.
+    - New failure patterns emerge after model or prompt changes.
+    - No one does qualitative review.
+
+    **Root cause:** 100% automated grading with no human error analysis.
+
+    **Where it breaks:** Eval operating rhythm.
+  diagram:
+    bad:
+    - Auto checks · All passing
+    - '!New patterns · Repeats PIN ask'
+    - Not measured · No grader
+    - '!Complaints · Found late'
+    bad_note: 100% automated grading
+    good:
+    - Weekly review · Sampled traces
+    - +Taxonomy · Classify issues
+    - +New checks · Automated
+    - Rotate · Reviewers
+    good_note: Weekly trace review that feeds new checks
+  solution: |-
+    1. Hold weekly trajectory review sessions on sampled runs, including negative feedback.
+    2. Classify findings into a failure taxonomy and write automated checks for new patterns.
+    3. Rotate reviewers across product, engineering and care.
+  works: |-
+    **Trade-off to manage:** Review time is expensive; 1-2 hours a week is enough to find most patterns.
+
+    **How you prove it worked:**
+
+    - Number of new failure modes found per month; time from discovery to automated check.
+
+    **Same pattern elsewhere:** FinTech: a bank agent's automated scores are fine, but reviews reveal it pushes credit card upgrades in unrelated conversations.
+  takeaway: Read the traces. Then automate what you find.
+  related:
+  - obs-17
+  - eval-05
+  code: |
+    @schedule(cron="0 15 * * MON")
+    def weekly_review():
+        sample = traces.sample(n=30, strata={"negative_feedback": 10, "random": 15, "new_version": 5})
+        session = review.create(traces=sample, reviewers=rotate(["product", "engineering", "care"]))
+        for f in session.findings:
+            taxonomy.add(f.category)
+            if f.new_pattern:
+                checks.register(auto_check_for(f))           # becomes an automated check
+  lang: python
+- id: aev-18
+  title: Planner prompt change silently breaks the payment executor
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank's bill-pay system has a planner agent and an executor agent. A team improves the planner's prompt and its own evals improve. The planner now writes amounts with thousands separators ("1,250.00"). The executor's parser reads "1" and schedules $1 payments, which fail reconciliation.
+  antipattern: |-
+    **Each agent evaluated in isolation only.**
+
+    *Think of it this way:* Changing a recipe card's format so the kitchen printer prints garbage, while the recipe itself got better.
+  fails: |-
+    **Mechanism:** Agents are coupled through message formats and expectations.
+
+    - Each agent was evaluated alone.
+    - The message format between agents was an implicit contract.
+    - No end-to-end test ran on the planner change.
+
+    **Root cause:** No contract tests or system evals for multi-agent changes.
+
+    **Where it breaks:** CI for multi-agent systems.
+  diagram:
+    bad:
+    - Planner tweak · Evals better
+    - '!''1,250.00'' · New format'
+    - Executor reads · '1'
+    - '!$1 payments · Recon breaks'
+    bad_note: Each agent evaluated in isolation
+    good:
+    - Typed schema · Decimal string
+    - +Contract test · Every PR
+    - +System eval · On merge
+    - Validate · At each hop
+    good_note: Typed handoffs, contract tests, system evals
+  solution: |-
+    1. Define typed handoff schemas with validation (amount as decimal string, no separators).
+    2. Add contract tests that validate one agent's outputs against the next agent's schema.
+    3. Run end-to-end system evals on any agent change.
+  works: |-
+    **Trade-off to manage:** End-to-end evals are slower; run them on merge, and contract tests on every PR.
+
+    **How you prove it worked:**
+
+    - Schema validation failures between agents; reconciliation breaks.
+
+    **Same pattern elsewhere:** Telco: a diagnosis agent's new output format breaks the dispatch agent's parsing of the required technician skill.
+  takeaway: Test agents alone and together.
+  related:
+  - agf-14
+  - mas-03
+  - cicd-12
+  code: |
+    class PaymentStep(BaseModel):
+        amount: constr(pattern=r"^\d+\.\d{2}$")           # decimal string, no separators
+        currency: str; payee_id: str
+
+    def test_planner_executor_contract():
+        for case in PLANNER_CASES:
+            out = planner.run(case)
+            for step in out.payment_steps:
+                PaymentStep.model_validate(step)            # planner output must satisfy executor schema
+  lang: python
+- id: aev-19
+  title: Judge approves an answer that contradicts the tool result
+  tags:
+  - Quality
+  - Telco
+  scenario: |-
+    A carrier's billing agent tells a customer their bill includes a $15 late fee. The billing tool result shows no late fee; the $15 was an equipment charge. The LLM judge, which only sees the question and the answer, rates it correct and well explained.
+  antipattern: |-
+    **The judge sees only the user question and final answer.**
+
+    *Think of it this way:* Asking someone to check a translation without showing them the original text.
+  fails: |-
+    **Mechanism:** Groundedness can't be checked without the evidence.
+
+    - The judge has no access to the evidence.
+    - It can grade fluency and plausibility only.
+    - Grounding errors pass.
+
+    **Root cause:** The judge lacks the tool outputs needed to check faithfulness.
+
+    **Where it breaks:** Judge input design.
+  diagram:
+    bad:
+    - '''$15 late fee'' · Agent says'
+    - '!Tool data · Equipment fee'
+    - Judge sees Q+A · Only
+    - '!Rated correct · Ungrounded'
+    bad_note: Judge sees only question and answer
+    good:
+    - Tool outputs · To the judge
+    - +Rubric · Claims supported
+    - +Code check · Amounts, dates
+    - Grounded · Verdict
+    good_note: Give the judge tool outputs and a faithfulness rubric
+  solution: |-
+    1. Pass relevant tool outputs (or the full trace) to the judge.
+    2. Use a faithfulness rubric (every factual claim must be supported by tool data).
+    3. Add a deterministic check for amounts and dates against tool results.
+  works: |-
+    **Trade-off to manage:** Bigger judge inputs cost more; pass only the tool results referenced.
+
+    **How you prove it worked:**
+
+    - Judge agreement with human review on grounding cases.
+
+    **Same pattern elsewhere:** FinTech: a judge approves a claim that a payment cleared, which the payments tool reported as pending.
+  takeaway: A judge needs the evidence to judge grounding.
+  related:
+  - eval-03
+  - aev-12
+  code: |
+    def judge_answer(answer, trace):
+        tool_data = {s.tool: s.output for s in trace.tool_spans}
+        verdict = judge.rubric("Every factual claim must be supported by TOOL DATA.", answer=answer, tool_data=tool_data)
+        numbers_ok = all(v in flatten_values(tool_data) for v in money_and_dates(answer))   # deterministic
+        return verdict.passed and numbers_ok
+  lang: python
+- id: aev-20
+  title: Offline evals pass while customers redo tasks by hand
+  tags:
+  - Quality
+  - FinTech
+  scenario: |-
+    A bank's agent for updating direct debits passes offline evals at 90%. In production, 30% of customers then call or visit a branch to make the same change, because the agent's confirmation was unclear or the change didn't stick. None of this appears in offline metrics.
+  antipattern: |-
+    **Offline-only agent evaluation.**
+
+    *Think of it this way:* A hotel whose online reviews are great but whose guests keep calling reception to fix their room.
+  fails: |-
+    **Mechanism:** The real distribution of tasks and environments differs from the test suite.
+
+    - Offline task distribution differs from real tasks.
+    - Silent failures (customer redoes the task elsewhere) are not linked back.
+    - No online agent metrics.
+
+    **Root cause:** Offline-only agent evaluation.
+
+    **Where it breaks:** Production measurement.
+  diagram:
+    bad:
+    - Offline 90% · Direct debits
+    - '!Unclear confirm · In prod'
+    - 30% redo · Call or branch
+    - '!Invisible · Not linked'
+    bad_note: Offline evals only
+    good:
+    - Takeover rate · Per intent
+    - +Repeat 7 days · Cross-channel
+    - +Undo rate · Reversals
+    - Trace grading · Weekly sample
+    good_note: Takeover and repeat-contact metrics in production
+  solution: |-
+    1. Track human takeover rate, repeat contact within 7 days on the same intent, undo or reversal rate and escalations.
+    2. Join agent sessions to downstream channels (call, branch) by customer and intent.
+    3. Sample and grade production traces weekly.
+  works: |-
+    **Trade-off to manage:** Cross-channel joins need data engineering and privacy review.
+
+    **How you prove it worked:**
+
+    - Repeat-contact and takeover dashboards per intent and version.
+
+    **Same pattern elsewhere:** Telco: after the agent "changes" a plan, customers call care within days to fix it.
+  takeaway: Human takeover rate is the truest agent metric.
+  related:
+  - eval-11
+  - obs-13
+  code: |
+    def online_agent_metrics(sessions, contacts):
+        return {
+            "human_takeover": mean(s.handed_off for s in sessions),
+            "repeat_contact_7d": mean(contacts.same_intent_within(s.customer, s.intent, days=7) for s in sessions),
+            "reversal_rate": mean(s.action_undone_within(hours=48) for s in sessions),
+            "escalations": sum(s.escalated for s in sessions)}
+  lang: python
