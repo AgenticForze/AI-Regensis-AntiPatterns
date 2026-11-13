@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Engineering &amp; Management · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="active" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part B · Model &amp; Prompt Layer</div>
+  <h1><span class="sn">5</span>Prompt Engineering &amp; Management</h1>
+  <p class="lede">Prompts are production code that changes model behaviour. These anti-patterns treat them like string literals.</p>
+  <span class="pill">4 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#hardcoded-prompts"><span>5.1</span>Prompts hardcoded in application code with no versioning</a><a href="#mega-prompt"><span>5.2</span>The mega-prompt that does everything</a><a href="#freetext-parsing"><span>5.3</span>Parsing free-text output with regex</a><a href="#prompt-only-safety"><span>5.4</span>Relying on prompt instructions alone for safety and policy</a></div>
+
+<article class="ap" id="hardcoded-prompts">
+  <header class="ap-h">
+    <div class="ap-num">5.1</div>
+    <div>
+      <h2><a href="#hardcoded-prompts">Prompts hardcoded in application code with no versioning</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A claims-triage service's accuracy drops 9% after a release. The cause turns out to be a one-word
+prompt edit bundled into an unrelated UI change. Nobody can tell which prompt version produced
+last week's decisions.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Prompts live as f-strings scattered through services. Changes ship with code deploys, aren't evaluated,
+and aren't recorded with the outputs they produce.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Invisible behaviour changes.</strong> Prompt edits change outputs as much as code changes do, but skip review and testing.</li>
+<li><strong>No traceability.</strong> You can't reproduce or audit a past decision without knowing the exact prompt, model and parameters.</li>
+<li><strong>Slow iteration.</strong> Domain experts can't improve prompts without an engineering release.</li>
+<li><strong>Duplication.</strong> The same instruction drifts across copies in different services.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-prompts-hardcoded-prompts" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">f-string in code</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Ships with any deploy</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No eval</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Untraceable outputs</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Behavioural changes bypass testing and audit</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Prompt registry</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">(versioned)</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Eval gate in CI</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Label: staging →</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">prod</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Runtime fetch by</text>
+<text class="dg-t dg-t-std" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">label</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Log prompt_version</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-prompts-hardcoded-prompts)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Every output traceable to prompt, model and parameters</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Manage prompts as <strong>versioned, tested artifacts</strong>:</p>
+<ul>
+<li>Store templates in a prompt registry or a dedicated repo folder (Langfuse, MLflow prompt registry, a cloud prompt-management service, or Git with YAML).</li>
+<li>Each version is immutable: template, model, parameters, output schema, owner.</li>
+<li>Promote via <strong>labels</strong> (dev → staging → prod) only after the eval suite passes.</li>
+<li>Log <code>prompt_id@version</code>, model and parameters with every request trace.</li>
+<li>Allow controlled A/B tests between versions.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Prompt changes get the same discipline as code: review, test, staged rollout and instant rollback by
+moving a label. Logged versions make every decision reproducible for audit. Domain experts can iterate
+in the registry while the eval gate protects production.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># prompts/claims_triage.yaml  (versioned in Git or a registry)</span>
+<span class="c1"># id: claims_triage   version: 14   model: mid-tier   temperature: 0</span>
+<span class="c1"># schema: TriageDecision   template: |  You are a claims triage assistant ...</span>
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">prompts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"claims_triage"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)</span>           <span class="c1"># resolves to v14</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">),</span> <span class="n">schema</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span>
+                   <span class="n">temperature</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">claim_text</span><span class="p">)</span>
+<span class="n">tracer</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">version</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">input_hash</span><span class="o">=</span><span class="n">h</span><span class="p">(</span><span class="n">claim_text</span><span class="p">),</span> <span class="n">output</span><span class="o">=</span><span class="n">out</span><span class="p">)</span>
+
+<span class="c1"># CI: block promotion if the eval regresses</span>
+<span class="k">assert</span> <span class="n">run_evals</span><span class="p">(</span><span class="s2">"claims_triage"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span><span class="o">.</span><span class="n">score</span> <span class="o">&gt;=</span> <span class="n">baseline</span><span class="p">(</span><span class="s2">"claims_triage"</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.01</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If a prompt can change a business decision, it needs version control, an eval gate and a trace ID, just like code.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Who should own prompt changes, engineering or the business domain, and how do you govern that?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="mega-prompt">
+  <header class="ap-h">
+    <div class="ap-num">5.2</div>
+    <div>
+      <h2><a href="#mega-prompt">The mega-prompt that does everything</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A customer-service bot's system prompt has grown to 9,000 tokens: 40 rules, 12 personas, product FAQs,
+escalation logic and formatting instructions. Fixing one behaviour breaks another, and costs climb.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Every requirement is appended to one monolithic prompt that handles classification, retrieval
+instructions, policy, tone and formatting in a single call.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Instruction interference.</strong> Rules conflict or get diluted; the model follows some and ignores others unpredictably.</li>
+<li><strong>Untestable.</strong> One giant prompt has no unit boundaries, so regressions appear anywhere.</li>
+<li><strong>Paid on every call.</strong> Thousands of static tokens are billed per request even when only a few rules apply.</li>
+<li><strong>Ownership chaos.</strong> Many teams edit the same text.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-prompts-mega-prompt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">User message</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">9K-token mega-prompt</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">One LLM call</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Inconsistent behaviour</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Conflicting rules, untestable, expensive</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">User message</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Intent router</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Focused prompt per</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">task</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Schema-validated</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">output</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Response</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-prompts-mega-prompt)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Small, owned, testable prompts composed by code</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Decompose by task</strong> and compose with code:</p>
+<ul>
+<li>A lightweight router classifies intent (billing, technical, cancellation, chit-chat).</li>
+<li>Each intent has a focused prompt with only its relevant rules, examples and tools.</li>
+<li>Shared policy (safety, tone) lives in a short common preamble, ideally cached.</li>
+<li>Load procedural knowledge on demand (retrieved instructions or "skills") instead of keeping everything resident.</li>
+<li>Each prompt has its own eval set and owner.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Smaller prompts are followed more reliably because there are fewer competing instructions. Each unit
+can be tested and improved independently. Tokens per call drop sharply, and the router itself gives
+useful analytics on demand by intent.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">ROUTER</span> <span class="o">=</span> <span class="n">prompts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"cs_router"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)</span>
+<span class="n">HANDLERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"billing"</span><span class="p">:</span>      <span class="n">Handler</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">"cs_billing"</span><span class="p">,</span>  <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">get_invoice</span><span class="p">,</span> <span class="n">issue_credit</span><span class="p">]),</span>
+    <span class="s2">"technical"</span><span class="p">:</span>    <span class="n">Handler</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">"cs_tech"</span><span class="p">,</span>     <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">search_kb</span><span class="p">,</span> <span class="n">run_diagnostic</span><span class="p">]),</span>
+    <span class="s2">"cancellation"</span><span class="p">:</span> <span class="n">Handler</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="s2">"cs_retention"</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">get_offers</span><span class="p">],</span> <span class="n">hitl</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">respond</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
+    <span class="n">intent</span> <span class="o">=</span> <span class="n">small_llm</span><span class="o">.</span><span class="n">classify</span><span class="p">(</span><span class="n">ROUTER</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">HANDLERS</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="s2">"other"</span><span class="p">])</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">HANDLERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">intent</span><span class="p">,</span> <span class="n">HANDLERS</span><span class="p">[</span><span class="s2">"technical"</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="p">[</span><span class="n">SHARED_POLICY_CACHED</span><span class="p">,</span> <span class="n">prompts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">ctx</span><span class="p">)],</span>
+                        <span class="n">tools</span><span class="o">=</span><span class="n">h</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>One prompt per job, composed by code. Mega-prompts are the monoliths of LLM applications.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you prevent the router itself from becoming a single point of failure?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="freetext-parsing">
+  <header class="ap-h">
+    <div class="ap-num">5.3</div>
+    <div>
+      <h2><a href="#freetext-parsing">Parsing free-text output with regex</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An invoice-extraction pipeline asks the model to "return the total and due date". Downstream code
+regex-parses the reply. About 3% of invoices fail silently when the model writes "Total due: USD 1,240.50
+(incl. VAT)".</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>LLM output is treated as human prose and scraped with regular expressions and string splits.
+Retries are added when parsing fails.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Format drift.</strong> Small prompt or model changes alter wording and break parsers.</li>
+<li><strong>Silent corruption.</strong> Partial regex matches produce wrong but valid-looking values.</li>
+<li><strong>Retry cost.</strong> Re-asking until the output parses wastes tokens and latency.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-prompts-freetext-parsing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">LLM free text</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Regex parse</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Silent bad values</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Downstream system</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Brittle to wording changes; failures hide in production data</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Typed schema</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Structured output /</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">tool call</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Schema validation</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Business-rule</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">checks</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Downstream system</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-prompts-freetext-parsing)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Contract-first output; invalid values rejected loudly</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use a <strong>schema-first contract</strong>:</p>
+<ul>
+<li>Define output types (Pydantic, JSON Schema).</li>
+<li>Use the model's <strong>native structured-output or strict tool-calling mode</strong>, which constrains decoding to the schema, rather than prompt-only "respond in JSON".</li>
+<li>Validate types, then apply <strong>business rules</strong> (totals equal sum of line items, due date after invoice date).</li>
+<li>On failure, run a single repair attempt with the validation error, then route to human review.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Constrained decoding removes format drift. Validation turns silent corruption into explicit, countable
+errors. Business-rule checks catch semantically wrong but well-formed values, which is the class of
+error that hurts finance teams most.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">condecimal</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Invoice</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">invoice_no</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">invoice_date</span><span class="p">:</span> <span class="n">date</span><span class="p">;</span> <span class="n">due_date</span><span class="p">:</span> <span class="n">date</span>
+    <span class="n">currency</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">total</span><span class="p">:</span> <span class="n">condecimal</span><span class="p">(</span><span class="n">max_digits</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">decimal_places</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">line_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">LineItem</span><span class="p">]</span>
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"after"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">due_date</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">invoice_date</span><span class="p">,</span> <span class="s2">"due before issue"</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">li</span><span class="o">.</span><span class="n">amount</span> <span class="k">for</span> <span class="n">li</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_items</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">total</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"total mismatch"</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<span class="n">inv</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">Invoice</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">document_text</span><span class="p">)</span>   <span class="c1"># constrained decoding</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Don&#x27;t parse prose. Ask for typed output with native structured-output modes, then validate the business rules as well as the schema.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What can structured output not guarantee, and how do you cover that gap?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="prompt-only-safety">
+  <header class="ap-h">
+    <div class="ap-num">5.4</div>
+    <div>
+      <h2><a href="#prompt-only-safety">Relying on prompt instructions alone for safety and policy</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's chatbot system prompt says "Never give investment advice and never discuss other customers."
+A user pastes a cleverly framed request and gets a specific stock recommendation.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>All safety, compliance and scope rules are written as natural-language instructions in the system
+prompt. No independent checks exist on inputs, outputs or actions.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Instructions aren't enforcement.</strong> Models follow them probabilistically, and adversarial inputs (jailbreaks, injection) are designed to override them.</li>
+<li><strong>No defense in depth.</strong> One bypass means total failure.</li>
+<li><strong>No evidence.</strong> Auditors can't verify a control that exists only as text.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-prompts-prompt-only-safety" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">User input</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">System prompt: &quot;never…&quot;</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">LLM</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Unchecked output</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Single probabilistic control, trivially bypassed</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">User input</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Input guard</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">LLM + policy prompt</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Output guard</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Action policy</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">engine</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-prompts-prompt-only-safety)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Layered, deterministic controls around a probabilistic core</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>layered controls</strong>, with the prompt as only the first layer:</p>
+<ol>
+<li><strong>Input guards:</strong> jailbreak and injection classifiers, topic restrictions, PII detection.</li>
+<li><strong>Policy prompt:</strong> clear scope and refusal style. Still useful, just not sufficient.</li>
+<li><strong>Output guards:</strong> classifiers for regulated advice, toxicity, PII and off-topic content, plus groundedness checks.</li>
+<li><strong>Action controls:</strong> a deterministic policy engine and human approval for consequential tool calls.</li>
+<li><strong>Monitoring:</strong> log guard triggers and red-team continuously.</li>
+</ol>
+<p>Managed options include Bedrock Guardrails, Model Armor on Google Cloud and Azure AI Content Safety with Prompt Shields. Open-source options include NeMo Guardrails and Llama Guard.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Each layer catches what the others miss, so one bypass no longer means compromise. Deterministic layers
+give auditors verifiable controls with logs. Guard-trigger metrics show where attacks and gaps
+concentrate, which drives continuous hardening.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">safe_chat</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">g</span> <span class="o">:=</span> <span class="n">input_guard</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span><span class="o">.</span><span class="n">blocked</span><span class="p">:</span>              <span class="c1"># injection, jailbreak, PII, topic</span>
+        <span class="n">audit</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">"input_block"</span><span class="p">,</span> <span class="n">g</span><span class="o">.</span><span class="n">reason</span><span class="p">);</span> <span class="k">return</span> <span class="n">refusal</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">reason</span><span class="p">)</span>
+    <span class="n">draft</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">POLICY_PROMPT</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">o</span> <span class="o">:=</span> <span class="n">output_guard</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">categories</span><span class="o">=</span><span class="p">[</span><span class="s2">"investment_advice"</span><span class="p">,</span> <span class="s2">"pii"</span><span class="p">,</span> <span class="s2">"toxicity"</span><span class="p">]))</span><span class="o">.</span><span class="n">blocked</span><span class="p">:</span>
+        <span class="n">audit</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">"output_block"</span><span class="p">,</span> <span class="n">o</span><span class="o">.</span><span class="n">reason</span><span class="p">);</span> <span class="k">return</span> <span class="n">compliant_fallback</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">reason</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">draft</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A system prompt is a request, not a control. Safety needs layered, deterministic guards with logs that an auditor can test.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you measure guardrail false-positive rates and their effect on user experience?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="advanced-rag.html">← 4. Advanced RAG</a><a class="next" href="models.html">6. Model Selection &amp; Routing →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

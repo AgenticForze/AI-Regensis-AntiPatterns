@@ -1,0 +1,283 @@
+id: local-vs-cloud
+num: 14
+short: Local LLMs vs Cloud Cost
+title: Local LLMs vs Hyperscaler Hosting (Cost Management)
+summary: Self-hosting open-weight models can cut costs dramatically or burn money quietly. The difference is usage level, utilization and operational maturity.
+intro:
+  - md: |
+      ### The deployment spectrum
+
+      | Option | Examples | You pay for | You operate |
+      |---|---|---|---|
+      | Managed API (pay per token) | Bedrock, Foundry Models, Agent Platform, first-party model APIs | Tokens | Nothing below the API |
+      | Reserved / provisioned capacity | Provisioned Throughput, PTUs | Committed capacity | Capacity planning |
+      | Self-hosted on cloud GPUs | vLLM / SGLang / TGI on EKS, GKE, AKS; SageMaker; NVIDIA NIM | GPU hours (busy or idle) | Serving stack, scaling, patching, model lifecycle |
+      | On-prem / edge | Ollama, llama.cpp, NIM on owned hardware, AI PCs | Capex + power + staff | Everything |
+  - chart: tco
+    caption: "Illustrative only. Managed APIs scale linearly with usage; self-hosted GPUs have a high fixed floor and step costs. Hybrid routing with caching tracks the lower envelope."
+  - md: |
+      ### What a real TCO comparison includes
+
+      - **GPU cost at realistic utilization.** Interactive workloads often run at 20–40% average utilization because of peaks and redundancy.
+      - **People:** platform and MLOps engineers to run serving, autoscaling, upgrades, security patching and on-call.
+      - **Quality gap:** an open model that's 5 points worse on your eval may need more human review, which costs more than the tokens saved.
+      - **Model refresh:** re-evaluating and redeploying as new open models ship every few months.
+      - **Hidden infrastructure:** load balancers, storage for weights, observability, redundancy across zones.
+patterns:
+  - id: selfhost-low-volume
+    title: Self-hosting "to save money" at low or spiky usage
+    tags: [Cost]
+    scenario: |
+      A mid-size insurer moves its claims-summary workload (~40M tokens a month) from a managed API to two
+      dedicated GPU nodes running an open model. The monthly bill rises fivefold, mostly for GPUs idling overnight
+      and at weekends.
+    antipattern: |
+      Comparing the per-token API price with a theoretical per-token cost at 100% GPU utilization, then
+      deploying always-on GPUs for a small or bursty workload.
+    fails: |
+      - **Fixed costs dominate at low usage.** A GPU costs the same whether it serves one request or a thousand.
+      - **Redundancy doubles the floor.** Production needs at least two replicas across zones.
+      - **Bursty traffic** forces provisioning for peak.
+    diagram:
+      bad: ["40M tokens / month", "!2 always-on GPU nodes", "~10% utilization", "5× cost"]
+      bad_note: "Fixed GPU cost spread over too little work"
+      good: ["Measure tokens / month + shape", "+TCO model (incl. people)", "Below break-even → managed API | Above → self-host", "+Revisit quarterly"]
+      good_note: "Decision driven by measured usage and full TCO"
+    solution: |
+      - **Measure** monthly tokens, peak-to-average ratio and latency needs per workload.
+      - Build a **TCO model** that includes GPU hours at realistic utilization, redundancy, engineering FTEs and the quality-adjusted cost (human review).
+      - Self-host only when steady usage is well above break-even, or when another driver (sovereignty, air-gap, latency, customization) justifies it.
+      - For bursty self-hosted workloads, use **scale-to-zero** serverless GPU options or batch scheduling.
+    works: |
+      The decision rests on real numbers. Low-usage workloads stay on pay-per-token pricing, where cost
+      follows demand, and high-usage, steady workloads move to self-hosting where the fixed cost is spread
+      across enough work to win.
+    code: |
+      def monthly_tco_selfhost(tokens_m, gpu_hr_usd, tokens_per_gpu_hr_m, util=0.35, replicas_min=2, fte=0.5,
+                               fte_cost=18_000, infra_overhead=0.15):
+          gpu_hours = max(replicas_min * 730, tokens_m / (tokens_per_gpu_hr_m * util))
+          return gpu_hours * gpu_hr_usd * (1 + infra_overhead) + fte * fte_cost
+
+      def monthly_tco_api(tokens_m, usd_per_m_blended, cache_hit=0.3, cache_discount=0.9):
+          return tokens_m * usd_per_m_blended * (1 - cache_hit * cache_discount)
+
+      decision = "self-host" if monthly_tco_selfhost(T, ...) < 0.7 * monthly_tco_api(T, ...) else "managed API"
+    takeaway: "Self-hosting trades variable cost for fixed cost. It only pays off when steady usage is high enough to keep GPUs busy, and people are counted in the TCO."
+    followup: "At roughly what monthly token volume does self-hosting start to make sense, and what assumptions drive that?"
+
+  - id: token-price-only
+    title: Comparing token prices while ignoring operations and quality
+    tags: [Cost, Quality]
+    scenario: |
+      A business case shows a 70% saving from switching to a self-hosted open model. After launch, the
+      model's lower accuracy on complex claims raises manual-review rates from 8% to 19%, wiping out the saving.
+    antipattern: |
+      The cost comparison stops at infrastructure. Quality differences, the cost of errors and the
+      operating team aren't in the model.
+    fails: |
+      - **Errors cost more than tokens.** One extra human review can cost far more than thousands of model calls.
+      - **The ops team is real.** Serving, scaling, upgrades, security and on-call need people.
+      - **Upgrades aren't free.** Each new open model needs evaluation, quantization testing and redeployment.
+    diagram:
+      bad: ["Token price A vs. B", "!\"70% cheaper\"", "Accuracy drop", "Review costs erase savings"]
+      bad_note: "Infrastructure-only comparison"
+      good: ["Eval both models", "+Cost per correct outcome", "+Ops + upgrade cost", "Decision on cost per business outcome"]
+      good_note: "Quality-adjusted unit economics"
+    solution: |
+      Compare on **cost per correct business outcome**:
+
+      `cost per outcome = (inference + infra + ops) / successful outcomes + error rate × cost of an error`
+
+      - Run both models on the same eval suite. Measure accuracy per segment and downstream effects (escalations, rework).
+      - Price the error cost with the business (review minutes, customer impact, regulatory exposure).
+      - Include operating headcount and an upgrade cadence in the model.
+    works: |
+      The metric captures what the business actually pays for. It often shows a hybrid answer: open models
+      for easy, high-volume segments, frontier models for complex ones. It also gives finance a defensible
+      business case.
+    code: |
+      def cost_per_outcome(model, segment, volume, error_cost_usd):
+          acc = evals[model][segment]["accuracy"]
+          infra = infra_cost(model, volume[segment])
+          return (infra + ops_cost(model)) / (volume[segment] * acc) + (1 - acc) * error_cost_usd
+
+      plan = {seg: min(MODELS, key=lambda m: cost_per_outcome(m, seg, volume, ERROR_COST[seg]))
+              for seg in SEGMENTS}         # often: open model for simple segments, frontier for complex
+    takeaway: "The right unit is cost per correct outcome, not cost per token. Price the errors and the operating team before claiming savings."
+    followup: "How would you present a quality-adjusted cost comparison to a CFO?"
+
+  - id: inefficient-serving
+    title: Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)
+    tags: [Cost, Latency]
+    scenario: |
+      A team serves an open 70B model with a basic Python inference server, one request at a time at full
+      precision. They need eight GPUs to handle a load that an optimized stack serves on two.
+    antipattern: |
+      Self-hosting with naive serving: static batching or none, unquantized weights, no prefix caching, and
+      default autoscaling based on CPU.
+    fails: |
+      - **Low throughput per GPU** multiplies hardware cost.
+      - **Memory waste** from unmanaged KV cache limits concurrency.
+      - **Wrong scaling signals.** CPU metrics don't reflect GPU queue depth.
+    diagram:
+      bad: ["Requests", "!Naive server (1 at a time, FP16)", "8 GPUs, long queues"]
+      bad_note: "Hardware compensating for software"
+      good: ["Requests", "+vLLM / SGLang: continuous batching", "+PagedAttention + prefix cache", "+Quantization (FP8 / INT4)", "2 GPUs, autoscale on queue"]
+      good_note: "Optimized serving multiplies tokens per GPU"
+    solution: |
+      - Use a modern inference engine (**vLLM**, **SGLang**, **TensorRT-LLM** or **NVIDIA NIM**) with **continuous batching** and paged KV-cache management.
+      - Enable **prefix caching** for shared system prompts and RAG templates.
+      - **Quantize** (FP8, AWQ/GPTQ INT4) after validating accuracy on your evals.
+      - Consider **speculative decoding** for latency-sensitive paths.
+      - Autoscale on **queue depth and time-to-first-token**, not CPU.
+      - Right-size the model: a fine-tuned 8B model often beats a generic 70B on a narrow task.
+    works: |
+      These techniques commonly raise throughput per GPU severalfold, which directly divides hardware cost.
+      Validating quantization on evals protects quality, and queue-based autoscaling matches capacity to real demand.
+    code: |
+      # vLLM: continuous batching is on by default; enable prefix caching + FP8
+      # vllm serve <open-model> --quantization fp8 --enable-prefix-caching \
+      #   --max-num-seqs 256 --gpu-memory-utilization 0.92 --tensor-parallel-size 2
+
+      # Kubernetes HPA on custom metric (queue depth) instead of CPU
+      # metrics:
+      # - type: Pods
+      #   pods: {metric: {name: vllm_num_requests_waiting}, target: {type: AverageValue, averageValue: "8"}}
+    lang: yaml
+    takeaway: "If you self-host, the serving stack is the cost lever. Continuous batching, prefix caching and validated quantization decide how many GPUs you need."
+    followup: "How would you validate that quantization hasn't degraded quality for a regulated use case?"
+
+  - id: no-hybrid-routing
+    title: All-or-nothing hosting with no hybrid routing
+    tags: [Cost, Quality]
+    scenario: |
+      A company debates for months whether to go "all open-source on-prem" or "all managed frontier API".
+      Both options are bad for parts of their workload.
+    antipattern: |
+      Hosting is treated as a single binary decision for the whole AI estate, not a per-workload routing choice.
+    fails: |
+      - **All-frontier** overpays for simple, high-volume tasks.
+      - **All-local** under-serves complex reasoning and agentic tasks.
+      - **Analysis paralysis** delays value.
+    diagram:
+      bad: ["All workloads", "!One hosting choice", "Overpay or underperform"]
+      bad_note: "Binary decision for a heterogeneous estate"
+      good: ["Request", "+Router (task, sensitivity, complexity)", "Local small model: PII-heavy, simple | Managed frontier: complex reasoning", "+Escalation on low confidence"]
+      good_note: "Each request goes to the cheapest compliant model that meets its quality bar"
+    solution: |
+      Build a **hybrid model mesh** behind one gateway:
+
+      - **Local or self-hosted small models** for high-volume simple tasks, highly sensitive data, or offline/edge needs.
+      - **Managed frontier models** for complex reasoning, coding and agentic planning.
+      - A **router** that considers task type, data classification, required quality and cost, with confidence-based escalation.
+      - One evaluation framework and one observability stack across both.
+    works: |
+      The estate gets the low unit cost of local models where they suffice and frontier quality where it
+      matters. Sensitive data can stay local by policy, and teams start delivering value instead of debating
+      the architecture.
+    code: |
+      def route(req):
+          if req.data_class == "restricted" and not req.allow_external:
+              return local_models.pick(req.task)                  # sovereignty first
+          if req.task in SIMPLE_TASKS and volume_high(req.task):
+              out = local_models.pick(req.task).generate(req)
+              return out if out.confidence >= 0.75 else frontier.generate(req)   # escalate
+          return frontier.generate(req)
+    takeaway: "Local versus cloud is a routing decision, not a religion. Send each request to the cheapest compliant model that meets its quality bar."
+    followup: "What signals would you use for confidence-based escalation?"
+
+  - id: local-equals-compliant
+    title: Assuming "local" automatically means secure and compliant
+    tags: [Security, Compliance]
+    scenario: |
+      A government agency runs open models on-prem "for security". An audit finds unpatched inference
+      servers, model weights downloaded from an unverified mirror, a license that restricts their use case,
+      and no logging.
+    antipattern: |
+      Equating physical location with security. Self-hosted models skip supply-chain checks, licensing
+      review, patching and monitoring that a managed service would have provided.
+    fails: |
+      - **Model supply-chain risk:** tampered weights and unsafe serialization formats can execute code on load.
+      - **License non-compliance:** open-weight licenses vary (acceptable-use policies, user thresholds, field-of-use limits).
+      - **Operational security debt:** unpatched CUDA drivers, inference servers and containers.
+      - **Missing controls:** no guardrails, no audit logs, no evals.
+    diagram:
+      bad: ["Weights from random mirror", "!On-prem server (unpatched)", "No logs / guardrails", "Audit failure"]
+      bad_note: "Location ≠ security"
+      good: ["Verified model registry (hash, signature)", "+License review", "+Hardened serving + patching", "+Same gateway, guardrails, evals", "Compliant local AI"]
+      good_note: "Local models held to the same control framework as cloud"
+    solution: |
+      - Source models from **verified publishers**, verify hashes and signatures, prefer **safetensors** formats, and scan artifacts.
+      - Run **license review** in the intake process.
+      - Run serving on hardened, patched images with vulnerability scanning and network isolation.
+      - Route local models through the **same AI gateway**, guardrails, tracing and eval gates as cloud models.
+      - Keep an AI bill of materials (model, version, source, license, fine-tune data).
+    works: |
+      Local deployment then delivers the sovereignty it promised, without new supply-chain or compliance
+      holes. One control framework across local and cloud keeps governance consistent and auditable.
+    code: |
+      def register_local_model(artifact, meta):
+          assert meta["format"] == "safetensors", "no pickle-based formats"
+          assert sha256(artifact) == meta["publisher_sha256"], "hash mismatch"
+          assert sigstore.verify(artifact, meta["signature"]), "signature invalid"
+          assert license_review.approved(meta["license"], use_case=meta["use_case"])
+          scan = model_scanner.scan(artifact)
+          assert not scan.findings, scan.findings
+          aibom.record(meta | {"scan": scan.id})
+          return model_registry.add(artifact, meta)
+    takeaway: "On-prem isn't automatically secure. Verify the model supply chain, review licenses, patch the stack, and hold local models to the same controls as cloud."
+    followup: "What goes into an AI bill of materials?"
+
+  - id: no-cache-layer
+    title: No caching layer in front of any model
+    tags: [Cost, Latency]
+    scenario: |
+      An HR assistant answers "How many vacation days do I get?" 9,000 times a month. Each time it runs
+      full retrieval and generation.
+    antipattern: |
+      Every request runs the full pipeline, whatever the model hosting. There's no exact, semantic or
+      prompt-prefix caching.
+    fails: |
+      - **Repeated identical work** for frequent questions.
+      - **Higher latency** for answers that could be instant.
+      - **Wasted capacity** on reserved or self-hosted GPUs.
+    diagram:
+      bad: ["Frequent question", "!Full RAG + LLM every time", "Cost × 9,000"]
+      bad_note: "No reuse of identical work"
+      good: ["Question", "+Exact cache", "+Semantic cache (scoped, TTL)", "+Prompt-prefix cache", "LLM (misses only)"]
+      good_note: "Layered caching with permission scoping and invalidation"
+    solution: |
+      Use **layered caching**:
+
+      1. **Prompt or prefix caching** at the model layer for stable system prompts and documents (available on the managed APIs; prefix caching in vLLM).
+      2. **Exact-match cache** on normalized query plus user scope.
+      3. **Semantic cache** for paraphrases above a high similarity threshold. Scope it by permission group and language, and invalidate it when source documents change.
+      4. Never cache across permission boundaries, and never cache personalized answers globally.
+    works: |
+      High-frequency questions are answered in milliseconds at near-zero marginal cost. Prefix caching cuts
+      the cost of the misses too. Scoping and invalidation keep caching from creating leakage or staleness.
+    code: |
+      def cached_answer(q, user):
+          scope = f"{user.permission_hash}:{user.lang}"
+          if (hit := exact_cache.get(scope, normalize(q))): return hit
+          if (hit := semantic_cache.nearest(scope, embed(q), min_sim=0.95)) and not hit.stale():
+              return hit.answer
+          ans = rag_answer(q, user)
+          semantic_cache.put(scope, embed(q), ans, doc_ids=ans.source_doc_ids, ttl=86400)
+          return ans
+
+      on_document_change(lambda doc_id: semantic_cache.invalidate(doc_ids=[doc_id]))
+    takeaway: "The cheapest model call is the one you don't make. Layer prefix, exact and semantic caches, scoped by permissions and invalidated by source changes."
+    followup: "What are the risks of semantic caching, and how do you mitigate them?"
+outro:
+  - md: |
+      ### Decision matrix
+
+      | Driver | Managed API | Provisioned / reserved | Self-hosted cloud GPU | On-prem / edge |
+      |---|---|---|---|---|
+      | Low or spiky volume | ✅ Best | ❌ | ❌ | ❌ |
+      | High, steady volume | ⚠️ Costly at scale | ✅ | ✅ (with mature ops) | ✅ (if capex approved) |
+      | Frontier-level reasoning | ✅ | ✅ | ⚠️ Open-model gap | ⚠️ |
+      | Strict sovereignty / air-gap | ⚠️ Sovereign regions | ⚠️ | ✅ | ✅ |
+      | Small team, fast delivery | ✅ | ✅ | ❌ | ❌ |
+      | Deep customization (fine-tune, distill) | ⚠️ Managed tuning | ⚠️ | ✅ | ✅ |

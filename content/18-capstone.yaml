@@ -1,0 +1,57 @@
+id: capstone
+num: 18
+short: Reference Architecture
+title: "Capstone: Enterprise Agentic AI Reference Architecture"
+summary: A target-state platform that combines the fixes from every section into one coherent architecture, with a roadmap and a maturity model for getting there.
+intro:
+  - layers:
+      layers:
+        - {name: "Experience", items: ["Web / mobile apps", "Workplace assistant", "Teams / Slack", "APIs"], kind: acc}
+        - {name: "Agents & workflows", items: ["Workflow engine", "Agent runtime + harness", "Supervisor / sub-agents", "Human-in-the-loop"], kind: new}
+        - {name: "AI gateway", items: ["Routing + fallback", "Guardrails", "Caching", "Metering / FinOps"]}
+        - {name: "Models", items: ["Frontier APIs", "Small / open models", "Fine-tuned / distilled", "Batch"]}
+        - {name: "Knowledge & tools", items: ["Hybrid retrieval + rerank", "MCP gateway + registry", "Memory (typed)", "Systems of record"]}
+        - {name: "Data foundation", items: ["Raw → processed → indexes", "Metadata + lineage", "PII redaction", "CDC sync"]}
+      side: ["Identity: OBO + agent IDs", "Evals & red-team harness", "Tracing (OTel)", "Governance registry", "Policy-as-code"]
+    caption: "Reference architecture: six horizontal layers, plus cross-cutting control planes on the right"
+  - md: |
+      ### How the layers map to the anti-patterns
+
+      | Layer | Key design decisions | Anti-patterns avoided |
+      |---|---|---|
+      | Data foundation | Structure-aware parsing, metadata contract, medallion storage, CDC with tombstones, redaction before embedding | 1.1–1.5, 2.3 |
+      | Knowledge & tools | Hybrid retrieval, reranking, ACL pre-filtering, validity filters, MCP gateway, typed memory | 2.1, 2.4, 3.1–3.5, 4.3, 9.2–9.3, 10.1–10.2 |
+      | Models | Portfolio routing, fallback, ladder before fine-tuning, caching, batch | 6.1–6.4, 14.4, 14.6 |
+      | AI gateway | Central guardrails, metering, residency-aware routing, spillover | 5.4, 6.2, 12.3, 12.5, 13.5, 13.10 |
+      | Agents & workflows | Least autonomy, budgets, checkpoints, typed hand-offs, supervisors, circuit breakers | 7.1–7.5, 8.1–8.5 |
+      | Control planes | OBO identity, evals at every stage, OTel tracing, governance registry, red-team regression | 10.3, 11.1–11.5, 12.1–12.4, 15.1–15.8 |
+  - flow:
+      good: ["User request + identity", "Gateway: input guard + route", "Workflow / agent harness", "Retrieval (ACL) | MCP tools (OBO)", "Gateway: output guard + meter", "Answer + citations + trace"]
+      good_loop: "Online evals and feedback flow back into datasets"
+    caption: "Request lifecycle through the reference architecture"
+  - md: |
+      ### 90-day roadmap from fragmented pilots to a governed platform
+
+      | Phase | Weeks | Outcomes |
+      |---|---|---|
+      | **Foundation** | 1–4 | AI use-case registry and risk tiering; model gateway with metering and baseline guardrails; identity integration (Entra / IAM, OBO); OpenTelemetry tracing; first golden eval set |
+      | **Paved road** | 5–8 | Shared ingestion and hybrid retrieval service with ACLs; prompt registry with CI eval gates; MCP gateway with 3–5 governed connectors; agent harness template with budgets and checkpoints |
+      | **Scale** | 9–12 | Migrate 2–3 highest-value pilots onto the platform; online evals and drift monitors; FinOps dashboards with unit economics; automated red-team suite; adoption playbook per persona |
+
+      ### Maturity model
+
+      | Level | Name | Characteristics |
+      |---|---|---|
+      | 1 | Experimenting | Isolated PoCs, shared API keys, vibe checks, no inventory |
+      | 2 | Piloting | A few apps in production, ad hoc guardrails, manual evals, cost visible per invoice only |
+      | 3 | Standardized | Shared gateway and retrieval, eval gates in CI, use-case registry, tracing |
+      | 4 | Scaled | Paved road for agents, MCP registry, OBO identity, FinOps unit economics, continuous red-teaming |
+      | 5 | Optimizing | Portfolio routing and distillation, production eval flywheel, value tracking at board level, governance automated end to end |
+
+      ### Choosing a cloud platform for a client
+
+      1. **Start from the estate.** Where are the data, the identity provider and the operations skills? This usually decides the primary platform (Section 13).
+      2. **Check model access.** Confirm the required models are available in the needed regions and capacity modes. All three platforms offer broad catalogs that increasingly overlap.
+      3. **Compare agent platforms on governance**, not demos: identity per agent, policy enforcement outside the model, evaluation and tracing, private networking.
+      4. **Keep the seams portable:** open frameworks, MCP tools, OpenTelemetry, a model gateway (13.14).
+      5. **Prove it on the client's eval set** in a time-boxed pilot before committing at scale.

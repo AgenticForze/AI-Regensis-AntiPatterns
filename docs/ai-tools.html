@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude &amp; Other AI Tools · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="active" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part G · Claude &amp; AI Tools</div>
+  <h1><span class="sn">16</span>Claude &amp; Other AI Tools</h1>
+  <p class="lede">Frontier model APIs, agent frameworks, coding agents and workplace assistants each come with their own adoption traps. These are the ones that recur across enterprise programs.</p>
+  <span class="pill">15 anti-patterns</span>
+</div>
+<div class="prose"><h3>Landscape</h3>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Representative tools</th>
+<th>Enterprise role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontier model APIs</td>
+<td>Anthropic Claude (Haiku, Sonnet, Opus tiers), OpenAI GPT, Google Gemini, Meta Llama, Mistral, Microsoft MAI</td>
+<td>Reasoning engines for custom apps and agents</td>
+</tr>
+<tr>
+<td>Agent SDKs &amp; frameworks</td>
+<td>Claude Agent SDK and Managed Agents, OpenAI Agents SDK, Google ADK, AWS Strands, Microsoft Agent Framework, LangGraph, CrewAI, LlamaIndex</td>
+<td>Orchestration, tool use, state, multi-agent</td>
+</tr>
+<tr>
+<td>AI coding agents</td>
+<td>Claude Code, GitHub Copilot, OpenAI Codex, Cursor, Gemini CLI, Windsurf</td>
+<td>Developer productivity across the SDLC</td>
+</tr>
+<tr>
+<td>Workplace assistants</td>
+<td>Claude (Team / Enterprise), ChatGPT Enterprise, Microsoft 365 Copilot, Gemini Enterprise</td>
+<td>Knowledge-worker productivity, enterprise search, lightweight agents</td>
+</tr>
+</tbody>
+</table>
+<p>Claude is available directly from Anthropic and through Amazon Bedrock, Google Cloud's Agent Platform and
+Microsoft Foundry. Feature availability and release timing can differ between routes.</p></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#claude-no-prompt-caching"><span>16.1</span>Claude: Large stable prompts re-sent without prompt caching</a><a href="#claude-thinking-misuse"><span>16.2</span>Claude: Reasoning effort not matched to the task</a><a href="#claude-skills-ignored"><span>16.3</span>Claude: Procedures pasted into every prompt instead of packaged as Skills</a><a href="#claude-single-tier"><span>16.4</span>Claude: One model tier for everything</a><a href="#claude-computer-use-misuse"><span>16.5</span>Claude: Computer use where an API exists, or without a sandbox</a><a href="#claude-access-route"><span>16.6</span>Claude: Not choosing deliberately between direct and cloud-marketplace access</a><a href="#provider-quirk-prompts"><span>16.7</span>Frameworks: Prompts tuned to one provider&#x27;s quirks with no portability layer</a><a href="#framework-as-architecture"><span>16.8</span>Frameworks: The framework treated as the architecture</a><a href="#coding-adoption-metrics"><span>16.9</span>Coding agents: Measuring adoption by seats and lines of code</a><a href="#coding-agent-unguarded"><span>16.10</span>Coding agents: Write access to production repos and systems with no guardrails</a><a href="#coding-no-context-files"><span>16.11</span>Coding agents: No repository context or conventions files</a><a href="#coding-no-security-scan"><span>16.12</span>Coding agents: AI-generated code shipped without security and dependency scanning</a><a href="#assistant-oversharing"><span>16.13</span>Workplace assistants: Enterprise rollout before fixing oversharing</a><a href="#assistant-no-enablement"><span>16.14</span>Workplace assistants: Licenses with no enablement, use-case catalog or ROI tracking</a><a href="#shadow-ai-ban"><span>16.15</span>Workplace assistants: Banning AI tools with no sanctioned alternative</a></div>
+
+<article class="ap" id="claude-no-prompt-caching">
+  <header class="ap-h">
+    <div class="ap-num">16.1</div>
+    <div>
+      <h2><a href="#claude-no-prompt-caching">Claude: Large stable prompts re-sent without prompt caching</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A policy-analysis agent sends a 60K-token system prompt (instructions, tool definitions and a reference
+handbook) with every turn. Most of each bill is for the same tokens, re-processed on every call.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Long, stable prefixes (system prompts, tool schemas, reference documents, conversation history) are
+sent uncached. Prompts are also structured so that volatile content comes first, which breaks any cache.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Repeated full-price input tokens</strong> on every turn.</li>
+<li><strong>Higher time-to-first-token</strong> from re-processing the prefix.</li>
+<li><strong>Cache-hostile prompt layout:</strong> a timestamp or user ID at the top invalidates everything after it.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-no-prompt-caching" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Turn N</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="74.1" font-size="12.5" text-anchor="middle">Timestamp + 60K static prefix</text>
+<text class="dg-t dg-t-bad" x="510.0" y="88.6" font-size="12.5" text-anchor="middle">(uncached)</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Full price, slow TTFT</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Same tokens billed at full rate every call</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Turn N</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="191.8" font-size="11" text-anchor="middle">Static prefix first</text>
+<text class="dg-t dg-t-new" x="332.8" y="204.8" font-size="11" text-anchor="middle">(tools, system,</text>
+<text class="dg-t dg-t-new" x="332.8" y="217.8" font-size="11" text-anchor="middle">docs)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">cache_control</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">breakpoint</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Volatile content</text>
+<text class="dg-t dg-t-std" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">last</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Cached reads</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-claude-no-prompt-caching)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Stable-first layout; cache breakpoints on reusable prefixes</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Order prompts for caching:</strong> tools → system instructions → reference documents → conversation history → the new user turn. Keep volatile values (dates, IDs) out of the prefix.</li>
+<li>Mark <strong>cache breakpoints</strong> on the stable prefix, and choose cache lifetimes that match the session pattern.</li>
+<li>Monitor cache-read versus cache-write tokens in usage metadata, and fix layouts that miss.</li>
+<li>Combine with <strong>context compaction</strong> for long sessions, so cached history doesn't grow without limit.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Cached prefix reads are billed at a fraction of the normal input price and processed faster, so
+long-context agents become affordable. Watching usage metadata shows when a layout change has broken the cache.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
+
+<span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">"claude-sonnet-5-5"</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="n">TOOLS</span><span class="p">,</span>                                              <span class="c1"># stable</span>
+    <span class="n">system</span><span class="o">=</span><span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="n">SYSTEM_INSTRUCTIONS</span><span class="p">},</span>
+            <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="n">HANDBOOK_60K</span><span class="p">,</span>
+             <span class="s2">"cache_control"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"ephemeral"</span><span class="p">}}],</span>        <span class="c1"># cache breakpoint on stable prefix</span>
+    <span class="n">messages</span><span class="o">=</span><span class="n">history</span> <span class="o">+</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">today</span><span class="p">()</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">question</span><span class="si">}</span><span class="s2">"</span><span class="p">}])</span>  <span class="c1"># volatile last</span>
+
+<span class="n">u</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span>
+<span class="n">metrics</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">cache_read</span><span class="o">=</span><span class="n">u</span><span class="o">.</span><span class="n">cache_read_input_tokens</span><span class="p">,</span> <span class="n">cache_write</span><span class="o">=</span><span class="n">u</span><span class="o">.</span><span class="n">cache_creation_input_tokens</span><span class="p">,</span>
+               <span class="n">uncached</span><span class="o">=</span><span class="n">u</span><span class="o">.</span><span class="n">input_tokens</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>With Claude, prompt layout is a cost decision. Put stable content first, set cache breakpoints, and check the cache-read tokens.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What breaks a prompt cache, and how do you design multi-tenant prompts to stay cache-friendly?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="claude-thinking-misuse">
+  <header class="ap-h">
+    <div class="ap-num">16.2</div>
+    <div>
+      <h2><a href="#claude-thinking-misuse">Claude: Reasoning effort not matched to the task</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>One team runs maximum extended reasoning on a ticket classifier, which is slow and expensive. Another
+runs complex multi-step contract-risk analysis with reasoning switched off and gets shallow answers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Extended reasoning and effort settings are set globally (always maximum or always off) instead of
+per task. Teams also ask the model to "think step by step" in visible output and then parse around it.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Over-thinking</strong> simple tasks adds cost and latency with no quality gain.</li>
+<li><strong>Under-thinking</strong> complex tasks reduces accuracy on planning, analysis and agentic tool use.</li>
+<li><strong>Visible chain-of-thought hacks</strong> pollute outputs and complicate parsing.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-thinking-misuse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">All tasks</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">One global reasoning setting</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Slow classifiers / shallow analysis</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-claude-thinking-misuse)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-claude-thinking-misuse)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Reasoning budget unrelated to difficulty</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Task type</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">Effort / thinking per</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">task</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Low: classify, extract</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">High: plan, analyse,</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">agentic</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="232.4" font-size="12.5" text-anchor="middle">Eval-tuned settings</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-ai-tools-claude-thinking-misuse)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-ai-tools-claude-thinking-misuse)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-ai-tools-claude-thinking-misuse)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Reasoning spend proportional to difficulty</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Treat <strong>effort / extended thinking</strong> as a per-task parameter, tuned on the eval suite like model choice.</li>
+<li>Use low effort or no extended thinking for classification, extraction and formatting. Use higher effort for planning, complex analysis, coding and multi-step agentic work.</li>
+<li>Use the platform's thinking features rather than prompt hacks, and keep reasoning out of user-facing output.</li>
+<li>Track the quality/latency/cost frontier per setting.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Reasoning spend tracks task difficulty, so simple paths stay fast and cheap and hard paths get the
+depth they need. Tuning on evals turns a configuration guess into a measured choice.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">TASK_PROFILE</span> <span class="o">=</span> <span class="p">{</span>                      <span class="c1"># tuned on eval suite per task</span>
+    <span class="s2">"classify_ticket"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-haiku-5-5"</span><span class="p">,</span>  <span class="s2">"effort"</span><span class="p">:</span> <span class="s2">"low"</span><span class="p">},</span>
+    <span class="s2">"extract_invoice"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-haiku-5-5"</span><span class="p">,</span>  <span class="s2">"effort"</span><span class="p">:</span> <span class="s2">"low"</span><span class="p">},</span>
+    <span class="s2">"contract_risk"</span><span class="p">:</span>   <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-opus-5-5"</span><span class="p">,</span>   <span class="s2">"effort"</span><span class="p">:</span> <span class="s2">"high"</span><span class="p">},</span>
+    <span class="s2">"agent_planning"</span><span class="p">:</span>  <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-sonnet-5-5"</span><span class="p">,</span> <span class="s2">"effort"</span><span class="p">:</span> <span class="s2">"high"</span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">payload</span><span class="p">):</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">TASK_PROFILE</span><span class="p">[</span><span class="n">task</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">claude_call</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s2">"model"</span><span class="p">],</span> <span class="n">effort</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s2">"effort"</span><span class="p">],</span> <span class="o">**</span><span class="n">payload</span><span class="p">)</span>   <span class="c1"># thin wrapper over the Messages API</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Reasoning effort is a dial, not a switch. Set it per task from eval results, low for routine work and high for planning and analysis.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you show a client that more reasoning effort is worth the extra latency?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="claude-skills-ignored">
+  <header class="ap-h">
+    <div class="ap-num">16.3</div>
+    <div>
+      <h2><a href="#claude-skills-ignored">Claude: Procedures pasted into every prompt instead of packaged as Skills</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A finance team's agent prompt includes the full month-end close procedure, the house style for board
+reports and the Excel modelling conventions: 25K tokens, mostly irrelevant to any given request.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Organizational know-how is pasted into system prompts, copied across apps, and loaded on every call
+whether or not it's needed.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Context and cost bloat</strong> from irrelevant procedures.</li>
+<li><strong>Copy drift:</strong> each app's version of the procedure diverges.</li>
+<li><strong>No reuse or governance</strong> of institutional knowledge.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-skills-ignored" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Every request</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">25K tokens of procedures in prompt</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Bloat + drift across apps</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Know-how hard-coded into prompts</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Request</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Skill index (names</text>
+<text class="dg-t dg-t-std" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">+ descriptions)</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Load only the</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">matching skill(s)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Bundled scripts /</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">templates</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Consistent output</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-claude-skills-ignored)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Progressive disclosure: know-how loaded on demand, versioned centrally</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Package repeatable know-how as <strong>Agent Skills</strong>: folders with a <code>SKILL.md</code> (instructions), plus optional
+scripts, templates and reference files.</p>
+<ul>
+<li>The agent sees only a short <strong>name and description</strong> for each skill and loads the full content when a task matches (progressive disclosure).</li>
+<li>Version, review and distribute skills centrally, and share them across Claude apps, Claude Code, the API and agent SDKs.</li>
+<li>Put deterministic steps in <strong>bundled scripts</strong> rather than prose instructions.</li>
+<li>Review third-party skills like code, since they can include executable content.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Context holds only what the current task needs, which cuts cost and improves instruction-following.
+One governed source of know-how serves every surface, and scripted steps make outputs repeatable.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="gh"># skills/month-end-close/SKILL.md</span>
+<span class="gh"># ---</span>
+<span class="gh"># name: month-end-close</span>
+<span class="gh"># description: Run the month-end close checklist and produce the variance commentary in house format.</span>
+<span class="gh"># ---</span>
+<span class="gh"># 1. Run scripts/pull_tb.py for the period ...</span>
+<span class="gh"># 2. Flag variances &gt; 5% using scripts/variance.py ...</span>
+<span class="gh"># 3. Draft commentary following templates/commentary.md ...</span>
+<span class="gh">#</span>
+<span class="gh"># The agent sees only name + description until a request matches;</span>
+<span class="gh"># then it reads SKILL.md and runs the bundled scripts in its sandbox.</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Institutional know-how belongs in versioned, on-demand Skills, not pasted into every prompt.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you govern a library of skills across business units?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="claude-single-tier">
+  <header class="ap-h">
+    <div class="ap-num">16.4</div>
+    <div>
+      <h2><a href="#claude-single-tier">Claude: One model tier for everything</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An enterprise standardizes on the most capable Claude tier for every workload, including high-volume
+email tagging and simple extraction. Costs are far above plan and throughput limits are hit early.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The model tier is chosen once for the brand ("we use Opus") rather than per workload.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Cost and latency</strong> are driven by the top tier.</li>
+<li><strong>Capacity pressure</strong> on the most constrained tier.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-single-tier" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">All workloads</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Top tier only</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">High cost, rate limits</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-claude-single-tier)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-claude-single-tier)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Tier chosen for the brand, not the task</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Workload</text>
+<rect class="dg-node dg-new" x="305.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="259.4" font-size="12.5" text-anchor="middle">Tier router</text>
+<circle class="dg-badge-new" cx="489.0" cy="236.0" r="8"/><text class="dg-badge-t" x="489.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Haiku: high-volume simple</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Sonnet: most production</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">work</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="313.4" font-size="12.5" text-anchor="middle">Opus: hardest reasoning</text>
+<rect class="dg-node dg-new" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Escalation</text>
+<circle class="dg-badge-new" cx="932.0" cy="236.0" r="8"/><text class="dg-badge-t" x="932.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="255.0" x2="301.5" y2="255.0" marker-end="url(#ah-ai-tools-claude-single-tier)"/>
+<line class="dg-edge" x1="496.0" y1="255.0" x2="523.0" y2="255.0" marker-end="url(#ah-ai-tools-claude-single-tier)"/>
+<line class="dg-edge" x1="717.5" y1="255.0" x2="744.5" y2="255.0" marker-end="url(#ah-ai-tools-claude-single-tier)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Each tier used where it wins on the eval</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Map workloads to tiers with the eval suite: the smallest tier for high-volume, latency-sensitive simple tasks; the middle tier as the general production workhorse; the top tier for complex reasoning, difficult coding and long-horizon agents.</li>
+<li>Use the top tier as an <strong>orchestrator</strong> with smaller tiers as sub-agents for parallel subtasks.</li>
+<li>Combine with batch processing and prompt caching.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Cost and capacity follow task difficulty, and quality is protected because tier choice is validated
+by evals and backed by escalation.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">orchestrator</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-5-5"</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">spawn_subagent</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">spawn_subagent</span><span class="p">(</span><span class="n">subtask</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">Agent</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">"claude-haiku-5-5"</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">subtask</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span> <span class="n">budget</span><span class="o">=</span><span class="n">Budget</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">subtask</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Use the model family as a portfolio: small tiers for volume, the middle tier for most production work, the top tier where reasoning is the bottleneck.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you decide when an orchestrator–sub-agent split across tiers is worth it?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="claude-computer-use-misuse">
+  <header class="ap-h">
+    <div class="ap-num">16.5</div>
+    <div>
+      <h2><a href="#claude-computer-use-misuse">Claude: Computer use where an API exists, or without a sandbox</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team automates CRM data entry with a screen-driving agent that clicks through the web UI, even though
+the CRM has a well-documented API. It's slow, breaks when the UI changes, and runs on a developer's
+logged-in workstation.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>GUI automation (computer use or browser agents) is used as the default integration method, running
+with real user sessions and no isolation.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Brittle and slow</strong> compared with APIs.</li>
+<li><strong>Security exposure:</strong> screen agents see everything on screen and can be steered by injected page content.</li>
+<li><strong>Over-broad access</strong> through the user's live sessions.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-computer-use-misuse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Task</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="74.1" font-size="12.5" text-anchor="middle">Screen-driving agent on user&#x27;s</text>
+<text class="dg-t dg-t-bad" x="510.0" y="88.6" font-size="12.5" text-anchor="middle">desktop</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Brittle, slow, exposed</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-claude-computer-use-misuse)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-claude-computer-use-misuse)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">GUI automation as the default integration</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Task</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">API / MCP connector</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">available?</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Yes → API tool</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">No → sandboxed VM /</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">browser agent</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="225.1" font-size="12.5" text-anchor="middle">Allow-listed domains +</text>
+<text class="dg-t dg-t-new" x="842.2" y="239.6" font-size="12.5" text-anchor="middle">human checkpoints</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-ai-tools-claude-computer-use-misuse)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-ai-tools-claude-computer-use-misuse)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-ai-tools-claude-computer-use-misuse)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">APIs first; GUI agents isolated and supervised</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Integration order: <strong>API / MCP connector → RPA with known selectors → computer use.</strong></li>
+<li>Use computer use for legacy apps with no API, exploratory or cross-application tasks, and testing.</li>
+<li>Run it in <strong>isolated VMs or containers</strong> with minimal privileges, dedicated test accounts, allow-listed domains and no access to secrets.</li>
+<li>Require human confirmation for submissions, payments and irreversible actions, and record sessions.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>APIs give speed and reliability where they exist. Computer use fills real gaps safely, and isolation
+plus checkpoints contain the injection and over-access risks specific to screen-reading agents.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">integrate</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">conn</span> <span class="o">:=</span> <span class="n">connectors</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">system</span><span class="p">)):</span>            <span class="c1"># MCP / API first</span>
+        <span class="k">return</span> <span class="n">api_agent</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">conn</span><span class="o">.</span><span class="n">tools</span><span class="p">)</span>
+    <span class="n">vm</span> <span class="o">=</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">vm</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="s2">"legacy-erp-client"</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">allow_list</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">system_domains</span><span class="p">),</span>
+                    <span class="n">creds</span><span class="o">=</span><span class="n">vault</span><span class="o">.</span><span class="n">test_account</span><span class="p">(</span><span class="n">task</span><span class="o">.</span><span class="n">system</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">computer_use_agent</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="n">vm</span><span class="p">,</span> <span class="n">confirm_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"submit"</span><span class="p">,</span> <span class="s2">"pay"</span><span class="p">,</span> <span class="s2">"delete"</span><span class="p">],</span>
+                                  <span class="n">record</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Computer use is the integration of last resort. Use APIs and MCP first, and when you do drive a screen, do it in a sandbox with checkpoints.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What new attack vectors does computer use introduce?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="claude-access-route">
+  <header class="ap-h">
+    <div class="ap-num">16.6</div>
+    <div>
+      <h2><a href="#claude-access-route">Claude: Not choosing deliberately between direct and cloud-marketplace access</a></h2>
+      <div class="tags"><span class="tag t-comp">Compliance</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Different business units consume Claude through the Anthropic API, Bedrock, Agent Platform and Foundry,
+each with different data-handling terms, feature sets and billing. Nobody can say which controls apply where.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Access routes are chosen ad hoc by each team, without comparing data residency, feature availability,
+commercial terms and integration with existing cloud governance.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Fragmented governance and spend.</strong></li>
+<li><strong>Feature mismatch:</strong> some capabilities reach the first-party API before they reach cloud platforms, or vice versa.</li>
+<li><strong>Residency and contractual terms</strong> differ by route and region.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-claude-access-route" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">BU A</text>
+<rect class="dg-node dg-std" x="84.0" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="135.4" font-size="12.5" text-anchor="middle">BU B</text>
+<rect class="dg-node dg-std" x="84.0" y="162.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="189.4" font-size="12.5" text-anchor="middle">BU C</text>
+<rect class="dg-node dg-bad" x="379.3" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="128.1" font-size="12.5" text-anchor="middle">Ad-hoc routes (API, Bedrock, Agent</text>
+<text class="dg-t dg-t-bad" x="510.0" y="142.6" font-size="12.5" text-anchor="middle">Platform, Foundry)</text>
+<circle class="dg-badge-bad" cx="636.7" cy="112.0" r="8"/><text class="dg-badge-t" x="636.7" y="116.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="135.4" font-size="12.5" text-anchor="middle">Fragmented controls</text>
+<line class="dg-edge" x1="348.3" y1="131.0" x2="375.3" y2="131.0" marker-end="url(#ah-ai-tools-claude-access-route)"/>
+<line class="dg-edge" x1="643.7" y1="131.0" x2="670.7" y2="131.0" marker-end="url(#ah-ai-tools-claude-access-route)"/>
+<text class="dg-note dg-note-bad" x="28" y="229.0" font-size="12.5">No enterprise decision on access route</text>
+<rect class="dg-band dg-band-good" x="8" y="256.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="276.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="313.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="340.4" font-size="12.5" text-anchor="middle">Requirements</text>
+<rect class="dg-node dg-new" x="305.5" y="313.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="326.9" font-size="11" text-anchor="middle">Route decision:</text>
+<text class="dg-t dg-t-new" x="399.2" y="339.9" font-size="11" text-anchor="middle">residency, features,</text>
+<text class="dg-t dg-t-new" x="399.2" y="352.9" font-size="11" text-anchor="middle">commits, governance</text>
+<circle class="dg-badge-new" cx="489.0" cy="317.0" r="8"/><text class="dg-badge-t" x="489.0" y="321.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="313.4" font-size="12.5" text-anchor="middle">Primary route</text>
+<rect class="dg-node dg-std" x="527.0" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="367.4" font-size="12.5" text-anchor="middle">Approved secondary</text>
+<rect class="dg-node dg-new" x="748.5" y="313.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="340.4" font-size="12.5" text-anchor="middle">Single gateway + metering</text>
+<circle class="dg-badge-new" cx="932.0" cy="317.0" r="8"/><text class="dg-badge-t" x="932.0" y="321.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="336.0" x2="301.5" y2="336.0" marker-end="url(#ah-ai-tools-claude-access-route)"/>
+<line class="dg-edge" x1="496.0" y1="336.0" x2="523.0" y2="336.0" marker-end="url(#ah-ai-tools-claude-access-route)"/>
+<line class="dg-edge" x1="717.5" y1="336.0" x2="744.5" y2="336.0" marker-end="url(#ah-ai-tools-claude-access-route)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Deliberate route choice, centrally metered</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Compare routes on <strong>data residency and processing regions</strong>, <strong>feature availability</strong> (newest tools and betas), <strong>identity and network integration</strong>, <strong>commercial commitments</strong> and <strong>support</strong>.</li>
+<li>Standardize on a primary route. Often that's the client's primary cloud, for governance and committed-spend reasons, with the first-party API approved where specific features are needed.</li>
+<li>Front all routes with one gateway for metering, guardrails and logging.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Governance applies consistently, spend counts toward the right commitments, and teams know where to
+go for new capabilities.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">CLAUDE_ROUTES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"default"</span><span class="p">:</span>       <span class="p">{</span><span class="s2">"via"</span><span class="p">:</span> <span class="s2">"client_primary_cloud"</span><span class="p">,</span> <span class="s2">"region"</span><span class="p">:</span> <span class="s2">"eu"</span><span class="p">,</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="s2">"governance + commit"</span><span class="p">},</span>
+    <span class="s2">"early_features"</span><span class="p">:{</span><span class="s2">"via"</span><span class="p">:</span> <span class="s2">"anthropic_api"</span><span class="p">,</span> <span class="s2">"approved_for"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"internal_tools"</span><span class="p">],</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="s2">"feature timing"</span><span class="p">},</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Claude is available through several routes. Choose one deliberately on residency, features and governance, and meter them all through one gateway.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you evaluate a feature that&#x27;s only available on one access route?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="provider-quirk-prompts">
+  <header class="ap-h">
+    <div class="ap-num">16.7</div>
+    <div>
+      <h2><a href="#provider-quirk-prompts">Frameworks: Prompts tuned to one provider&#x27;s quirks with no portability layer</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A company's 200 prompts rely on one model family's formatting conventions and implicit behaviours.
+A pricing change elsewhere is attractive, but switching breaks most outputs.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Prompts, parsers and tool definitions are written against one model's undocumented habits. There
+are no per-model variants and no cross-model eval.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Vendor lock-in through prompts,</strong> even when the APIs are similar.</li>
+<li><strong>Fragile to model upgrades</strong> within the same provider too.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-provider-quirk-prompts" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">200 prompts</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Tuned to one model&#x27;s quirks</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Switch → breakage</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-provider-quirk-prompts)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-provider-quirk-prompts)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Implicit coupling to model behaviour</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Task spec + schema</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Per-model prompt variants</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Cross-model eval matrix</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Gateway selects model +</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">variant</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-ai-tools-provider-quirk-prompts)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-ai-tools-provider-quirk-prompts)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-ai-tools-provider-quirk-prompts)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Behaviour pinned by schemas and evals, not quirks</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Specify behaviour with <strong>schemas, examples and explicit instructions</strong> rather than relying on habits.</li>
+<li>Keep <strong>per-model prompt variants</strong> in the registry where needed.</li>
+<li>Maintain a <strong>cross-model eval matrix</strong> so switching is a measured decision.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Model choice becomes a commercial and quality decision instead of a migration project, and the same
+discipline protects against regressions from same-vendor upgrades.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">matrix</span> <span class="o">=</span> <span class="p">{(</span><span class="n">m</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span> <span class="n">eval_suite</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">m</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">prompts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">variant</span><span class="o">=</span><span class="n">m</span><span class="p">))</span>
+          <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">CANDIDATE_MODELS</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">CRITICAL_PROMPTS</span><span class="p">}</span>
+<span class="n">viable</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">CANDIDATE_MODELS</span> <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">matrix</span><span class="p">[(</span><span class="n">m</span><span class="p">,</span> <span class="n">p</span><span class="p">)]</span> <span class="o">&gt;=</span> <span class="n">TARGET</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">CRITICAL_PROMPTS</span><span class="p">)]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Pin behaviour with schemas and evals, not model quirks, so switching models is a measured choice.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How long would it take your team to move a production workload to another model family?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="framework-as-architecture">
+  <header class="ap-h">
+    <div class="ap-num">16.8</div>
+    <div>
+      <h2><a href="#framework-as-architecture">Frameworks: The framework treated as the architecture</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team adopts a heavyweight multi-agent framework for a three-step document workflow. Debugging goes
+through layers of abstraction, and a minor framework release breaks production.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Choosing a framework first and shaping the problem to fit it. Building on framework internals and
+unpinned versions.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Accidental complexity:</strong> abstractions hide prompts, retries and state, so behaviour is hard to see.</li>
+<li><strong>Upgrade fragility:</strong> fast-moving frameworks change APIs often.</li>
+<li><strong>Lock-in to a framework</strong> instead of to a vendor.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-framework-as-architecture" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">3-step workflow</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Heavy multi-agent framework</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Opaque behaviour, upgrade breakage</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-framework-as-architecture)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-framework-as-architecture)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Framework chosen before the problem</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Problem shape</text>
+<rect class="dg-node dg-std" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Plain SDK calls</text>
+<rect class="dg-node dg-std" x="305.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="259.4" font-size="12.5" text-anchor="middle">Graph framework</text>
+<rect class="dg-node dg-std" x="305.5" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="306.1" font-size="12.5" text-anchor="middle">Agent SDK / managed</text>
+<text class="dg-t dg-t-std" x="399.2" y="320.6" font-size="12.5" text-anchor="middle">harness</text>
+<rect class="dg-node dg-new" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Pinned versions + upgrade</text>
+<text class="dg-t dg-t-new" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">tests</text>
+<circle class="dg-badge-new" cx="710.5" cy="236.0" r="8"/><text class="dg-badge-t" x="710.5" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="252.1" font-size="12.5" text-anchor="middle">Own prompts &amp; state</text>
+<text class="dg-t dg-t-new" x="842.2" y="266.6" font-size="12.5" text-anchor="middle">visible</text>
+<circle class="dg-badge-new" cx="932.0" cy="236.0" r="8"/><text class="dg-badge-t" x="932.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="255.0" x2="301.5" y2="255.0" marker-end="url(#ah-ai-tools-framework-as-architecture)"/>
+<line class="dg-edge" x1="496.0" y1="255.0" x2="523.0" y2="255.0" marker-end="url(#ah-ai-tools-framework-as-architecture)"/>
+<line class="dg-edge" x1="717.5" y1="255.0" x2="744.5" y2="255.0" marker-end="url(#ah-ai-tools-framework-as-architecture)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Lightest abstraction that fits; dependencies managed like any other</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Start from the <strong>problem shape</strong> (autonomy spectrum, 7.1). Use plain SDK calls for simple chains, graph frameworks for stateful workflows, and agent SDKs or managed harnesses for open-ended agents.</li>
+<li>Keep prompts, state schemas and tool definitions in <strong>your own code</strong>, visible and testable.</li>
+<li><strong>Pin versions</strong>, run the eval suite on upgrades, and read changelogs.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The architecture stays understandable and debuggable, and framework upgrades become routine. If a
+framework is abandoned or changes direction, the core logic moves with little rework.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># requirements.txt pins exact versions; upgrades go through the eval gate</span>
+<span class="c1"># langgraph==&lt;pinned&gt;</span>
+<span class="c1"># anthropic==&lt;pinned&gt;</span>
+
+<span class="c1"># Simple chain: no framework needed</span>
+<span class="n">summary</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">SUMMARIZE</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+<span class="n">facts</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">EXTRACT</span><span class="p">,</span> <span class="n">summary</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">Facts</span><span class="p">)</span>
+<span class="n">memo</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">DRAFT_MEMO</span><span class="p">,</span> <span class="n">facts</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Pick the lightest abstraction that fits the problem. Frameworks are dependencies to manage, not architectures to adopt.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you evaluate an agent framework for enterprise use?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="coding-adoption-metrics">
+  <header class="ap-h">
+    <div class="ap-num">16.9</div>
+    <div>
+      <h2><a href="#coding-adoption-metrics">Coding agents: Measuring adoption by seats and lines of code</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A CIO reports "90% of developers activated AI coding tools and AI wrote 40% of our code". Delivery
+speed hasn't changed, change-failure rate is up, and review queues are longer.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Success is measured by license activation, suggestion acceptance and AI-generated line counts,
+not by delivery outcomes.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Vanity metrics:</strong> more code isn't more value, and it can mean more review and maintenance.</li>
+<li><strong>Bottlenecks move:</strong> faster coding exposes slow review, testing and deployment.</li>
+<li><strong>Quality risk</strong> goes unmeasured.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-coding-adoption-metrics" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Seats activated</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Lines of AI code</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">&quot;Success&quot; claimed</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">No delivery change</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Activity metrics, not outcomes</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Baseline DORA + cycle</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">time</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="191.8" font-size="11" text-anchor="middle">Targeted workflows</text>
+<text class="dg-t dg-t-new" x="399.2" y="204.8" font-size="11" text-anchor="middle">(tests, migrations,</text>
+<text class="dg-t dg-t-new" x="399.2" y="217.8" font-size="11" text-anchor="middle">reviews)</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Measure: lead time,</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">change-failure, rework</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Scale what works</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-ai-tools-coding-adoption-metrics)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Outcome metrics against a baseline</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Baseline</strong> DORA metrics (lead time, deployment frequency, change-failure rate, time to restore), PR cycle time and developer experience before rollout.</li>
+<li>Target <strong>high-leverage workflows</strong>: test generation, migrations and upgrades, code review assistance, incident triage, documentation.</li>
+<li>Measure outcomes per team, and invest in the moved bottlenecks (review capacity, CI speed).</li>
+<li>Track quality signals: defect escape, rework, security findings in AI-assisted PRs.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Leadership sees whether AI improves delivery, not just usage. Targeting workflows produces visible
+wins, and measuring bottlenecks prevents gains being lost downstream.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">report</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"lead_time_p50_days"</span><span class="p">:</span>  <span class="n">compare</span><span class="p">(</span><span class="n">dora</span><span class="o">.</span><span class="n">lead_time</span><span class="p">,</span> <span class="n">before</span><span class="o">=</span><span class="n">Q2</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">Q4</span><span class="p">),</span>
+    <span class="s2">"change_failure_rate"</span><span class="p">:</span> <span class="n">compare</span><span class="p">(</span><span class="n">dora</span><span class="o">.</span><span class="n">cfr</span><span class="p">,</span> <span class="n">before</span><span class="o">=</span><span class="n">Q2</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">Q4</span><span class="p">),</span>
+    <span class="s2">"pr_cycle_time_hours"</span><span class="p">:</span> <span class="n">compare</span><span class="p">(</span><span class="n">git</span><span class="o">.</span><span class="n">pr_cycle_time</span><span class="p">,</span> <span class="n">before</span><span class="o">=</span><span class="n">Q2</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">Q4</span><span class="p">),</span>
+    <span class="s2">"ai_pr_rework_rate"</span><span class="p">:</span>   <span class="n">rework_rate</span><span class="p">(</span><span class="n">prs</span><span class="p">(</span><span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai-assisted"</span><span class="p">]))</span> <span class="o">-</span> <span class="n">rework_rate</span><span class="p">(</span><span class="n">prs</span><span class="p">(</span><span class="n">labels</span><span class="o">=</span><span class="p">[</span><span class="s2">"human"</span><span class="p">])),</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Measure AI coding tools by delivery outcomes (lead time, change-failure rate, rework), not by seats or lines of code.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you design a fair experiment to measure AI coding-tool impact?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="coding-agent-unguarded">
+  <header class="ap-h">
+    <div class="ap-num">16.10</div>
+    <div>
+      <h2><a href="#coding-agent-unguarded">Coding agents: Write access to production repos and systems with no guardrails</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A developer lets an autonomous coding agent run with broad shell permissions and cloud credentials in
+their environment. A misinterpreted cleanup instruction deletes a shared staging database.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Coding agents run with the developer's full credentials, unrestricted shell access and the ability to
+push directly, with no sandbox, permission rules or review gate.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Destructive commands</strong> from misunderstanding or prompt injection (via README files, issues, dependencies).</li>
+<li><strong>Credential exposure</strong> to agent context and logs.</li>
+<li><strong>Unreviewed changes</strong> reach shared branches.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-coding-agent-unguarded" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Coding agent</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Full shell + cloud creds</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Direct push</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Deleted staging DB</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Agent inherits every privilege the developer has</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Coding agent</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Sandbox /</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">devcontainer</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Permission rules +</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">hooks (deny</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">destructive)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Branch + PR only</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Human review + CI</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-coding-agent-unguarded)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Least privilege, sandboxed execution, review-gated delivery</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Run agents in <strong>sandboxes or devcontainers</strong> with scoped, short-lived credentials and no production secrets.</li>
+<li>Configure <strong>permission rules</strong> (allowed, ask and deny lists for commands and paths) and <strong>hooks</strong> that block destructive operations.</li>
+<li>Protect branches: the agent opens <strong>PRs</strong>, and humans plus CI approve.</li>
+<li>Treat repository content as untrusted input, and scan for prompt-injection patterns in issues and docs the agent reads.</li>
+<li>Use the enterprise admin controls of your coding tools (managed settings, audit logs, allowed MCP servers).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The agent can work quickly inside a bounded space, and mistakes stay contained and reversible.
+Review gates keep accountability with humans, and managed settings make the policy consistent across the organization.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1">// Managed settings for a coding agent (illustrative; deployed org-wide by IT)</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"permissions"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"allow"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"Bash(npm test:*)"</span><span class="p">,</span><span class="w"> </span><span class="s2">"Bash(git diff:*)"</span><span class="p">,</span><span class="w"> </span><span class="s2">"Edit(src/**)"</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">"ask"</span><span class="p">:</span><span class="w">   </span><span class="p">[</span><span class="s2">"Bash(git push:*)"</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">"deny"</span><span class="p">:</span><span class="w">  </span><span class="p">[</span><span class="s2">"Bash(rm -rf:*)"</span><span class="p">,</span><span class="w"> </span><span class="s2">"Bash(terraform apply:*)"</span><span class="p">,</span><span class="w"> </span><span class="s2">"Bash(kubectl delete:*)"</span><span class="p">,</span><span class="w"> </span><span class="s2">"Read(.env*)"</span><span class="p">]</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"hooks"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"PreToolUse"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">"matcher"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Bash"</span><span class="p">,</span><span class="w"> </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"./scripts/block_prod_targets.sh"</span><span class="p">}]}</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Give coding agents a sandbox, least-privilege credentials, deny rules for destructive commands, and a PR-only path to shared branches.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you roll out coding-agent policies consistently across hundreds of developers?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="coding-no-context-files">
+  <header class="ap-h">
+    <div class="ap-num">16.11</div>
+    <div>
+      <h2><a href="#coding-no-context-files">Coding agents: No repository context or conventions files</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Developers complain that the coding agent ignores the team's architecture, test framework and naming
+conventions. Every session starts with ten minutes of re-explaining.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents start each session with no persistent, repo-level guidance about build commands, conventions,
+architecture boundaries or forbidden patterns.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Inconsistent output</strong> that violates conventions and creates review churn.</li>
+<li><strong>Wasted time</strong> re-explaining context.</li>
+<li><strong>Unsafe defaults</strong> (wrong commands, wrong directories).</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-coding-no-context-files" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">New session</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">No repo guidance</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Convention violations</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Review churn</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Agent re-learns the codebase every time</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">New session</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="191.8" font-size="11" text-anchor="middle">Repo context file</text>
+<text class="dg-t dg-t-new" x="399.2" y="204.8" font-size="11" text-anchor="middle">(CLAUDE.md / AGENTS.md /</text>
+<text class="dg-t dg-t-new" x="399.2" y="217.8" font-size="11" text-anchor="middle">rules)</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Shared skills + commands</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Convention-aligned</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">changes</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-context-files)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Codified team knowledge loaded automatically</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Maintain <strong>repo context files</strong> (<code>CLAUDE.md</code>, <code>AGENTS.md</code>, <code>.cursor/rules</code>, Copilot instructions) with build and test commands, architecture map, conventions and do-not rules.</li>
+<li>Keep them <strong>short and current</strong>, and review them like code.</li>
+<li>Package recurring workflows as <strong>skills or custom commands</strong> (release notes, migrations, review checklists).</li>
+<li>Measure review comments per AI-assisted PR to see whether guidance is working.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Agents start every session with the team's conventions, so output fits the codebase and reviews get
+faster. Context files also double as onboarding documentation for humans.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="gh"># CLAUDE.md</span>
+<span class="gu">## Build &amp; test</span>
+<span class="k">-</span><span class="w"> </span><span class="sb">`make test`</span> (unit), <span class="sb">`make it`</span> (integration, needs docker)
+<span class="gu">## Architecture</span>
+<span class="k">-</span><span class="w"> </span><span class="sb">`api/`</span> → <span class="sb">`services/`</span> → <span class="sb">`repos/`</span>. Services never import from <span class="sb">`api/`</span>.
+<span class="gu">## Conventions</span>
+<span class="k">-</span><span class="w"> </span>Python 3.12, pydantic v2, no raw SQL outside <span class="sb">`repos/`</span>
+<span class="gu">## Never</span>
+<span class="k">-</span><span class="w"> </span>Edit <span class="sb">`migrations/`</span> by hand; run <span class="sb">`make migration name=...`</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Coding agents are only as good as the context they start with. Codify conventions in versioned repo context files and shared skills.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What belongs in a repo context file, and what doesn&#x27;t?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="coding-no-security-scan">
+  <header class="ap-h">
+    <div class="ap-num">16.12</div>
+    <div>
+      <h2><a href="#coding-no-security-scan">Coding agents: AI-generated code shipped without security and dependency scanning</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An AI-assisted PR adds a dependency whose name was hallucinated. An attacker had registered that
+package name with malicious code ("slopsquatting"). Another PR introduces an injection-vulnerable query.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>AI-assisted changes go through lighter review because they "look clean", and dependency additions
+aren't verified.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Hallucinated or typo-squatted packages</strong> introduce supply-chain attacks.</li>
+<li><strong>Plausible but insecure patterns</strong> (injection, weak crypto, missing authorization checks).</li>
+<li><strong>Automation complacency</strong> among reviewers.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-coding-no-security-scan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">AI-generated PR</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Light review</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Hallucinated dependency +</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">insecure query</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Merged</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Plausible code treated as safe code</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">AI-generated PR</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">SAST + secrets scan</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Dependency</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">allow-list /</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">provenance</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">AI-assisted</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">security review</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Human approval</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-coding-no-security-scan)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">AI code held to (at least) the same security bar</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Run <strong>SAST, secret scanning and SCA</strong> on every PR, and block new dependencies not on an allow-list or without verified provenance.</li>
+<li>Label AI-assisted PRs and track their findings.</li>
+<li>Add <strong>AI-assisted security review</strong> as an extra check, never a replacement for human review.</li>
+<li>Train reviewers on AI-specific failure patterns.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Supply-chain and common vulnerability classes are caught automatically, whoever wrote the code.
+Tracking AI-assisted findings shows whether the tools are improving or degrading security.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_new_dependencies</span><span class="p">(</span><span class="n">diff</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="n">added_packages</span><span class="p">(</span><span class="n">diff</span><span class="p">):</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">meta</span> <span class="ow">or</span> <span class="n">meta</span><span class="o">.</span><span class="n">age_days</span> <span class="o">&lt;</span> <span class="mi">90</span> <span class="ow">or</span> <span class="n">meta</span><span class="o">.</span><span class="n">downloads_weekly</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+            <span class="n">fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Suspicious or unknown package: </span><span class="si">{</span><span class="n">pkg</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pkg</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ALLOWLIST</span><span class="p">:</span>
+            <span class="n">require_approval</span><span class="p">(</span><span class="s2">"security"</span><span class="p">,</span> <span class="n">pkg</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>AI-generated code needs the same or a higher security bar. Scan everything and verify every new dependency.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What is slopsquatting and how do you defend against it?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="assistant-oversharing">
+  <header class="ap-h">
+    <div class="ap-num">16.13</div>
+    <div>
+      <h2><a href="#assistant-oversharing">Workplace assistants: Enterprise rollout before fixing oversharing</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Within a week of an enterprise-wide workplace-assistant rollout, employees discover they can ask
+"show me salary information" and get spreadsheets from overshared SharePoint sites.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Assistants that search the organization's content with the user's permissions are switched on without
+first cleaning up years of over-permissive sharing.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>The assistant makes oversharing discoverable.</strong> Permissions were always wrong, but search hid them through obscurity.</li>
+<li><strong>Reputational and legal exposure</strong> from HR, legal or M&amp;A content.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-assistant-oversharing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Years of overshared sites</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Assistant switched on org-wide</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Sensitive data surfaced</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">AI finds what permissions always allowed</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Permission audit</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Sensitivity labels</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">+ DLP</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Restricted search</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">scope for risky</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">sites</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Phased rollout</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Monitoring</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-assistant-oversharing)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Data-access hygiene before AI amplification</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Run <strong>oversharing assessments</strong> (access reports, "everyone" links, broad groups) and remediate high-risk sites first.</li>
+<li>Apply <strong>sensitivity labels and DLP</strong>, and exclude or restrict search on sensitive sites during remediation.</li>
+<li>Roll out in <strong>phases</strong>, starting with groups whose content is well governed.</li>
+<li>Monitor assistant interactions touching sensitive labels.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The assistant is safe because the data estate is. Phasing gives fast value to clean areas while
+remediation continues elsewhere.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">risky</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sites</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">has_everyone_links</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">member_count</span> <span class="o">&gt;</span> <span class="mi">5000</span> <span class="ow">and</span> <span class="n">s</span><span class="o">.</span><span class="n">label</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"Confidential"</span><span class="p">,</span> <span class="kc">None</span><span class="p">}]</span>
+<span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">risky</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">sensitive_hits</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">remediation</span><span class="o">.</span><span class="n">queue</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">actions</span><span class="o">=</span><span class="p">[</span><span class="s2">"remove_everyone_links"</span><span class="p">,</span> <span class="s2">"apply_label"</span><span class="p">,</span> <span class="s2">"restrict_search"</span><span class="p">])</span>
+<span class="n">rollout</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="p">[</span><span class="s2">"finance-ops"</span><span class="p">,</span> <span class="s2">"it"</span><span class="p">],</span> <span class="n">when</span><span class="o">=</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">sites_remediated_pct</span> <span class="o">&gt;=</span> <span class="mf">0.95</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Workplace assistants respect permissions perfectly, including the wrong ones. Fix oversharing before switching AI on.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you sequence a 50,000-seat assistant rollout?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="assistant-no-enablement">
+  <header class="ap-h">
+    <div class="ap-num">16.14</div>
+    <div>
+      <h2><a href="#assistant-no-enablement">Workplace assistants: Licenses with no enablement, use-case catalog or ROI tracking</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Twenty thousand assistant licenses are purchased. After six months, weekly active usage is 18%, most
+prompts are "summarize this email", and renewal is in question.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Deployment is treated as an IT rollout (provision licenses, send an announcement email) rather than
+as change management.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Low adoption:</strong> users don't know what to do with a blank prompt box.</li>
+<li><strong>Shallow use</strong> produces little measurable value.</li>
+<li><strong>Shadow AI</strong> continues where the official tool feels limited.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-assistant-no-enablement" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Licenses purchased</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Announcement email</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">18% weekly use</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Renewal at risk</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Technology rollout without behaviour change</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Persona use-case</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">catalog</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Champions +</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">training</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Prebuilt agents /</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">prompts / skills</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Value tracking</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Expand on evidence</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-ai-tools-assistant-no-enablement)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Adoption designed and measured like a product launch</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Build a <strong>use-case catalog per persona</strong> (sales, finance, legal, HR) with worked examples and prebuilt agents or skills.</li>
+<li>Train <strong>champions</strong> in each function, and run hands-on sessions on real work.</li>
+<li>Provide a <strong>sanctioned path</strong> for advanced users (custom agents, connectors) so they don't go to shadow tools.</li>
+<li>Track active usage <em>and</em> value: time saved per workflow, survey data, business KPIs.</li>
+<li>Reallocate licenses based on usage evidence.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Users learn concrete, valuable workflows, so adoption deepens. Champions spread practices peer to peer,
+and value tracking produces the ROI evidence that secures renewal and expansion.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">kpis</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"weekly_active_pct"</span><span class="p">:</span> <span class="n">active_users</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span> <span class="o">/</span> <span class="n">licensed_users</span><span class="p">(),</span>
+    <span class="s2">"advanced_use_pct"</span><span class="p">:</span>  <span class="n">users_with</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="s2">"agents"</span><span class="p">,</span> <span class="s2">"connectors"</span><span class="p">,</span> <span class="s2">"skills"</span><span class="p">])</span> <span class="o">/</span> <span class="n">active_users</span><span class="p">(</span><span class="mi">30</span><span class="p">),</span>
+    <span class="s2">"hours_saved_month"</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">minutes_saved</span> <span class="o">*</span> <span class="n">w</span><span class="o">.</span><span class="n">runs</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">tracked_workflows</span><span class="p">)</span> <span class="o">/</span> <span class="mi">60</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">reallocate</span><span class="p">(</span><span class="n">licenses</span><span class="p">,</span> <span class="n">from_</span><span class="o">=</span><span class="n">inactive_users</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">60</span><span class="p">),</span> <span class="n">to</span><span class="o">=</span><span class="n">waitlist_by_function</span><span class="p">())</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A workplace AI rollout is change management, not provisioning. Use persona playbooks, champions, sanctioned advanced paths and measured value.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you build the business case for renewing an enterprise assistant license?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="shadow-ai-ban">
+  <header class="ap-h">
+    <div class="ap-num">16.15</div>
+    <div>
+      <h2><a href="#shadow-ai-ban">Workplace assistants: Banning AI tools with no sanctioned alternative</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A firm blocks public AI chat sites. Survey data later shows 45% of staff use personal accounts on
+their phones for work tasks, including pasting client data.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Policy is prohibition only. There's no approved tool, no guidance on data classes, and no enterprise
+controls such as SSO, audit, retention or DLP.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Shadow AI</strong> moves usage to channels with zero visibility.</li>
+<li><strong>Data leakage</strong> to consumer services with unknown retention terms.</li>
+<li><strong>Lost productivity and talent frustration.</strong></li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ai-tools-shadow-ai-ban" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Block AI sites</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">No approved alternative</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="74.1" font-size="12.5" text-anchor="middle">Personal accounts on</text>
+<text class="dg-t dg-t-std" x="620.8" y="88.6" font-size="12.5" text-anchor="middle">phones</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Invisible data leakage</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Prohibition pushes usage underground</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="191.8" font-size="11" text-anchor="middle">Approved enterprise AI</text>
+<text class="dg-t dg-t-std" x="177.8" y="204.8" font-size="11" text-anchor="middle">(SSO, audit, DLP, no</text>
+<text class="dg-t dg-t-std" x="177.8" y="217.8" font-size="11" text-anchor="middle">training on data)</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Clear data-class guidance</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Easy request path for new</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">tools</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Monitoring</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-ai-tools-shadow-ai-ban)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Make the safe path the easy path</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Provide <strong>sanctioned enterprise AI tools</strong> with SSO/SCIM, audit logs, retention controls, DLP integration and contractual terms excluding training on customer data.</li>
+<li>Publish a <strong>one-page acceptable-use policy</strong> with clear data-classification rules.</li>
+<li>Offer a <strong>fast intake path</strong> for new tools and use cases.</li>
+<li>Monitor for shadow usage through CASB/SSE tools, and use the findings to improve the sanctioned offering.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Usage moves to governed channels because they're better and easier. Visibility returns, and data
+protection is enforced technically rather than by hope.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">AI_ACCEPTABLE_USE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"public"</span><span class="p">:</span>       <span class="p">[</span><span class="s2">"any approved AI tool"</span><span class="p">],</span>
+    <span class="s2">"internal"</span><span class="p">:</span>     <span class="p">[</span><span class="s2">"enterprise assistant"</span><span class="p">,</span> <span class="s2">"approved coding agents"</span><span class="p">],</span>
+    <span class="s2">"confidential"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"enterprise assistant (labelled workspaces)"</span><span class="p">,</span> <span class="s2">"private-endpoint apps"</span><span class="p">],</span>
+    <span class="s2">"restricted"</span><span class="p">:</span>   <span class="p">[</span><span class="s2">"approved in-house apps only"</span><span class="p">],</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Banning AI without a sanctioned alternative creates shadow AI. Make the governed path the easiest one.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you measure shadow AI usage?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="harness.html">← 15. Harness Engineering</a><a class="next" href="leadership.html">17. Leadership Anti-Patterns →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

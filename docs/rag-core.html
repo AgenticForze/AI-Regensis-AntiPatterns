@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retrieval &amp; RAG Core · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="active" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part A · Retrieval &amp; Knowledge</div>
+  <h1><span class="sn">3</span>Retrieval &amp; RAG Core</h1>
+  <p class="lede">The retrieve-then-generate loop is simple to demo and hard to get right. These are the failures behind &quot;the bot gave a wrong answer even though the document was there&quot;.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#naive-topk"><span>3.1</span>Naive top-k vector search with no hybrid retrieval</a><a href="#no-reranking"><span>3.2</span>No reranking stage</a><a href="#context-stuffing"><span>3.3</span>Stuffing the context window (&quot;lost in the middle&quot;)</a><a href="#no-query-rewriting"><span>3.4</span>No query rewriting or decomposition for multi-hop questions</a><a href="#answering-without-evidence"><span>3.5</span>Answering when retrieval returns nothing relevant</a></div>
+
+<article class="ap" id="naive-topk">
+  <header class="ap-h">
+    <div class="ap-num">3.1</div>
+    <div>
+      <h2><a href="#naive-topk">Naive top-k vector search with no hybrid retrieval</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A telecom support assistant gets the query "error E-4021 on router model AX3000". Vector search returns
+generic router-troubleshooting articles, not the one KB article that mentions E-4021.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The retrieval stack is one dense vector query with a fixed <code>k=5</code>. No keyword search, no metadata
+filters, no fallback.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Dense vectors are bad at exact matching.</strong> Error codes, product SKUs, names and acronyms are spread out across embedding space.</li>
+<li><strong>Recall ceiling.</strong> If the right document isn't in the top 5, no prompt engineering can recover it.</li>
+<li><strong>No structure.</strong> Questions with obvious filters ("for AX3000 only", "policies in effect in 2026") ignore that structure entirely.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-rag-core-naive-topk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Embed</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Dense top-5 only</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">LLM</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Exact codes and rare terms are missed; the recall ceiling is set by k=5</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="232.4" font-size="12.5" text-anchor="middle">Extract filters</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">BM25</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="259.4" font-size="12.5" text-anchor="middle">Dense vectors</text>
+<rect class="dg-node dg-new" x="615.6" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="225.1" font-size="12.5" text-anchor="middle">Reciprocal rank</text>
+<text class="dg-t dg-t-new" x="687.2" y="239.6" font-size="12.5" text-anchor="middle">fusion</text>
+<circle class="dg-badge-new" cx="754.8" cy="209.0" r="8"/><text class="dg-badge-t" x="754.8" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="232.4" font-size="12.5" text-anchor="middle">Top-50 → rerank → 5</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-rag-core-naive-topk)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Lexical and semantic signals combined, then narrowed by a reranker</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>hybrid retrieval with fusion</strong>:</p>
+<ul>
+<li>Run <strong>BM25/keyword</strong> and <strong>dense</strong> retrieval in parallel over the same chunks. Most enterprise search engines (OpenSearch, Elasticsearch, Azure AI Search, Vertex AI Search, pgvector with full-text) support this natively.</li>
+<li>Merge with <strong>Reciprocal Rank Fusion (RRF)</strong>, which needs no score calibration between the two systems.</li>
+<li>Extract structured filters from the query (product model, date range, region) with a small LLM call or rules, and apply them as metadata filters.</li>
+<li>Retrieve wide (k=30–50), then narrow with a reranker (next pattern).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Lexical retrieval catches exact identifiers and rare terms, and dense retrieval catches paraphrases and
+concepts. RRF combines them robustly. Retrieving wide raises the recall ceiling, and filters remove
+noise before ranking. In published benchmarks and in practice, hybrid retrieval consistently beats
+either method alone on enterprise corpora.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">rrf</span><span class="p">(</span><span class="n">rank_lists</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">60</span><span class="p">):</span>
+    <span class="n">scores</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ranks</span> <span class="ow">in</span> <span class="n">rank_lists</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">doc_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ranks</span><span class="p">):</span>
+            <span class="n">scores</span><span class="p">[</span><span class="n">doc_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">scores</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">hybrid_retrieve</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">filters</span> <span class="o">=</span> <span class="n">extract_filters</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>                    <span class="c1"># {"product": "AX3000"} via small LLM / regex</span>
+    <span class="n">flt</span> <span class="o">=</span> <span class="n">acl_filter</span><span class="p">(</span><span class="n">user</span><span class="p">)</span> <span class="o">|</span> <span class="n">filters</span>
+    <span class="n">lexical</span> <span class="o">=</span> <span class="n">bm25</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+    <span class="n">dense</span>   <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embed</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+    <span class="n">fused</span>   <span class="o">=</span> <span class="n">rrf</span><span class="p">([[</span><span class="n">h</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">lexical</span><span class="p">],</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">dense</span><span class="p">]])[:</span><span class="mi">50</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">rerank</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">fetch</span><span class="p">(</span><span class="n">fused</span><span class="p">))[:</span><span class="mi">6</span><span class="p">]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Hybrid retrieval is the production baseline. Dense-only search fails on precisely the identifiers enterprise users care about most.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you use a learned sparse model like SPLADE instead of BM25?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-reranking">
+  <header class="ap-h">
+    <div class="ap-num">3.2</div>
+    <div>
+      <h2><a href="#no-reranking">No reranking stage</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A legal research assistant retrieves 20 chunks and passes them all to the LLM. Answers are verbose,
+sometimes cite marginally related cases, and token costs are three times the forecast.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>First-stage retrieval scores (cosine similarity) are taken as final relevance. Either everything
+retrieved is sent to the model, or a small k is used and good results are cut off.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Bi-encoder similarity is coarse.</strong> It compares query and document vectors computed independently, and misses fine-grained relevance.</li>
+<li><strong>Precision/recall trade-off with no escape.</strong> Small k loses recall; large k floods context with noise, raising cost and hallucination risk.</li>
+<li><strong>Noisy context degrades answers.</strong> Irrelevant passages distract the model and dilute citations.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-rag-core-no-reranking" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Retrieve k=20</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">All 20 → prompt</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Verbose, costly answer</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Noise in context: higher cost, lower faithfulness</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Retrieve k=50</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Cross-encoder</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">rerank</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Score threshold</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Top 5 → prompt</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-rag-core-no-reranking)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Wide recall, narrow precision; context is small and relevant</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Add a <strong>two-stage retrieve-then-rerank pipeline</strong>:</p>
+<ul>
+<li>Stage 1 (cheap, wide): hybrid retrieval returns 30–100 candidates.</li>
+<li>Stage 2 (precise, narrow): a <strong>cross-encoder reranker</strong> (Cohere Rerank, Voyage, BGE-reranker, or the managed rankers in Bedrock, Vertex or Azure AI Search) scores each query–passage pair jointly.</li>
+<li>Keep the top 3–8, and <strong>drop anything under a calibrated relevance threshold</strong> even if that leaves fewer.</li>
+<li>Measure precision@k and answer faithfulness before and after.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Cross-encoders read query and passage together, so they capture relevance that vector similarity
+misses. The pipeline gets recall from the wide stage and precision from the narrow one. Smaller,
+cleaner context reduces token cost and gives the generator fewer distractors. That shows up as better
+faithfulness and shorter, better-cited answers.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">rerank</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">candidates</span><span class="p">,</span> <span class="n">top_n</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">min_score</span><span class="o">=</span><span class="mf">0.35</span><span class="p">):</span>
+    <span class="n">scored</span> <span class="o">=</span> <span class="n">reranker</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">documents</span><span class="o">=</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">])</span>  <span class="c1"># cross-encoder</span>
+    <span class="n">ranked</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">scored</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">ranked</span><span class="p">[:</span><span class="n">top_n</span><span class="p">]</span> <span class="k">if</span> <span class="n">s</span> <span class="o">&gt;=</span> <span class="n">min_score</span><span class="p">]</span>
+
+<span class="n">ctx</span> <span class="o">=</span> <span class="n">rerank</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">hybrid_retrieve</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">60</span><span class="p">))</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">ctx</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">abstain</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>              <span class="c1"># see "answering when retrieval is empty"</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Retrieve wide and cheap, rerank narrow and precise. A reranker is usually the highest-ROI single upgrade to a RAG system.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you calibrate the reranker threshold, and how does it interact with abstention?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="context-stuffing">
+  <header class="ap-h">
+    <div class="ap-num">3.3</div>
+    <div>
+      <h2><a href="#context-stuffing">Stuffing the context window (&quot;lost in the middle&quot;)</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>With million-token context windows available, a team skips retrieval and loads an entire 600-page
+procurement manual into every request. Answers miss details from the middle of the document, latency is
+high and the monthly bill is a surprise.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>"Long context replaces RAG." Whole documents, or dozens of chunks, are concatenated into the prompt in
+arbitrary order, on every turn.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Position bias.</strong> Models attend unevenly across very long inputs and often under-use information buried mid-context.</li>
+<li><strong>Cost scales with every call.</strong> Paying for hundreds of thousands of input tokens per question is rarely justified.</li>
+<li><strong>Latency.</strong> Time-to-first-token grows with input length.</li>
+<li><strong>Diluted grounding.</strong> Citations become vague when everything is in context.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-rag-core-context-stuffing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Question</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Entire manual (600 pages)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">LLM</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Slow, costly, misses</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">mid-doc facts</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Paying for everything, every time, and still missing facts</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Question</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Hybrid retrieve +</text>
+<text class="dg-t dg-t-std" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">rerank</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Order &amp; compress</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Cached stable</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">prefix</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">LLM</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-rag-core-context-stuffing)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Small, ordered, relevant context; stable parts cached</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Engineer the context deliberately:</p>
+<ul>
+<li>Retrieve and rerank to a <strong>small token budget</strong> (often 2–8K tokens of evidence).</li>
+<li><strong>Order evidence</strong>: place the most relevant passages at the start and end, and group passages from the same document.</li>
+<li><strong>Compress</strong>: extract only the relevant sentences from long passages, or summarize low-ranked passages.</li>
+<li>Use long context where it genuinely fits, such as whole-document analysis or contract comparison, and pair it with <strong>prompt caching</strong> so the stable document prefix isn't re-billed in full on every turn.</li>
+<li>Track tokens per answer as a cost KPI.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Focused context gives the model fewer distractors, so answers are more faithful and citations precise.
+Token cost and latency fall roughly with input size. Caching makes legitimate long-context use
+affordable. The design uses long context as a tool for specific jobs rather than a substitute for retrieval.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_context</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">passages</span><span class="p">,</span> <span class="n">budget_tokens</span><span class="o">=</span><span class="mi">6000</span><span class="p">):</span>
+    <span class="n">passages</span> <span class="o">=</span> <span class="n">rerank</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">passages</span><span class="p">,</span> <span class="n">top_n</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+    <span class="n">passages</span> <span class="o">=</span> <span class="p">[</span><span class="n">compress</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span> <span class="k">if</span> <span class="n">tokens</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">800</span> <span class="k">else</span> <span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">passages</span><span class="p">]</span>   <span class="c1"># sentence extraction</span>
+    <span class="n">ordered</span>  <span class="o">=</span> <span class="n">passages</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">passages</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">][::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>          <span class="c1"># strongest at both edges</span>
+    <span class="n">ctx</span><span class="p">,</span> <span class="n">used</span> <span class="o">=</span> <span class="p">[],</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">used</span> <span class="o">+</span> <span class="n">tokens</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">budget_tokens</span><span class="p">:</span> <span class="k">break</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"&lt;source id='</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">doc_id</span><span class="si">}</span><span class="s2">#</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">chunk</span><span class="si">}</span><span class="s2">'&gt;</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&lt;/source&gt;"</span><span class="p">);</span> <span class="n">used</span> <span class="o">+=</span> <span class="n">tokens</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+
+<span class="c1"># Long-document analysis path: cache the document prefix, vary only the question</span>
+<span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="p">[{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">manual_text</span><span class="p">,</span> <span class="s2">"cache"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}],</span> <span class="n">user</span><span class="o">=</span><span class="n">question</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Context is a budget, not a bucket. Long windows are great for whole-document tasks, but retrieval plus ordering plus caching beats stuffing on cost, latency and accuracy.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you choose long-context over RAG, and how would you prove it with evaluation?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-query-rewriting">
+  <header class="ap-h">
+    <div class="ap-num">3.4</div>
+    <div>
+      <h2><a href="#no-query-rewriting">No query rewriting or decomposition for multi-hop questions</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A wealth-management assistant is asked "How did our ESG fund's fees compare to the market average the
+year after the new SEC rule?" The answer is vague, because no single chunk contains all of that.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The user's raw question, conversational context and all, is embedded and searched once. Follow-ups such
+as "and what about the bond fund?" are searched without the earlier context.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Multi-hop questions need several facts</strong> from different documents (which rule, which year, fund fees, market average). One query embedding can't point at all of them.</li>
+<li><strong>Conversational references</strong> ("it", "that fund", "the year after") carry no meaning without the history.</li>
+<li><strong>Vocabulary mismatch.</strong> Users say "fees", documents say "total expense ratio".</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-rag-core-no-query-rewriting" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">&quot;…and the bond fund?&quot;</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Embed raw text</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">One search</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Irrelevant hits</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Pronouns and multi-hop intent are lost</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Question + history</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Rewrite</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(standalone)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Decompose →</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">sub-queries</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Parallel retrieval</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Synthesize</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-rag-core-no-query-rewriting)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Each sub-question retrieves its own evidence; the answer composes them</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Insert a <strong>query-understanding step</strong> before retrieval:</p>
+<ul>
+<li><strong>Condense:</strong> rewrite the latest turn plus history into a standalone question.</li>
+<li><strong>Decompose:</strong> for complex questions, have a small model produce sub-queries with dependencies (find the rule date → find fee data for the next year → find the market benchmark).</li>
+<li><strong>Expand:</strong> add domain synonyms or a hypothetical answer passage (HyDE) to bridge vocabulary gaps.</li>
+<li>Retrieve per sub-query (in parallel where independent), then synthesize with citations per fact.</li>
+<li>Route simple questions straight through, so you only pay for decomposition when it's needed.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Each sub-query is focused, so it lands on the right evidence. Standalone rewriting fixes conversational
+reference failures, which are among the most common in chat logs. Routing keeps latency and cost low
+for the majority of simple questions. Per-fact citations make the composed answer auditable.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PLAN</span> <span class="o">=</span> <span class="s2">"""Rewrite the question as standalone using the history, then split it into the</span>
+<span class="s2">minimal ordered sub-questions needed. Return JSON: {"standalone": str, "steps": [{"q": str, "depends_on": [int]}]}"""</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">answer</span><span class="p">(</span><span class="n">question</span><span class="p">,</span> <span class="n">history</span><span class="p">):</span>
+    <span class="n">plan</span> <span class="o">=</span> <span class="n">small_llm</span><span class="o">.</span><span class="n">json</span><span class="p">(</span><span class="n">PLAN</span><span class="p">,</span> <span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">6</span><span class="p">:],</span> <span class="n">question</span><span class="o">=</span><span class="n">question</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">plan</span><span class="p">[</span><span class="s2">"steps"</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">rag</span><span class="p">(</span><span class="n">plan</span><span class="p">[</span><span class="s2">"standalone"</span><span class="p">])</span>
+    <span class="n">facts</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">plan</span><span class="p">[</span><span class="s2">"steps"</span><span class="p">]):</span>                <span class="c1"># resolve dependencies in order</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">fill</span><span class="p">(</span><span class="n">step</span><span class="p">[</span><span class="s2">"q"</span><span class="p">],</span> <span class="p">{</span><span class="n">d</span><span class="p">:</span> <span class="n">facts</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s2">"depends_on"</span><span class="p">]})</span>
+        <span class="n">facts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">rag</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">return_evidence</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">synthesize</span><span class="p">(</span><span class="n">plan</span><span class="p">[</span><span class="s2">"standalone"</span><span class="p">],</span> <span class="n">facts</span><span class="p">)</span>            <span class="c1"># cites per-fact sources</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Users don&#x27;t write search queries, they ask compound questions in conversation. Rewrite, decompose and route before you retrieve.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you stop decomposition from adding latency to simple questions?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="answering-without-evidence">
+  <header class="ap-h">
+    <div class="ap-num">3.5</div>
+    <div>
+      <h2><a href="#answering-without-evidence">Answering when retrieval returns nothing relevant</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A benefits assistant is asked about a dental plan the company doesn't offer. Nothing relevant is
+retrieved, yet the assistant confidently describes coverage limits, which it invented from general knowledge.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Whatever is retrieved, even low-relevance or empty results, goes into the prompt, and the model is
+always expected to answer. There's no notion of "insufficient evidence".</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Hallucination fills the gap.</strong> Models are trained to be helpful, and with weak context they fall back on general knowledge that may not apply to this company.</li>
+<li><strong>Confident tone.</strong> Users can't tell grounded answers from invented ones.</li>
+<li><strong>Liability.</strong> In HR, legal, medical or financial contexts, a fabricated answer can create real obligations or harm.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-rag-core-answering-without-evidence" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="261.2" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="81.4" font-size="12.5" text-anchor="middle">Retrieve</text>
+<rect class="dg-node dg-bad" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="74.1" font-size="12.5" text-anchor="middle">Weak / empty</text>
+<text class="dg-t dg-t-bad" x="510.0" y="88.6" font-size="12.5" text-anchor="middle">context</text>
+<circle class="dg-badge-bad" cx="577.6" cy="58.0" r="8"/><text class="dg-badge-t" x="577.6" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="615.6" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="81.4" font-size="12.5" text-anchor="middle">LLM must answer</text>
+<rect class="dg-node dg-std" x="792.8" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="81.4" font-size="12.5" text-anchor="middle">Fabricated answer</text>
+<line class="dg-edge" x1="230.2" y1="77.0" x2="257.2" y2="77.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<line class="dg-edge" x1="407.4" y1="77.0" x2="434.4" y2="77.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<line class="dg-edge" x1="584.6" y1="77.0" x2="611.6" y2="77.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<line class="dg-edge" x1="761.8" y1="77.0" x2="788.8" y2="77.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No evidence threshold, so the model improvises</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-std" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="232.4" font-size="12.5" text-anchor="middle">Retrieve + rerank</text>
+<rect class="dg-node dg-new" x="527.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="232.4" font-size="12.5" text-anchor="middle">Evidence gate</text>
+<circle class="dg-badge-new" cx="710.5" cy="209.0" r="8"/><text class="dg-badge-t" x="710.5" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Answer with citations</text>
+<rect class="dg-node dg-std" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Abstain + route to human</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-rag-core-answering-without-evidence)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Abstention is a designed, measured outcome</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Make <strong>abstention a first-class path</strong>:</p>
+<ul>
+<li>Gate on evidence: if no passage passes the reranker threshold, don't generate a substantive answer.</li>
+<li>Instruct and test the generator to answer <strong>only from provided sources</strong>, and to say what's missing when evidence is partial.</li>
+<li>Return a helpful fallback, such as clarifying questions, related topics that <em>are</em> covered, or a hand-off to a human or ticket.</li>
+<li>Run a post-generation <strong>groundedness check</strong> for high-risk domains.</li>
+<li>Track abstention rate and "false abstention" as quality KPIs. Spikes reveal content gaps worth filling.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The system no longer has to choose between silence and invention. Users learn that answers come with
+evidence, which builds trust. Abstention logs become a prioritized content backlog. Risk teams get a
+measurable control rather than a promise that the model will behave.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">grounded_answer</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">ev</span> <span class="o">=</span> <span class="n">rerank</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">hybrid_retrieve</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">),</span> <span class="n">min_score</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ev</span><span class="p">:</span>
+        <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"abstain.no_evidence"</span><span class="p">);</span> <span class="n">gaps</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Answer</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">"I couldn't find this in the approved policy documents."</span><span class="p">,</span>
+                      <span class="n">suggestions</span><span class="o">=</span><span class="n">related_topics</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">handoff</span><span class="o">=</span><span class="n">ticket_link</span><span class="p">(</span><span class="n">q</span><span class="p">))</span>
+    <span class="n">draft</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">SYSTEM_GROUNDED</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="n">ev</span><span class="p">,</span> <span class="n">question</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+    <span class="n">check</span> <span class="o">=</span> <span class="n">groundedness_judge</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">ev</span><span class="p">)</span>                 <span class="c1"># claims supported by sources?</span>
+    <span class="k">if</span> <span class="n">check</span><span class="o">.</span><span class="n">unsupported_claims</span><span class="p">:</span>
+        <span class="n">draft</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">revise</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">remove</span><span class="o">=</span><span class="n">check</span><span class="o">.</span><span class="n">unsupported_claims</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Answer</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">draft</span><span class="p">,</span> <span class="n">citations</span><span class="o">=</span><span class="n">cite</span><span class="p">(</span><span class="n">ev</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>&quot;I don&#x27;t know, here&#x27;s who does&quot; is a feature. Design and measure abstention instead of letting the model improvise.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you balance abstention rate against user frustration?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="embeddings.html">← 2. Embeddings &amp; Vector Stores</a><a class="next" href="advanced-rag.html">4. Advanced RAG →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

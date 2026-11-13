@@ -1,0 +1,228 @@
+id: multi-agent
+num: 8
+short: Multi-Agent Systems
+title: Multi-Agent Systems
+summary: Multiple agents can parallelize work and isolate context. They also multiply cost, latency and failure modes. These anti-patterns show the difference.
+patterns:
+  - id: org-chart-agents
+    title: Multi-agent for its own sake ("the org chart in code")
+    tags: [Cost, Reliability]
+    scenario: |
+      A marketing team builds a "CMO agent" that manages a "copywriter agent", an "SEO agent", a "brand agent"
+      and a "legal agent" to write a product description. It takes 3 minutes, costs 40× a single call, and the
+      output is worse than one good prompt.
+    antipattern: |
+      Agents are created to mirror human job titles. Each hand-off is a conversation, and the topology is
+      chosen for the demo narrative.
+    fails: |
+      - **Information loss at every hand-off.** Each agent sees a summary of a summary.
+      - **Cost and latency multiply** with the number of agents and rounds of conversation.
+      - **Coordination failures.** Agents disagree, repeat work, or wait on each other.
+      - **Harder evaluation.** Responsibility for a bad output is spread across agents.
+    diagram:
+      bad: ["Brief", "!CMO agent", "Copy | SEO | Brand | Legal agents", "!Rounds of debate", "3 min, 40× cost"]
+      bad_note: "Topology mirrors an org chart, not the problem"
+      good: ["Brief", "Single agent + tools", "+Parallel sub-agents (independent work only)", "+Deterministic checks", "Output"]
+      good_note: "Add agents only for parallelism or context isolation, proven by eval"
+    solution: |
+      Use multiple agents **only for specific, measurable reasons**:
+
+      - **Parallelism:** independent subtasks such as researching ten competitors at once.
+      - **Context isolation:** subtasks that would otherwise flood one context window, such as reading many large documents.
+      - **Separation of privilege:** different tools or data permissions per agent.
+
+      Otherwise, use one capable agent with good tools, plus deterministic checks (a legal-term linter, SEO rules)
+      instead of LLM "reviewer" agents. Benchmark the multi-agent design against the single-agent baseline on
+      quality, cost and latency.
+    works: |
+      Each additional agent has to justify itself in throughput, context capacity or security. Deterministic
+      checks are cheaper and more reliable than agent debates. The simpler architecture is easier to evaluate,
+      and multi-agent designs remain available when evidence supports them.
+    code: |
+      # Orchestrator–worker only where subtasks are independent and context-heavy
+      async def competitive_research(companies):
+          briefs = await asyncio.gather(*[
+              sub_agent(f"Research {c}: pricing, launches, hiring signals",
+                        tools=[web_search, fetch], budget=Budget(steps=12)) for c in companies])
+          return lead_agent.synthesize(briefs)       # sub-agents return condensed findings, not transcripts
+
+      # Product copy: single agent + deterministic checks, no agent "committee"
+      draft = llm.generate(COPY_PROMPT, product=p)
+      issues = legal_linter(draft) + seo_rules(draft) + brand_terms(draft)
+      final = llm.revise(draft, issues) if issues else draft
+    takeaway: "Agents aren't headcount. Add one only for parallelism, context isolation or privilege separation, and prove it beats the single-agent baseline."
+    followup: "What metrics would convince you a multi-agent design is worth its cost?"
+
+  - id: chatty-agents
+    title: Chatty agents passing full transcripts
+    tags: [Cost, Latency]
+    scenario: |
+      In a supply-chain planning system, each agent forwards its entire conversation history to the next.
+      By the fourth agent, the context is 180K tokens and most of it is irrelevant intermediate reasoning.
+    antipattern: |
+      Agents communicate through free-form natural-language chat, passing complete transcripts and intermediate
+      tool outputs to each other.
+    fails: |
+      - **Token cost grows with every hop.**
+      - **Signal drowns in noise.** Downstream agents struggle to find the facts they need.
+      - **No contract.** Nobody knows what an agent is required to provide or can rely on receiving.
+    diagram:
+      bad: ["Agent A (full transcript)", "!→ Agent B (+ A's transcript)", "!→ Agent C (+ A+B)", "180K-token context"]
+      bad_note: "Context and cost compound per hop"
+      good: ["Agent A", "+Typed hand-off artifact", "Agent B", "+Typed hand-off artifact", "Agent C"]
+      good_note: "Agents exchange compact, validated contracts; artifacts stored by reference"
+    solution: |
+      Use **typed hand-off contracts**:
+
+      - Define the output schema for each agent (findings, decisions, open questions, artifact references).
+      - Pass large artifacts **by reference** (file or blob IDs), not inline.
+      - Summarize or compress before hand-off. Discard raw tool output and scratch reasoning.
+      - Validate hand-offs, and reject or repair malformed ones.
+    works: |
+      Context stays small and relevant, so cost and latency stay roughly flat as the pipeline grows. Contracts
+      make each agent independently testable and replaceable, and references keep heavy data out of prompts
+      while staying accessible when needed.
+    code: |
+      class DemandForecastHandoff(BaseModel):
+          sku_forecasts: list[SkuForecast]          # compact, typed
+          assumptions: list[str]
+          risks: list[str]
+          artifact_refs: dict[str, str]             # {"model_run": "s3://.../run-8812.parquet"}
+
+      fc = forecaster.run(task, output_schema=DemandForecastHandoff)
+      plan = supply_planner.run(goal="build replenishment plan", inputs=fc.model_dump())   # no transcript
+    takeaway: "Agents should exchange contracts, not conversations. Use typed hand-offs, pass artifacts by reference, and throw away scratch work."
+    followup: "How would you version a hand-off schema when two agents are owned by different teams?"
+
+  - id: no-supervisor
+    title: No supervisor, contract or termination condition
+    tags: [Reliability]
+    scenario: |
+      A peer-to-peer group of "researcher", "critic" and "writer" agents debates a market-entry memo. The critic
+      always finds something to improve, so the conversation never converges and is cut off by a timeout.
+    antipattern: |
+      Agents talk freely in a group chat with no orchestrator, no defined completion criteria and no
+      authority to decide when the work is done.
+    fails: |
+      - **No convergence.** Critique loops can run forever.
+      - **No accountability.** No single component owns the final result or the decision to stop.
+      - **Unpredictable control flow** that can't be tested.
+    diagram:
+      bad: ["Researcher", "!↔ Critic ↔ Writer (free chat)", "No stop rule", "Timeout"]
+      bad_note: "Peer debate without authority or exit criteria"
+      good: ["Supervisor (plan + criteria)", "Workers (bounded tasks)", "+Rubric check", "Accept | Max 2 revisions → human"]
+      good_note: "Explicit ownership, acceptance criteria and revision limits"
+    solution: |
+      Use an explicit **orchestration topology**:
+
+      - **Supervisor/orchestrator** owns the plan, assigns bounded tasks, and decides completion.
+      - **Acceptance criteria** as a rubric (sections present, sources cited, numbers reconciled), checked by code where possible.
+      - **Revision limits**: at most N critique rounds, then escalate to a human with the open issues.
+      - Express the topology as a graph with explicit edges and conditions, not as free chat.
+    works: |
+      There's always one owner of "done". Rubric-based acceptance makes quality objective and testable.
+      Revision limits bound cost and guarantee termination, and the graph topology is reviewable and testable
+      like any other code.
+    code: |
+      def supervise(goal):
+          plan = supervisor.plan(goal)                       # bounded tasks with owners
+          results = {t.id: workers[t.role].run(t) for t in plan.tasks}
+          draft = writer.run(goal, results)
+          for attempt in range(2):                           # revision limit
+              gaps = rubric.check(draft)                     # deterministic + judge criteria
+              if not gaps: return draft
+              draft = writer.revise(draft, gaps)
+          return escalate_to_human(draft, open_issues=rubric.check(draft))
+    takeaway: "Every multi-agent system needs an owner of \"done\": a supervisor, acceptance criteria and a revision limit."
+    followup: "Compare supervisor, hierarchical and swarm topologies. When would you use each?"
+
+  - id: shared-mutable-memory
+    title: Shared mutable memory without concurrency control
+    tags: [Reliability]
+    scenario: |
+      Parallel agents processing insurance claims all read and write a shared "case notes" scratchpad. Two
+      agents overwrite each other's updates, and one claim is approved on the basis of another claim's notes.
+    antipattern: |
+      Agents share one global blackboard (a dict, document or memory store) with unrestricted read/write
+      access and no keys, versions or locks.
+    fails: |
+      - **Race conditions and lost updates** when agents run in parallel.
+      - **Cross-contamination** between unrelated tasks or customers.
+      - **Unattributable state.** Nobody knows which agent wrote what, or when.
+    diagram:
+      bad: ["Agent 1 | Agent 2 | Agent 3", "!Shared global scratchpad", "Lost updates / cross-case data"]
+      bad_note: "Concurrent unscoped writes"
+      good: ["Agent 1 | Agent 2 | Agent 3", "+Scoped state (per case)", "+Append-only events | Versioned writes", "+Reducer merges"]
+      good_note: "Isolated, attributable, conflict-free state"
+    solution: |
+      Treat shared agent state as a **concurrent data structure**:
+
+      - **Scope** state by task, case or tenant. Agents get only the keys they need.
+      - Prefer **append-only event logs** with reducers that merge updates deterministically (the pattern LangGraph state reducers use).
+      - Use **optimistic concurrency** (version numbers, compare-and-swap) for mutable records.
+      - Record `writer_agent`, timestamp and step for every write.
+    works: |
+      Scoping prevents cross-contamination by construction. Append-only logs plus reducers remove lost
+      updates and give a full history. Optimistic locking surfaces conflicts instead of hiding them, and
+      attribution makes debugging and audit straightforward.
+    code: |
+      from typing import Annotated
+      import operator
+
+      class ClaimState(TypedDict):
+          claim_id: str
+          findings: Annotated[list[Finding], operator.add]     # append-only; parallel writes merge
+          decision: Decision | None
+
+      def write_decision(store, claim_id, decision, expected_version, agent):
+          ok = store.compare_and_set(key=f"claim:{claim_id}:decision", value=decision,
+                                     version=expected_version, meta={"writer": agent, "ts": now()})
+          if not ok: raise ConflictError("decision changed by another agent; re-read and retry")
+    takeaway: "Shared agent memory is a concurrency problem. Scope it, append rather than overwrite, version mutable records, and attribute every write."
+    followup: "How would you design state for agents running across multiple regions?"
+
+  - id: cascading-failures
+    title: Cascading failures with no circuit breakers
+    tags: [Reliability, Cost]
+    scenario: |
+      A data-extraction agent starts returning malformed results after an upstream API change. Three downstream
+      agents keep consuming its output, compounding errors, and 4,000 incorrect records are written to the ERP before anyone notices.
+    antipattern: |
+      Agents trust each other's outputs implicitly. There's no validation between stages, no health tracking
+      per agent, and no automatic stop when error rates spike.
+    fails: |
+      - **Errors propagate and amplify** through the chain.
+      - **No blast-radius control.** Bad output reaches systems of record.
+      - **Late detection.** Problems are found by downstream users, not by monitoring.
+    diagram:
+      bad: ["Extractor (broken)", "!→ Enricher", "!→ Validator agent", "!→ ERP write", "4,000 bad records"]
+      bad_note: "Implicit trust between stages"
+      good: ["Extractor", "+Contract validation", "+Circuit breaker (error rate)", "Downstream agents", "+Quarantine before write"]
+      good_note: "Failures contained at the stage where they start"
+    solution: |
+      Apply **resilience engineering** between agents:
+
+      - Validate every hand-off against its schema and invariants.
+      - Track per-agent error and validation-failure rates. **Open a circuit breaker** when a threshold is crossed, pausing the stage and alerting.
+      - Write to systems of record through a **staging/quarantine** area with reconciliation checks before commit.
+      - Use canary releases and anomaly detection on output distributions (volumes, value ranges).
+    works: |
+      Bad output is stopped at the first boundary, not discovered in the ERP. Circuit breakers turn a silent
+      cascade into a visible incident with bounded damage, and staging writes give a final gate that is cheap
+      to roll back.
+    code: |
+      class AgentBreaker:
+          def __init__(self, name, threshold=0.05, window=200):
+              self.name, self.threshold, self.results = name, threshold, deque(maxlen=window)
+          def record(self, ok): self.results.append(ok)
+          @property
+          def open(self): return len(self.results) > 50 and 1 - mean(self.results) > self.threshold
+
+      def stage(agent, payload, schema, breaker):
+          if breaker.open: raise StagePaused(agent.name)
+          out = agent.run(payload)
+          ok = schema.validate(out) and invariants_hold(out)
+          breaker.record(ok)
+          return out if ok else quarantine(out)
+    takeaway: "Agent pipelines need the resilience patterns of distributed systems: contract checks, circuit breakers and staged writes."
+    followup: "How would you detect semantic drift that still passes schema validation?"

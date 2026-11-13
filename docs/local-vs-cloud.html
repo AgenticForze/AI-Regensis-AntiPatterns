@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local LLMs vs Hyperscaler Hosting (Cost Management) · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="active" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part E · Platforms &amp; Economics</div>
+  <h1><span class="sn">14</span>Local LLMs vs Hyperscaler Hosting (Cost Management)</h1>
+  <p class="lede">Self-hosting open-weight models can cut costs dramatically or burn money quietly. The difference is usage level, utilization and operational maturity.</p>
+  <span class="pill">6 anti-patterns</span>
+</div>
+<div class="prose"><h3>The deployment spectrum</h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Examples</th>
+<th>You pay for</th>
+<th>You operate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Managed API (pay per token)</td>
+<td>Bedrock, Foundry Models, Agent Platform, first-party model APIs</td>
+<td>Tokens</td>
+<td>Nothing below the API</td>
+</tr>
+<tr>
+<td>Reserved / provisioned capacity</td>
+<td>Provisioned Throughput, PTUs</td>
+<td>Committed capacity</td>
+<td>Capacity planning</td>
+</tr>
+<tr>
+<td>Self-hosted on cloud GPUs</td>
+<td>vLLM / SGLang / TGI on EKS, GKE, AKS; SageMaker; NVIDIA NIM</td>
+<td>GPU hours (busy or idle)</td>
+<td>Serving stack, scaling, patching, model lifecycle</td>
+</tr>
+<tr>
+<td>On-prem / edge</td>
+<td>Ollama, llama.cpp, NIM on owned hardware, AI PCs</td>
+<td>Capex + power + staff</td>
+<td>Everything</td>
+</tr>
+</tbody>
+</table></div>
+<figure class="fig"><svg class="dg" viewBox="0 0 960 400" role="img" xmlns="http://www.w3.org/2000/svg">
+<line class="dg-grid" x1="80" x2="920" y1="340.0" y2="340.0"/>
+<text class="dg-axis" x="70" y="344.0" text-anchor="end" font-size="11">$0k</text>
+<line class="dg-grid" x1="80" x2="920" y1="262.5" y2="262.5"/>
+<text class="dg-axis" x="70" y="266.5" text-anchor="end" font-size="11">$9k</text>
+<line class="dg-grid" x1="80" x2="920" y1="185.0" y2="185.0"/>
+<text class="dg-axis" x="70" y="189.0" text-anchor="end" font-size="11">$18k</text>
+<line class="dg-grid" x1="80" x2="920" y1="107.5" y2="107.5"/>
+<text class="dg-axis" x="70" y="111.5" text-anchor="end" font-size="11">$27k</text>
+<line class="dg-grid" x1="80" x2="920" y1="30.0" y2="30.0"/>
+<text class="dg-axis" x="70" y="34.0" text-anchor="end" font-size="11">$36k</text>
+<text class="dg-axis" x="80.0" y="360" text-anchor="middle" font-size="11">0B</text>
+<text class="dg-axis" x="248.0" y="360" text-anchor="middle" font-size="11">2B</text>
+<text class="dg-axis" x="416.0" y="360" text-anchor="middle" font-size="11">4B</text>
+<text class="dg-axis" x="584.0" y="360" text-anchor="middle" font-size="11">6B</text>
+<text class="dg-axis" x="752.0" y="360" text-anchor="middle" font-size="11">8B</text>
+<text class="dg-axis" x="920.0" y="360" text-anchor="middle" font-size="11">10B</text>
+<text class="dg-axis" x="500.0" y="386" text-anchor="middle" font-size="12">Monthly token volume (billions)</text>
+<text class="dg-axis" x="18" y="185.0" text-anchor="middle" font-size="12" transform="rotate(-90 18 185.0)">Monthly cost (illustrative)</text>
+<path class="dg-line dg-line-a" d="M80.0,340.0 L84.2,338.6 L88.4,337.2 L92.6,335.9 L96.8,334.5 L101.0,333.1 L105.2,331.7 L109.4,330.4 L113.6,329.0 L117.8,327.6 L122.0,326.2 L126.2,324.8 L130.4,323.5 L134.6,322.1 L138.8,320.7 L143.0,319.3 L147.2,318.0 L151.4,316.6 L155.6,315.2 L159.8,313.8 L164.0,312.4 L168.2,311.1 L172.4,309.7 L176.6,308.3 L180.8,306.9 L185.0,305.6 L189.2,304.2 L193.4,302.8 L197.6,301.4 L201.8,300.0 L206.0,298.7 L210.2,297.3 L214.4,295.9 L218.6,294.5 L222.8,293.2 L227.0,291.8 L231.2,290.4 L235.4,289.0 L239.6,287.6 L243.8,286.3 L248.0,284.9 L252.2,283.5 L256.4,282.1 L260.6,280.8 L264.8,279.4 L269.0,278.0 L273.2,276.6 L277.4,275.2 L281.6,273.9 L285.8,272.5 L290.0,271.1 L294.2,269.7 L298.4,268.4 L302.6,267.0 L306.8,265.6 L311.0,264.2 L315.2,262.8 L319.4,261.5 L323.6,260.1 L327.8,258.7 L332.0,257.3 L336.2,256.0 L340.4,254.6 L344.6,253.2 L348.8,251.8 L353.0,250.4 L357.2,249.1 L361.4,247.7 L365.6,246.3 L369.8,244.9 L374.0,243.6 L378.2,242.2 L382.4,240.8 L386.6,239.4 L390.8,238.0 L395.0,236.7 L399.2,235.3 L403.4,233.9 L407.6,232.5 L411.8,231.2 L416.0,229.8 L420.2,228.4 L424.4,227.0 L428.6,225.6 L432.8,224.3 L437.0,222.9 L441.2,221.5 L445.4,220.1 L449.6,218.8 L453.8,217.4 L458.0,216.0 L462.2,214.6 L466.4,213.2 L470.6,211.9 L474.8,210.5 L479.0,209.1 L483.2,207.7 L487.4,206.4 L491.6,205.0 L495.8,203.6 L500.0,202.2 L504.2,200.8 L508.4,199.5 L512.6,198.1 L516.8,196.7 L521.0,195.3 L525.2,194.0 L529.4,192.6 L533.6,191.2 L537.8,189.8 L542.0,188.4 L546.2,187.1 L550.4,185.7 L554.6,184.3 L558.8,182.9 L563.0,181.6 L567.2,180.2 L571.4,178.8 L575.6,177.4 L579.8,176.0 L584.0,174.7 L588.2,173.3 L592.4,171.9 L596.6,170.5 L600.8,169.2 L605.0,167.8 L609.2,166.4 L613.4,165.0 L617.6,163.6 L621.8,162.3 L626.0,160.9 L630.2,159.5 L634.4,158.1 L638.6,156.8 L642.8,155.4 L647.0,154.0 L651.2,152.6 L655.4,151.2 L659.6,149.9 L663.8,148.5 L668.0,147.1 L672.2,145.7 L676.4,144.4 L680.6,143.0 L684.8,141.6 L689.0,140.2 L693.2,138.8 L697.4,137.5 L701.6,136.1 L705.8,134.7 L710.0,133.3 L714.2,132.0 L718.4,130.6 L722.6,129.2 L726.8,127.8 L731.0,126.4 L735.2,125.1 L739.4,123.7 L743.6,122.3 L747.8,120.9 L752.0,119.6 L756.2,118.2 L760.4,116.8 L764.6,115.4 L768.8,114.0 L773.0,112.7 L777.2,111.3 L781.4,109.9 L785.6,108.5 L789.8,107.2 L794.0,105.8 L798.2,104.4 L802.4,103.0 L806.6,101.6 L810.8,100.3 L815.0,98.9 L819.2,97.5 L823.4,96.1 L827.6,94.8 L831.8,93.4 L836.0,92.0 L840.2,90.6 L844.4,89.2 L848.6,87.9 L852.8,86.5 L857.0,85.1 L861.2,83.7 L865.4,82.4 L869.6,81.0 L873.8,79.6 L878.0,78.2 L882.2,76.8 L886.4,75.5 L890.6,74.1 L894.8,72.7 L899.0,71.3 L903.2,70.0 L907.4,68.6 L911.6,67.2 L915.8,65.8 L920.0,64.4"/>
+<path class="dg-line dg-line-b" d="M80.0,219.4 L84.2,219.3 L88.4,219.2 L92.6,219.1 L96.8,218.9 L101.0,218.8 L105.2,218.7 L109.4,218.5 L113.6,218.4 L117.8,218.3 L122.0,218.2 L126.2,218.0 L130.4,217.9 L134.6,217.8 L138.8,217.6 L143.0,217.5 L147.2,217.4 L151.4,217.2 L155.6,217.1 L159.8,217.0 L164.0,216.9 L168.2,216.7 L172.4,216.6 L176.6,216.5 L180.8,216.3 L185.0,216.2 L189.2,216.1 L193.4,216.0 L197.6,215.8 L201.8,215.7 L206.0,215.6 L210.2,215.4 L214.4,215.3 L218.6,215.2 L222.8,215.1 L227.0,214.9 L231.2,214.8 L235.4,214.7 L239.6,214.5 L243.8,214.4 L248.0,214.3 L252.2,214.1 L256.4,214.0 L260.6,213.9 L264.8,213.8 L269.0,213.6 L273.2,213.5 L277.4,213.4 L281.6,213.2 L285.8,213.1 L290.0,213.0 L294.2,212.9 L298.4,212.7 L302.6,212.6 L306.8,212.5 L311.0,212.3 L315.2,212.2 L319.4,212.1 L323.6,212.0 L327.8,211.8 L332.0,177.2 L336.2,177.1 L340.4,177.0 L344.6,176.9 L348.8,176.7 L353.0,176.6 L357.2,176.5 L361.4,176.3 L365.6,176.2 L369.8,176.1 L374.0,176.0 L378.2,175.8 L382.4,175.7 L386.6,175.6 L390.8,175.4 L395.0,175.3 L399.2,175.2 L403.4,175.1 L407.6,174.9 L411.8,174.8 L416.0,174.7 L420.2,174.5 L424.4,174.4 L428.6,174.3 L432.8,174.1 L437.0,174.0 L441.2,173.9 L445.4,173.8 L449.6,173.6 L453.8,173.5 L458.0,173.4 L462.2,173.2 L466.4,173.1 L470.6,173.0 L474.8,172.9 L479.0,172.7 L483.2,172.6 L487.4,172.5 L491.6,172.3 L495.8,172.2 L500.0,172.1 L504.2,172.0 L508.4,171.8 L512.6,171.7 L516.8,171.6 L521.0,171.4 L525.2,171.3 L529.4,171.2 L533.6,171.0 L537.8,170.9 L542.0,170.8 L546.2,170.7 L550.4,170.5 L554.6,170.4 L558.8,170.3 L563.0,170.1 L567.2,170.0 L571.4,169.9 L575.6,169.8 L579.8,169.6 L584.0,135.1 L588.2,134.9 L592.4,134.8 L596.6,134.7 L600.8,134.5 L605.0,134.4 L609.2,134.3 L613.4,134.2 L617.6,134.0 L621.8,133.9 L626.0,133.8 L630.2,133.6 L634.4,133.5 L638.6,133.4 L642.8,133.2 L647.0,133.1 L651.2,133.0 L655.4,132.9 L659.6,132.7 L663.8,132.6 L668.0,132.5 L672.2,132.3 L676.4,132.2 L680.6,132.1 L684.8,132.0 L689.0,131.8 L693.2,131.7 L697.4,131.6 L701.6,131.4 L705.8,131.3 L710.0,131.2 L714.2,131.1 L718.4,130.9 L722.6,130.8 L726.8,130.7 L731.0,130.5 L735.2,130.4 L739.4,130.3 L743.6,130.1 L747.8,130.0 L752.0,129.9 L756.2,129.8 L760.4,129.6 L764.6,129.5 L768.8,129.4 L773.0,129.2 L777.2,129.1 L781.4,129.0 L785.6,128.9 L789.8,128.7 L794.0,128.6 L798.2,128.5 L802.4,128.3 L806.6,128.2 L810.8,128.1 L815.0,128.0 L819.2,127.8 L823.4,127.7 L827.6,127.6 L831.8,127.4 L836.0,92.9 L840.2,92.7 L844.4,92.6 L848.6,92.5 L852.8,92.3 L857.0,92.2 L861.2,92.1 L865.4,92.0 L869.6,91.8 L873.8,91.7 L878.0,91.6 L882.2,91.4 L886.4,91.3 L890.6,91.2 L894.8,91.1 L899.0,90.9 L903.2,90.8 L907.4,90.7 L911.6,90.5 L915.8,90.4 L920.0,90.3"/>
+<path class="dg-line dg-line-c" d="M80.0,340.0 L84.2,338.9 L88.4,337.8 L92.6,336.7 L96.8,335.6 L101.0,334.5 L105.2,333.4 L109.4,332.3 L113.6,331.2 L117.8,330.1 L122.0,329.0 L126.2,327.9 L130.4,326.8 L134.6,325.7 L138.8,324.6 L143.0,323.5 L147.2,322.4 L151.4,321.3 L155.6,320.2 L159.8,319.1 L164.0,318.0 L168.2,316.9 L172.4,315.8 L176.6,314.6 L180.8,313.5 L185.0,312.4 L189.2,311.3 L193.4,310.2 L197.6,309.1 L201.8,308.0 L206.0,306.9 L210.2,305.8 L214.4,304.7 L218.6,303.6 L222.8,302.5 L227.0,301.4 L231.2,300.3 L235.4,299.2 L239.6,298.1 L243.8,297.0 L248.0,295.9 L252.2,294.8 L256.4,293.7 L260.6,292.6 L264.8,291.5 L269.0,290.4 L273.2,289.3 L277.4,288.2 L281.6,287.1 L285.8,286.0 L290.0,284.9 L294.2,283.8 L298.4,282.7 L302.6,281.6 L306.8,280.5 L311.0,279.4 L315.2,278.3 L319.4,277.2 L323.6,276.1 L327.8,275.0 L332.0,273.9 L336.2,272.8 L340.4,271.7 L344.6,270.6 L348.8,269.5 L353.0,268.4 L357.2,267.3 L361.4,266.2 L365.6,265.0 L369.8,263.9 L374.0,262.8 L378.2,261.7 L382.4,260.6 L386.6,259.5 L390.8,258.4 L395.0,257.3 L399.2,256.2 L403.4,255.1 L407.6,254.0 L411.8,252.9 L416.0,251.8 L420.2,250.7 L424.4,249.6 L428.6,248.5 L432.8,247.4 L437.0,246.3 L441.2,245.2 L445.4,244.1 L449.6,243.0 L453.8,241.9 L458.0,240.8 L462.2,239.7 L466.4,238.6 L470.6,237.5 L474.8,236.4 L479.0,235.3 L483.2,234.2 L487.4,233.1 L491.6,232.0 L495.8,230.9 L500.0,229.8 L504.2,228.7 L508.4,227.6 L512.6,226.5 L516.8,225.4 L521.0,224.3 L525.2,223.2 L529.4,222.1 L533.6,221.0 L537.8,219.9 L542.0,218.8 L546.2,217.7 L550.4,216.6 L554.6,215.4 L558.8,214.3 L563.0,213.2 L567.2,212.1 L571.4,211.0 L575.6,209.9 L579.8,208.8 L584.0,207.7 L588.2,206.6 L592.4,205.5 L596.6,204.4 L600.8,203.3 L605.0,202.2 L609.2,201.1 L613.4,200.0 L617.6,198.9 L621.8,197.8 L626.0,196.7 L630.2,195.6 L634.4,194.5 L638.6,193.4 L642.8,192.3 L647.0,191.2 L651.2,190.1 L655.4,189.0 L659.6,187.9 L663.8,186.8 L668.0,185.7 L672.2,184.6 L676.4,183.5 L680.6,182.4 L684.8,181.3 L689.0,180.2 L693.2,179.1 L697.4,178.0 L701.6,176.9 L705.8,175.8 L710.0,174.7 L714.2,173.6 L718.4,172.7 L722.6,172.6 L726.8,172.5 L731.0,172.4 L735.2,172.3 L739.4,172.2 L743.6,172.1 L747.8,172.0 L752.0,171.9 L756.2,171.8 L760.4,171.7 L764.6,171.6 L768.8,171.5 L773.0,171.4 L777.2,171.3 L781.4,171.2 L785.6,171.1 L789.8,171.0 L794.0,170.9 L798.2,170.8 L802.4,170.7 L806.6,170.6 L810.8,170.5 L815.0,170.4 L819.2,170.3 L823.4,170.2 L827.6,170.1 L831.8,169.9 L836.0,142.3 L840.2,142.2 L844.4,142.1 L848.6,142.0 L852.8,141.9 L857.0,141.8 L861.2,141.7 L865.4,141.6 L869.6,141.5 L873.8,141.4 L878.0,141.3 L882.2,141.2 L886.4,141.0 L890.6,140.9 L894.8,140.8 L899.0,140.7 L903.2,140.6 L907.4,140.5 L911.6,140.4 L915.8,140.3 L920.0,140.2"/>
+<line class="dg-be" x1="718.4" x2="718.4" y1="30" y2="340"/>
+<text class="dg-be-t" x="724.4" y="44" font-size="11.5">Break-even zone</text>
+<line class="dg-line dg-line-a" x1="96" x2="118" y1="46" y2="46"/>
+<text class="dg-axis" x="126" y="50" font-size="11.5">Managed API (pay per token)</text>
+<line class="dg-line dg-line-b" x1="96" x2="118" y1="64" y2="64"/>
+<text class="dg-axis" x="126" y="68" font-size="11.5">Self-hosted GPU (fixed + step scale)</text>
+<line class="dg-line dg-line-c" x1="96" x2="118" y1="82" y2="82"/>
+<text class="dg-axis" x="126" y="86" font-size="11.5">Hybrid routing + caching</text>
+</svg><figcaption>Illustrative only. Managed APIs scale linearly with usage; self-hosted GPUs have a high fixed floor and step costs. Hybrid routing with caching tracks the lower envelope.</figcaption></figure>
+<div class="prose"><h3>What a real TCO comparison includes</h3>
+<ul>
+<li><strong>GPU cost at realistic utilization.</strong> Interactive workloads often run at 20–40% average utilization because of peaks and redundancy.</li>
+<li><strong>People:</strong> platform and MLOps engineers to run serving, autoscaling, upgrades, security patching and on-call.</li>
+<li><strong>Quality gap:</strong> an open model that's 5 points worse on your eval may need more human review, which costs more than the tokens saved.</li>
+<li><strong>Model refresh:</strong> re-evaluating and redeploying as new open models ship every few months.</li>
+<li><strong>Hidden infrastructure:</strong> load balancers, storage for weights, observability, redundancy across zones.</li>
+</ul></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#selfhost-low-volume"><span>14.1</span>Self-hosting &quot;to save money&quot; at low or spiky usage</a><a href="#token-price-only"><span>14.2</span>Comparing token prices while ignoring operations and quality</a><a href="#inefficient-serving"><span>14.3</span>Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)</a><a href="#no-hybrid-routing"><span>14.4</span>All-or-nothing hosting with no hybrid routing</a><a href="#local-equals-compliant"><span>14.5</span>Assuming &quot;local&quot; automatically means secure and compliant</a><a href="#no-cache-layer"><span>14.6</span>No caching layer in front of any model</a></div>
+
+<article class="ap" id="selfhost-low-volume">
+  <header class="ap-h">
+    <div class="ap-num">14.1</div>
+    <div>
+      <h2><a href="#selfhost-low-volume">Self-hosting &quot;to save money&quot; at low or spiky usage</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A mid-size insurer moves its claims-summary workload (~40M tokens a month) from a managed API to two
+dedicated GPU nodes running an open model. The monthly bill rises fivefold, mostly for GPUs idling overnight
+and at weekends.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Comparing the per-token API price with a theoretical per-token cost at 100% GPU utilization, then
+deploying always-on GPUs for a small or bursty workload.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Fixed costs dominate at low usage.</strong> A GPU costs the same whether it serves one request or a thousand.</li>
+<li><strong>Redundancy doubles the floor.</strong> Production needs at least two replicas across zones.</li>
+<li><strong>Bursty traffic</strong> forces provisioning for peak.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-selfhost-low-volume" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">40M tokens / month</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">2 always-on GPU nodes</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">~10% utilization</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">5× cost</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fixed GPU cost spread over too little work</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="225.1" font-size="12.5" text-anchor="middle">Measure tokens / month +</text>
+<text class="dg-t dg-t-std" x="177.8" y="239.6" font-size="12.5" text-anchor="middle">shape</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="232.4" font-size="12.5" text-anchor="middle">TCO model (incl. people)</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Below break-even →</text>
+<text class="dg-t dg-t-std" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">managed API</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="259.4" font-size="12.5" text-anchor="middle">Above → self-host</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="232.4" font-size="12.5" text-anchor="middle">Revisit quarterly</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-local-vs-cloud-selfhost-low-volume)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Decision driven by measured usage and full TCO</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Measure</strong> monthly tokens, peak-to-average ratio and latency needs per workload.</li>
+<li>Build a <strong>TCO model</strong> that includes GPU hours at realistic utilization, redundancy, engineering FTEs and the quality-adjusted cost (human review).</li>
+<li>Self-host only when steady usage is well above break-even, or when another driver (sovereignty, air-gap, latency, customization) justifies it.</li>
+<li>For bursty self-hosted workloads, use <strong>scale-to-zero</strong> serverless GPU options or batch scheduling.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The decision rests on real numbers. Low-usage workloads stay on pay-per-token pricing, where cost
+follows demand, and high-usage, steady workloads move to self-hosting where the fixed cost is spread
+across enough work to win.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">monthly_tco_selfhost</span><span class="p">(</span><span class="n">tokens_m</span><span class="p">,</span> <span class="n">gpu_hr_usd</span><span class="p">,</span> <span class="n">tokens_per_gpu_hr_m</span><span class="p">,</span> <span class="n">util</span><span class="o">=</span><span class="mf">0.35</span><span class="p">,</span> <span class="n">replicas_min</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">fte</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                         <span class="n">fte_cost</span><span class="o">=</span><span class="mi">18_000</span><span class="p">,</span> <span class="n">infra_overhead</span><span class="o">=</span><span class="mf">0.15</span><span class="p">):</span>
+    <span class="n">gpu_hours</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">replicas_min</span> <span class="o">*</span> <span class="mi">730</span><span class="p">,</span> <span class="n">tokens_m</span> <span class="o">/</span> <span class="p">(</span><span class="n">tokens_per_gpu_hr_m</span> <span class="o">*</span> <span class="n">util</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">gpu_hours</span> <span class="o">*</span> <span class="n">gpu_hr_usd</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">infra_overhead</span><span class="p">)</span> <span class="o">+</span> <span class="n">fte</span> <span class="o">*</span> <span class="n">fte_cost</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">monthly_tco_api</span><span class="p">(</span><span class="n">tokens_m</span><span class="p">,</span> <span class="n">usd_per_m_blended</span><span class="p">,</span> <span class="n">cache_hit</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">cache_discount</span><span class="o">=</span><span class="mf">0.9</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">tokens_m</span> <span class="o">*</span> <span class="n">usd_per_m_blended</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">cache_hit</span> <span class="o">*</span> <span class="n">cache_discount</span><span class="p">)</span>
+
+<span class="n">decision</span> <span class="o">=</span> <span class="s2">"self-host"</span> <span class="k">if</span> <span class="n">monthly_tco_selfhost</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.7</span> <span class="o">*</span> <span class="n">monthly_tco_api</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"managed API"</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Self-hosting trades variable cost for fixed cost. It only pays off when steady usage is high enough to keep GPUs busy, and people are counted in the TCO.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>At roughly what monthly token volume does self-hosting start to make sense, and what assumptions drive that?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="token-price-only">
+  <header class="ap-h">
+    <div class="ap-num">14.2</div>
+    <div>
+      <h2><a href="#token-price-only">Comparing token prices while ignoring operations and quality</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A business case shows a 70% saving from switching to a self-hosted open model. After launch, the
+model's lower accuracy on complex claims raises manual-review rates from 8% to 19%, wiping out the saving.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The cost comparison stops at infrastructure. Quality differences, the cost of errors and the
+operating team aren't in the model.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Errors cost more than tokens.</strong> One extra human review can cost far more than thousands of model calls.</li>
+<li><strong>The ops team is real.</strong> Serving, scaling, upgrades, security and on-call need people.</li>
+<li><strong>Upgrades aren't free.</strong> Each new open model needs evaluation, quantization testing and redeployment.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-token-price-only" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Token price A vs. B</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">&quot;70% cheaper&quot;</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Accuracy drop</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Review costs erase</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">savings</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Infrastructure-only comparison</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Eval both models</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Cost per correct outcome</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Ops + upgrade cost</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Decision on cost per</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">business outcome</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-local-vs-cloud-token-price-only)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Quality-adjusted unit economics</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Compare on <strong>cost per correct business outcome</strong>:</p>
+<p><code>cost per outcome = (inference + infra + ops) / successful outcomes + error rate × cost of an error</code></p>
+<ul>
+<li>Run both models on the same eval suite. Measure accuracy per segment and downstream effects (escalations, rework).</li>
+<li>Price the error cost with the business (review minutes, customer impact, regulatory exposure).</li>
+<li>Include operating headcount and an upgrade cadence in the model.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The metric captures what the business actually pays for. It often shows a hybrid answer: open models
+for easy, high-volume segments, frontier models for complex ones. It also gives finance a defensible
+business case.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cost_per_outcome</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">segment</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="n">error_cost_usd</span><span class="p">):</span>
+    <span class="n">acc</span> <span class="o">=</span> <span class="n">evals</span><span class="p">[</span><span class="n">model</span><span class="p">][</span><span class="n">segment</span><span class="p">][</span><span class="s2">"accuracy"</span><span class="p">]</span>
+    <span class="n">infra</span> <span class="o">=</span> <span class="n">infra_cost</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">volume</span><span class="p">[</span><span class="n">segment</span><span class="p">])</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">infra</span> <span class="o">+</span> <span class="n">ops_cost</span><span class="p">(</span><span class="n">model</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="n">volume</span><span class="p">[</span><span class="n">segment</span><span class="p">]</span> <span class="o">*</span> <span class="n">acc</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">acc</span><span class="p">)</span> <span class="o">*</span> <span class="n">error_cost_usd</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="p">{</span><span class="n">seg</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">MODELS</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="n">cost_per_outcome</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">seg</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="n">ERROR_COST</span><span class="p">[</span><span class="n">seg</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">seg</span> <span class="ow">in</span> <span class="n">SEGMENTS</span><span class="p">}</span>         <span class="c1"># often: open model for simple segments, frontier for complex</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>The right unit is cost per correct outcome, not cost per token. Price the errors and the operating team before claiming savings.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you present a quality-adjusted cost comparison to a CFO?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="inefficient-serving">
+  <header class="ap-h">
+    <div class="ap-num">14.3</div>
+    <div>
+      <h2><a href="#inefficient-serving">Unoptimized self-hosted serving (no batching, quantization or KV cache reuse)</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team serves an open 70B model with a basic Python inference server, one request at a time at full
+precision. They need eight GPUs to handle a load that an optimized stack serves on two.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Self-hosting with naive serving: static batching or none, unquantized weights, no prefix caching, and
+default autoscaling based on CPU.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Low throughput per GPU</strong> multiplies hardware cost.</li>
+<li><strong>Memory waste</strong> from unmanaged KV cache limits concurrency.</li>
+<li><strong>Wrong scaling signals.</strong> CPU metrics don't reflect GPU queue depth.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-inefficient-serving" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Requests</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Naive server (1 at a time, FP16)</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">8 GPUs, long queues</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Hardware compensating for software</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Requests</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">vLLM / SGLang:</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">continuous batching</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">PagedAttention +</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">prefix cache</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Quantization (FP8 /</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">INT4)</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">2 GPUs, autoscale</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">on queue</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-local-vs-cloud-inefficient-serving)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Optimized serving multiplies tokens per GPU</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Use a modern inference engine (<strong>vLLM</strong>, <strong>SGLang</strong>, <strong>TensorRT-LLM</strong> or <strong>NVIDIA NIM</strong>) with <strong>continuous batching</strong> and paged KV-cache management.</li>
+<li>Enable <strong>prefix caching</strong> for shared system prompts and RAG templates.</li>
+<li><strong>Quantize</strong> (FP8, AWQ/GPTQ INT4) after validating accuracy on your evals.</li>
+<li>Consider <strong>speculative decoding</strong> for latency-sensitive paths.</li>
+<li>Autoscale on <strong>queue depth and time-to-first-token</strong>, not CPU.</li>
+<li>Right-size the model: a fine-tuned 8B model often beats a generic 70B on a narrow task.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>These techniques commonly raise throughput per GPU severalfold, which directly divides hardware cost.
+Validating quantization on evals protects quality, and queue-based autoscaling matches capacity to real demand.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># vLLM: continuous batching is on by default; enable prefix caching + FP8</span>
+<span class="c1"># vllm serve &lt;open-model&gt; --quantization fp8 --enable-prefix-caching \</span>
+<span class="c1">#   --max-num-seqs 256 --gpu-memory-utilization 0.92 --tensor-parallel-size 2</span>
+
+<span class="c1"># Kubernetes HPA on custom metric (queue depth) instead of CPU</span>
+<span class="c1"># metrics:</span>
+<span class="c1"># - type: Pods</span>
+<span class="c1">#   pods: {metric: {name: vllm_num_requests_waiting}, target: {type: AverageValue, averageValue: "8"}}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If you self-host, the serving stack is the cost lever. Continuous batching, prefix caching and validated quantization decide how many GPUs you need.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you validate that quantization hasn&#x27;t degraded quality for a regulated use case?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-hybrid-routing">
+  <header class="ap-h">
+    <div class="ap-num">14.4</div>
+    <div>
+      <h2><a href="#no-hybrid-routing">All-or-nothing hosting with no hybrid routing</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A company debates for months whether to go "all open-source on-prem" or "all managed frontier API".
+Both options are bad for parts of their workload.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Hosting is treated as a single binary decision for the whole AI estate, not a per-workload routing choice.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>All-frontier</strong> overpays for simple, high-volume tasks.</li>
+<li><strong>All-local</strong> under-serves complex reasoning and agentic tasks.</li>
+<li><strong>Analysis paralysis</strong> delays value.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-no-hybrid-routing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">All workloads</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">One hosting choice</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Overpay or underperform</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-local-vs-cloud-no-hybrid-routing)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-local-vs-cloud-no-hybrid-routing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Binary decision for a heterogeneous estate</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Request</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">Router (task,</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">sensitivity, complexity)</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Local small model:</text>
+<text class="dg-t dg-t-std" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">PII-heavy, simple</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Managed frontier: complex</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">reasoning</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="225.1" font-size="12.5" text-anchor="middle">Escalation on low</text>
+<text class="dg-t dg-t-new" x="842.2" y="239.6" font-size="12.5" text-anchor="middle">confidence</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-local-vs-cloud-no-hybrid-routing)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-local-vs-cloud-no-hybrid-routing)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-local-vs-cloud-no-hybrid-routing)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Each request goes to the cheapest compliant model that meets its quality bar</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build a <strong>hybrid model mesh</strong> behind one gateway:</p>
+<ul>
+<li><strong>Local or self-hosted small models</strong> for high-volume simple tasks, highly sensitive data, or offline/edge needs.</li>
+<li><strong>Managed frontier models</strong> for complex reasoning, coding and agentic planning.</li>
+<li>A <strong>router</strong> that considers task type, data classification, required quality and cost, with confidence-based escalation.</li>
+<li>One evaluation framework and one observability stack across both.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The estate gets the low unit cost of local models where they suffice and frontier quality where it
+matters. Sensitive data can stay local by policy, and teams start delivering value instead of debating
+the architecture.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">route</span><span class="p">(</span><span class="n">req</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">req</span><span class="o">.</span><span class="n">data_class</span> <span class="o">==</span> <span class="s2">"restricted"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">req</span><span class="o">.</span><span class="n">allow_external</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">local_models</span><span class="o">.</span><span class="n">pick</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">task</span><span class="p">)</span>                  <span class="c1"># sovereignty first</span>
+    <span class="k">if</span> <span class="n">req</span><span class="o">.</span><span class="n">task</span> <span class="ow">in</span> <span class="n">SIMPLE_TASKS</span> <span class="ow">and</span> <span class="n">volume_high</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">task</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">local_models</span><span class="o">.</span><span class="n">pick</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">task</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span> <span class="k">if</span> <span class="n">out</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&gt;=</span> <span class="mf">0.75</span> <span class="k">else</span> <span class="n">frontier</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>   <span class="c1"># escalate</span>
+    <span class="k">return</span> <span class="n">frontier</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Local versus cloud is a routing decision, not a religion. Send each request to the cheapest compliant model that meets its quality bar.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What signals would you use for confidence-based escalation?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="local-equals-compliant">
+  <header class="ap-h">
+    <div class="ap-num">14.5</div>
+    <div>
+      <h2><a href="#local-equals-compliant">Assuming &quot;local&quot; automatically means secure and compliant</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A government agency runs open models on-prem "for security". An audit finds unpatched inference
+servers, model weights downloaded from an unverified mirror, a license that restricts their use case,
+and no logging.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Equating physical location with security. Self-hosted models skip supply-chain checks, licensing
+review, patching and monitoring that a managed service would have provided.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Model supply-chain risk:</strong> tampered weights and unsafe serialization formats can execute code on load.</li>
+<li><strong>License non-compliance:</strong> open-weight licenses vary (acceptable-use policies, user thresholds, field-of-use limits).</li>
+<li><strong>Operational security debt:</strong> unpatched CUDA drivers, inference servers and containers.</li>
+<li><strong>Missing controls:</strong> no guardrails, no audit logs, no evals.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-local-equals-compliant" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="74.1" font-size="12.5" text-anchor="middle">Weights from random</text>
+<text class="dg-t dg-t-std" x="177.8" y="88.6" font-size="12.5" text-anchor="middle">mirror</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">On-prem server</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">(unpatched)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No logs / guardrails</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Audit failure</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Location ≠ security</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="191.8" font-size="11" text-anchor="middle">Verified model</text>
+<text class="dg-t dg-t-std" x="155.6" y="204.8" font-size="11" text-anchor="middle">registry (hash,</text>
+<text class="dg-t dg-t-std" x="155.6" y="217.8" font-size="11" text-anchor="middle">signature)</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">License review</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Hardened serving +</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">patching</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Same gateway,</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">guardrails, evals</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Compliant local AI</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-local-vs-cloud-local-equals-compliant)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Local models held to the same control framework as cloud</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Source models from <strong>verified publishers</strong>, verify hashes and signatures, prefer <strong>safetensors</strong> formats, and scan artifacts.</li>
+<li>Run <strong>license review</strong> in the intake process.</li>
+<li>Run serving on hardened, patched images with vulnerability scanning and network isolation.</li>
+<li>Route local models through the <strong>same AI gateway</strong>, guardrails, tracing and eval gates as cloud models.</li>
+<li>Keep an AI bill of materials (model, version, source, license, fine-tune data).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Local deployment then delivers the sovereignty it promised, without new supply-chain or compliance
+holes. One control framework across local and cloud keeps governance consistent and auditable.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_local_model</span><span class="p">(</span><span class="n">artifact</span><span class="p">,</span> <span class="n">meta</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"format"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"safetensors"</span><span class="p">,</span> <span class="s2">"no pickle-based formats"</span>
+    <span class="k">assert</span> <span class="n">sha256</span><span class="p">(</span><span class="n">artifact</span><span class="p">)</span> <span class="o">==</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"publisher_sha256"</span><span class="p">],</span> <span class="s2">"hash mismatch"</span>
+    <span class="k">assert</span> <span class="n">sigstore</span><span class="o">.</span><span class="n">verify</span><span class="p">(</span><span class="n">artifact</span><span class="p">,</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"signature"</span><span class="p">]),</span> <span class="s2">"signature invalid"</span>
+    <span class="k">assert</span> <span class="n">license_review</span><span class="o">.</span><span class="n">approved</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">"license"</span><span class="p">],</span> <span class="n">use_case</span><span class="o">=</span><span class="n">meta</span><span class="p">[</span><span class="s2">"use_case"</span><span class="p">])</span>
+    <span class="n">scan</span> <span class="o">=</span> <span class="n">model_scanner</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="n">artifact</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">scan</span><span class="o">.</span><span class="n">findings</span><span class="p">,</span> <span class="n">scan</span><span class="o">.</span><span class="n">findings</span>
+    <span class="n">aibom</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">meta</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"scan"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">id</span><span class="p">})</span>
+    <span class="k">return</span> <span class="n">model_registry</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">artifact</span><span class="p">,</span> <span class="n">meta</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>On-prem isn&#x27;t automatically secure. Verify the model supply chain, review licenses, patch the stack, and hold local models to the same controls as cloud.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What goes into an AI bill of materials?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-cache-layer">
+  <header class="ap-h">
+    <div class="ap-num">14.6</div>
+    <div>
+      <h2><a href="#no-cache-layer">No caching layer in front of any model</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An HR assistant answers "How many vacation days do I get?" 9,000 times a month. Each time it runs
+full retrieval and generation.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Every request runs the full pipeline, whatever the model hosting. There's no exact, semantic or
+prompt-prefix caching.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Repeated identical work</strong> for frequent questions.</li>
+<li><strong>Higher latency</strong> for answers that could be instant.</li>
+<li><strong>Wasted capacity</strong> on reserved or self-hosted GPUs.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-local-vs-cloud-no-cache-layer" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Frequent question</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Full RAG + LLM every time</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Cost × 9,000</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No reuse of identical work</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Question</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Exact cache</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Semantic cache</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">(scoped, TTL)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Prompt-prefix cache</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">LLM (misses only)</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-local-vs-cloud-no-cache-layer)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Layered caching with permission scoping and invalidation</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>layered caching</strong>:</p>
+<ol>
+<li><strong>Prompt or prefix caching</strong> at the model layer for stable system prompts and documents (available on the managed APIs; prefix caching in vLLM).</li>
+<li><strong>Exact-match cache</strong> on normalized query plus user scope.</li>
+<li><strong>Semantic cache</strong> for paraphrases above a high similarity threshold. Scope it by permission group and language, and invalidate it when source documents change.</li>
+<li>Never cache across permission boundaries, and never cache personalized answers globally.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>High-frequency questions are answered in milliseconds at near-zero marginal cost. Prefix caching cuts
+the cost of the misses too. Scoping and invalidation keep caching from creating leakage or staleness.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">cached_answer</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">scope</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">permission_hash</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">lang</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">hit</span> <span class="o">:=</span> <span class="n">exact_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">normalize</span><span class="p">(</span><span class="n">q</span><span class="p">))):</span> <span class="k">return</span> <span class="n">hit</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">hit</span> <span class="o">:=</span> <span class="n">semantic_cache</span><span class="o">.</span><span class="n">nearest</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">min_sim</span><span class="o">=</span><span class="mf">0.95</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">hit</span><span class="o">.</span><span class="n">stale</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">hit</span><span class="o">.</span><span class="n">answer</span>
+    <span class="n">ans</span> <span class="o">=</span> <span class="n">rag_answer</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+    <span class="n">semantic_cache</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">embed</span><span class="p">(</span><span class="n">q</span><span class="p">),</span> <span class="n">ans</span><span class="p">,</span> <span class="n">doc_ids</span><span class="o">=</span><span class="n">ans</span><span class="o">.</span><span class="n">source_doc_ids</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">86400</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ans</span>
+
+<span class="n">on_document_change</span><span class="p">(</span><span class="k">lambda</span> <span class="n">doc_id</span><span class="p">:</span> <span class="n">semantic_cache</span><span class="o">.</span><span class="n">invalidate</span><span class="p">(</span><span class="n">doc_ids</span><span class="o">=</span><span class="p">[</span><span class="n">doc_id</span><span class="p">]))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>The cheapest model call is the one you don&#x27;t make. Layer prefix, exact and semantic caches, scoped by permissions and invalidated by source changes.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What are the risks of semantic caching, and how do you mitigate them?</p></div>
+  </section>
+</article>
+<div class="prose"><h3>Decision matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Driver</th>
+<th>Managed API</th>
+<th>Provisioned / reserved</th>
+<th>Self-hosted cloud GPU</th>
+<th>On-prem / edge</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Low or spiky volume</td>
+<td>✅ Best</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td>High, steady volume</td>
+<td>⚠️ Costly at scale</td>
+<td>✅</td>
+<td>✅ (with mature ops)</td>
+<td>✅ (if capex approved)</td>
+</tr>
+<tr>
+<td>Frontier-level reasoning</td>
+<td>✅</td>
+<td>✅</td>
+<td>⚠️ Open-model gap</td>
+<td>⚠️</td>
+</tr>
+<tr>
+<td>Strict sovereignty / air-gap</td>
+<td>⚠️ Sovereign regions</td>
+<td>⚠️</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Small team, fast delivery</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+<td>❌</td>
+</tr>
+<tr>
+<td>Deep customization (fine-tune, distill)</td>
+<td>⚠️ Managed tuning</td>
+<td>⚠️</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table></div>
+<div class="pn"><a class="prev" href="hyperscalers.html">← 13. Hyperscaler Platforms</a><a class="next" href="harness.html">15. Harness Engineering →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

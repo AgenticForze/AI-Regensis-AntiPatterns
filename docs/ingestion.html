@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Ingestion &amp; Chunking · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="active" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part A · Retrieval &amp; Knowledge</div>
+  <h1><span class="sn">1</span>Data Ingestion &amp; Chunking</h1>
+  <p class="lede">Retrieval quality is capped by ingestion quality. These anti-patterns corrupt knowledge before a single query is run.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#fixed-size-chunking"><span>1.1</span>Fixed-size chunking that ignores document structure</a><a href="#no-metadata-lineage"><span>1.2</span>No metadata or lineage on chunks</a><a href="#flat-pdf-tables"><span>1.3</span>Parsing PDFs, tables and scans as flat text</a><a href="#one-time-ingestion"><span>1.4</span>One-time ingestion with no incremental refresh or deletes</a><a href="#pii-ingestion"><span>1.5</span>Ingesting PII and secrets without redaction</a></div>
+
+<article class="ap" id="fixed-size-chunking">
+  <header class="ap-h">
+    <div class="ap-num">1.1</div>
+    <div>
+      <h2><a href="#fixed-size-chunking">Fixed-size chunking that ignores document structure</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An insurer indexes 40,000 policy documents for a claims-adjuster assistant. Adjusters ask
+"Is water damage from a burst pipe covered under the HO-3 endorsement?" The answer is often
+wrong or incomplete, even though the clause is in the corpus.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Every document is split into 512-token windows with a 50-token overlap, regardless of headings,
+clauses, tables or lists. The same splitter is used for contracts, FAQs, spreadsheets and emails.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Semantic units are cut in half.</strong> A coverage clause and its exclusion end up in different chunks, so the retriever returns the clause without the exception.</li>
+<li><strong>Headings are lost.</strong> A chunk that says "This does not apply" has no anchor to which section "this" refers to.</li>
+<li><strong>Embedding dilution.</strong> Chunks that straddle two topics produce vectors that sit between both, so they rank poorly for either.</li>
+<li><strong>Blind tuning.</strong> Teams adjust chunk size by trial and error with no evaluation set, which trades one failure for another.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ingestion-fixed-size-chunking" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">Policy PDF</text>
+<rect class="dg-node dg-std" x="261.2" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="81.4" font-size="12.5" text-anchor="middle">Text extract</text>
+<rect class="dg-node dg-bad" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">512-token split</text>
+<circle class="dg-badge-bad" cx="577.6" cy="58.0" r="8"/><text class="dg-badge-t" x="577.6" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="615.6" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="81.4" font-size="12.5" text-anchor="middle">Embed</text>
+<rect class="dg-node dg-std" x="792.8" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="81.4" font-size="12.5" text-anchor="middle">Vector index</text>
+<line class="dg-edge" x1="230.2" y1="77.0" x2="257.2" y2="77.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="407.4" y1="77.0" x2="434.4" y2="77.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="584.6" y1="77.0" x2="611.6" y2="77.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="761.8" y1="77.0" x2="788.8" y2="77.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Clause and its exclusion land in different chunks; heading context is lost</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Policy PDF</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="232.4" font-size="12.5" text-anchor="middle">Layout-aware parse</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Structure-aware</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">chunk</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="259.4" font-size="12.5" text-anchor="middle">Heading path</text>
+<rect class="dg-node dg-new" x="615.6" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="232.4" font-size="12.5" text-anchor="middle">Contextual header</text>
+<circle class="dg-badge-new" cx="754.8" cy="209.0" r="8"/><text class="dg-badge-t" x="754.8" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="232.4" font-size="12.5" text-anchor="middle">Embed + index</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-ingestion-fixed-size-chunking)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Each chunk is a complete semantic unit carrying its section path</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>structure-aware chunking</strong> driven by the document layout:</p>
+<ol>
+<li>Parse into a document tree (title → section → clause → paragraph/table) with a layout-aware parser.</li>
+<li>Split on semantic boundaries (sections, clauses, list items). Merge small siblings and recursively split oversized nodes.</li>
+<li><strong>Prepend a contextual header</strong> to each chunk: document title, section breadcrumb, effective date. Optionally add a one-sentence LLM summary of where the chunk sits in the document ("contextual retrieval").</li>
+<li>Store a <strong>parent-child relationship</strong>. Retrieve on small child chunks for precision, then expand to the parent section for generation.</li>
+<li>Pick a chunking strategy per document type (contracts, FAQs, tables, transcripts) and validate it against a labeled retrieval set.</li>
+</ol></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Chunks now line up with how meaning is actually organized, so each embedding represents one idea.
+The breadcrumb restores the context that splitting removes, which raises recall on queries that
+reference section names. The parent-child expansion delivers complete clauses, exceptions included,
+to the generator. Because the strategy is chosen per document type and measured, changes are
+evidence-based rather than guesswork.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">chunk_document</span><span class="p">(</span><span class="n">doc_tree</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">400</span><span class="p">):</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">doc_tree</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">levels</span><span class="o">=</span><span class="p">(</span><span class="s2">"section"</span><span class="p">,</span> <span class="s2">"clause"</span><span class="p">)):</span>
+        <span class="n">breadcrumb</span> <span class="o">=</span> <span class="s2">" &gt; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">path_titles</span><span class="p">())</span>          <span class="c1"># Policy &gt; Coverage A &gt; Water damage</span>
+        <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">split_on_boundaries</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">max_tokens</span><span class="p">):</span>
+            <span class="n">header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">doc_tree</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2"> | </span><span class="si">{</span><span class="n">breadcrumb</span><span class="si">}</span><span class="s2"> | eff. </span><span class="si">{</span><span class="n">doc_tree</span><span class="o">.</span><span class="n">effective_date</span><span class="si">}</span><span class="s2">]"</span>
+            <span class="n">chunks</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s2">"id"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">doc_tree</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">piece</span><span class="o">.</span><span class="n">idx</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                <span class="s2">"text"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">header</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">piece</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                <span class="s2">"parent_id"</span><span class="p">:</span> <span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>          <span class="c1"># expand to full clause at generation time</span>
+                <span class="s2">"doc_type"</span><span class="p">:</span> <span class="n">doc_tree</span><span class="o">.</span><span class="n">doc_type</span><span class="p">,</span>
+            <span class="p">})</span>
+    <span class="k">return</span> <span class="n">chunks</span>
+
+<span class="c1"># Retrieval: match on children, generate on parents</span>
+<span class="n">hits</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+<span class="n">context</span> <span class="o">=</span> <span class="n">dedupe</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">get_parent</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">parent_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">rerank</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">hits</span><span class="p">)[:</span><span class="mi">5</span><span class="p">])</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Chunking is a modelling decision, not a preprocessing default. Chunk along document structure, carry the heading path into every chunk, and prove the choice with a retrieval eval.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you chunk a 300-page contract with nested tables and cross-references?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-metadata-lineage">
+  <header class="ap-h">
+    <div class="ap-num">1.2</div>
+    <div>
+      <h2><a href="#no-metadata-lineage">No metadata or lineage on chunks</a></h2>
+      <div class="tags"><span class="tag t-comp">Compliance</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A pharmaceutical company's regulatory assistant cites an SOP. An auditor asks which version,
+which approval date, and which source system the answer came from. Nobody can tell.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Chunks are stored as <code>{id, text, vector}</code>. Source system, version, owner, effective date,
+classification and ingestion run are discarded during ingestion.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>No filtering.</strong> Retrieval can't be restricted to current, approved or region-specific documents, so superseded SOPs compete with live ones.</li>
+<li><strong>No auditability.</strong> In regulated industries, an answer without provenance is unusable however accurate it is.</li>
+<li><strong>No targeted fixes.</strong> When a source document is wrong or withdrawn, nobody can find and purge its chunks.</li>
+<li><strong>No freshness signals.</strong> The ranker can't prefer newer content.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ingestion-no-metadata-lineage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">SharePoint</text>
+<rect class="dg-node dg-std" x="84.0" y="108.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="135.4" font-size="12.5" text-anchor="middle">Confluence</text>
+<rect class="dg-node dg-std" x="261.2" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="108.4" font-size="12.5" text-anchor="middle">Extract text</text>
+<rect class="dg-node dg-bad" x="438.4" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="108.4" font-size="12.5" text-anchor="middle">{id, text, vector}</text>
+<circle class="dg-badge-bad" cx="577.6" cy="85.0" r="8"/><text class="dg-badge-t" x="577.6" y="89.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="615.6" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="108.4" font-size="12.5" text-anchor="middle">Retriever</text>
+<rect class="dg-node dg-std" x="792.8" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="108.4" font-size="12.5" text-anchor="middle">Answer (no source)</text>
+<line class="dg-edge" x1="230.2" y1="104.0" x2="257.2" y2="104.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="407.4" y1="104.0" x2="434.4" y2="104.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="584.6" y1="104.0" x2="611.6" y2="104.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="761.8" y1="104.0" x2="788.8" y2="104.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<text class="dg-note dg-note-bad" x="28" y="175.0" font-size="12.5">Cannot filter, cite, version or purge</text>
+<rect class="dg-band dg-band-good" x="8" y="202.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="222.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="140.8" y="259.4" font-size="12.5" text-anchor="middle">SharePoint</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="140.8" y="313.4" font-size="12.5" text-anchor="middle">Confluence</text>
+<rect class="dg-node dg-new" x="231.7" y="259.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="288.5" y="279.1" font-size="12.5" text-anchor="middle">Metadata</text>
+<text class="dg-t dg-t-new" x="288.5" y="293.6" font-size="12.5" text-anchor="middle">harvest</text>
+<circle class="dg-badge-new" cx="341.3" cy="263.0" r="8"/><text class="dg-badge-t" x="341.3" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="379.3" y="259.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="436.2" y="286.4" font-size="12.5" text-anchor="middle">Lineage record</text>
+<circle class="dg-badge-new" cx="489.0" cy="263.0" r="8"/><text class="dg-badge-t" x="489.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="259.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="583.8" y="286.4" font-size="12.5" text-anchor="middle">Chunk + embed</text>
+<rect class="dg-node dg-new" x="674.7" y="259.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="731.5" y="279.1" font-size="12.5" text-anchor="middle">Filtered</text>
+<text class="dg-t dg-t-new" x="731.5" y="293.6" font-size="12.5" text-anchor="middle">retrieval</text>
+<circle class="dg-badge-new" cx="784.3" cy="263.0" r="8"/><text class="dg-badge-t" x="784.3" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="822.3" y="259.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="879.2" y="286.4" font-size="12.5" text-anchor="middle">Cited answer</text>
+<line class="dg-edge" x1="200.7" y1="282.0" x2="227.7" y2="282.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="348.3" y1="282.0" x2="375.3" y2="282.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="496.0" y1="282.0" x2="523.0" y2="282.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="643.7" y1="282.0" x2="670.7" y2="282.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<line class="dg-edge" x1="791.3" y1="282.0" x2="818.3" y2="282.0" marker-end="url(#ah-ingestion-no-metadata-lineage)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Every chunk is traceable to source, version, owner and ingestion run</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Define a <strong>chunk metadata contract</strong> and enforce it at ingestion:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source_uri</code>, <code>source_system</code>, <code>doc_id</code>, <code>version</code></td>
+<td>Citation and lineage</td>
+</tr>
+<tr>
+<td><code>effective_from</code>, <code>effective_to</code>, <code>status</code></td>
+<td>Freshness and supersession filtering</td>
+</tr>
+<tr>
+<td><code>classification</code>, <code>acl_groups</code>, <code>region</code></td>
+<td>Security trimming and residency</td>
+</tr>
+<tr>
+<td><code>owner</code>, <code>doc_type</code>, <code>language</code></td>
+<td>Routing, ranking and stewardship</td>
+</tr>
+<tr>
+<td><code>ingest_run_id</code>, <code>parser_version</code>, <code>embed_model</code></td>
+<td>Reproducibility and rollback</td>
+</tr>
+</tbody>
+</table>
+<p>Reject chunks that fail the contract. Register every ingestion run in a lineage store
+(OpenLineage, a data catalog, or a simple run table) so you can trace any answer back to raw bytes.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Metadata turns the vector index from a bag of text into a governed data product. Filters keep
+superseded and unauthorized content out before ranking. Citations carry version and date, which
+satisfies auditors. A withdrawn document can be purged by <code>doc_id</code> in seconds, and a bad parser
+release can be rolled back by <code>ingest_run_id</code>.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ChunkMeta</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">doc_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">source_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">source_system</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="s2">"^(approved|draft|superseded)$"</span><span class="p">)</span>
+    <span class="n">effective_from</span><span class="p">:</span> <span class="n">date</span><span class="p">;</span> <span class="n">effective_to</span><span class="p">:</span> <span class="n">date</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">classification</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">acl_groups</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">];</span> <span class="n">region</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">ingest_run_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">parser_version</span><span class="p">:</span> <span class="nb">str</span><span class="p">;</span> <span class="n">embed_model</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ingest</span><span class="p">(</span><span class="n">chunk_text</span><span class="p">,</span> <span class="n">raw_meta</span><span class="p">,</span> <span class="n">run</span><span class="p">):</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">ChunkMeta</span><span class="p">(</span><span class="o">**</span><span class="n">raw_meta</span><span class="p">,</span> <span class="n">ingest_run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                     <span class="n">parser_version</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">parser</span><span class="p">,</span> <span class="n">embed_model</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">embedder</span><span class="p">)</span>  <span class="c1"># raises if invalid</span>
+    <span class="n">index</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">chunk_id</span><span class="p">(</span><span class="n">meta</span><span class="p">),</span> <span class="n">vector</span><span class="o">=</span><span class="n">embed</span><span class="p">(</span><span class="n">chunk_text</span><span class="p">),</span> <span class="n">text</span><span class="o">=</span><span class="n">chunk_text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">meta</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>
+
+<span class="c1"># Retrieval only sees approved, in-force, permitted content</span>
+<span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="s2">"approved"</span><span class="p">,</span> <span class="s2">"effective_to"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"$gte"</span><span class="p">:</span> <span class="n">today</span><span class="p">()},</span>
+                        <span class="s2">"acl_groups"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"$in"</span><span class="p">:</span> <span class="n">user</span><span class="o">.</span><span class="n">groups</span><span class="p">}})</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If you can&#x27;t answer &quot;where did this answer come from, which version, and who approved it&quot;, the system isn&#x27;t production-ready for a regulated client.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you handle a document that is withdrawn after it has already been cited in answers?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="flat-pdf-tables">
+  <header class="ap-h">
+    <div class="ap-num">1.3</div>
+    <div>
+      <h2><a href="#flat-pdf-tables">Parsing PDFs, tables and scans as flat text</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank's credit-risk assistant answers questions from annual reports and rate sheets. Asked for
+"the Tier 1 capital ratio for 2025", it returns a number from the wrong column or the wrong year.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>A basic text extractor flattens PDFs. Tables become whitespace-separated number soup, multi-column
+layouts interleave, headers and footers repeat on every chunk, and scanned pages are skipped silently.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Row and column relationships are destroyed.</strong> "12.4 13.1 11.8" no longer says which number belongs to which year or metric.</li>
+<li><strong>Reading order breaks</strong> on two-column layouts, so sentences are stitched across columns.</li>
+<li><strong>Boilerplate pollution.</strong> Repeated headers and footers dominate embeddings and crowd out real hits.</li>
+<li><strong>Silent gaps.</strong> Scanned or image-only pages produce no text and no error, so the knowledge isn't there and nobody knows.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ingestion-flat-pdf-tables" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">Annual report PDF</text>
+<rect class="dg-node dg-bad" x="261.2" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="332.8" y="81.4" font-size="12.5" text-anchor="middle">pdftotext</text>
+<circle class="dg-badge-bad" cx="400.4" cy="58.0" r="8"/><text class="dg-badge-t" x="400.4" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Number soup</text>
+<rect class="dg-node dg-std" x="615.6" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="81.4" font-size="12.5" text-anchor="middle">Chunk</text>
+<rect class="dg-node dg-std" x="792.8" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="81.4" font-size="12.5" text-anchor="middle">Wrong figure cited</text>
+<line class="dg-edge" x1="230.2" y1="77.0" x2="257.2" y2="77.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="407.4" y1="77.0" x2="434.4" y2="77.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="584.6" y1="77.0" x2="611.6" y2="77.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="761.8" y1="77.0" x2="788.8" y2="77.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Table structure and reading order are lost; scans silently dropped</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Annual report PDF</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="232.4" font-size="12.5" text-anchor="middle">Layout / OCR model</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Tables → Markdown</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="259.4" font-size="12.5" text-anchor="middle">Figures → captions</text>
+<rect class="dg-node dg-new" x="615.6" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="232.4" font-size="12.5" text-anchor="middle">Quality checks</text>
+<circle class="dg-badge-new" cx="754.8" cy="209.0" r="8"/><text class="dg-badge-t" x="754.8" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="232.4" font-size="12.5" text-anchor="middle">Typed chunks</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-ingestion-flat-pdf-tables)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Tables keep headers per row; low-confidence pages are flagged, not skipped</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Treat parsing as a <strong>multimodal extraction pipeline</strong>:</p>
+<ul>
+<li>Use a layout-aware parser or document-intelligence service (for example Azure Document Intelligence, Amazon Textract, Google Document AI, or open-source Docling/Unstructured) that returns blocks, reading order and table cells.</li>
+<li><strong>Serialize tables</strong> as Markdown or HTML, and for large tables also emit <em>row-level chunks</em> that repeat the column headers ("2025 · Tier 1 capital ratio · 13.1%").</li>
+<li>Run OCR on image-only pages. For charts and diagrams, generate captions with a vision model and index those.</li>
+<li>Strip repeated headers and footers by detecting text that recurs across pages.</li>
+<li>Add <strong>quality gates</strong>: text-per-page thresholds, OCR confidence, table-detection counts. Route failures to a review queue.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Numbers stay attached to their row and column labels, so retrieval and generation see
+"2025 Tier 1 ratio = 13.1%" instead of an ambiguous string. Row-level chunks make single facts directly
+retrievable. Quality gates turn silent data loss into a visible operational metric, which matters most
+in finance, where one wrong figure destroys trust.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="n">pdf</span><span class="p">):</span>
+    <span class="n">doc</span> <span class="o">=</span> <span class="n">layout_parser</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">pdf</span><span class="p">)</span>                 <span class="c1"># blocks, reading order, tables, confidence</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">doc</span><span class="o">.</span><span class="n">pages</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">page</span><span class="o">.</span><span class="n">text_chars</span> <span class="o">&lt;</span> <span class="mi">50</span><span class="p">:</span>                     <span class="c1"># image-only page</span>
+            <span class="n">page</span> <span class="o">=</span> <span class="n">ocr</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">page</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">page</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&lt;</span> <span class="mf">0.85</span><span class="p">:</span> <span class="n">review_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">pdf</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">page</span><span class="o">.</span><span class="n">no</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">tables</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">to_markdown</span><span class="p">(),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"table"</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="n">page</span><span class="o">.</span><span class="n">no</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">t</span><span class="o">.</span><span class="n">rows</span><span class="p">:</span>                       <span class="c1"># row-level facts with headers repeated</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">(</span><span class="s2">" · "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">row</span><span class="p">)),</span>
+                                 <span class="n">kind</span><span class="o">=</span><span class="s2">"table_row"</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="n">page</span><span class="o">.</span><span class="n">no</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">fig</span> <span class="ow">in</span> <span class="n">page</span><span class="o">.</span><span class="n">figures</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">(</span><span class="n">vision_caption</span><span class="p">(</span><span class="n">fig</span><span class="o">.</span><span class="n">image</span><span class="p">),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"figure"</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="n">page</span><span class="o">.</span><span class="n">no</span><span class="p">))</span>
+        <span class="n">out</span> <span class="o">+=</span> <span class="n">text_chunks</span><span class="p">(</span><span class="n">strip_boilerplate</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="n">doc</span><span class="o">.</span><span class="n">repeated_lines</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">out</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>In document-heavy industries the parser is the most underrated component. Bad parsing produces confident wrong numbers that no prompt can fix.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you index a table as structured data in SQL rather than as text chunks?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="one-time-ingestion">
+  <header class="ap-h">
+    <div class="ap-num">1.4</div>
+    <div>
+      <h2><a href="#one-time-ingestion">One-time ingestion with no incremental refresh or deletes</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An HR policy assistant was loaded once at launch. Six months later it still quotes the old
+parental-leave policy, and documents that were deleted from SharePoint for legal reasons are still being cited.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Ingestion is a notebook someone ran once. Updates mean re-running everything by hand. Deletions in
+the source system never reach the index.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Stale answers.</strong> The index drifts from the source of truth, and users get confident answers based on outdated policy.</li>
+<li><strong>Zombie documents.</strong> Content removed for legal, privacy or confidentiality reasons stays retrievable, which is a compliance incident waiting to happen.</li>
+<li><strong>Full re-index cost.</strong> Rebuilding everything to pick up a handful of changes is slow and expensive, so it happens rarely.</li>
+<li><strong>No freshness SLA.</strong> Nobody owns how stale the index is allowed to be.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 364" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ingestion-one-time-ingestion" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Source systems</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Manual notebook run</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Vector index</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Users</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Index drifts from the source; deleted documents keep being served</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="198.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Source systems</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="225.1" font-size="12.5" text-anchor="middle">Change feed (CDC /</text>
+<text class="dg-t dg-t-new" x="332.8" y="239.6" font-size="12.5" text-anchor="middle">webhooks)</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="225.1" font-size="12.5" text-anchor="middle">Diff by content</text>
+<text class="dg-t dg-t-new" x="510.0" y="239.6" font-size="12.5" text-anchor="middle">hash</text>
+<circle class="dg-badge-new" cx="577.6" cy="209.0" r="8"/><text class="dg-badge-t" x="577.6" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Upsert</text>
+<rect class="dg-node dg-std" x="615.6" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="259.4" font-size="12.5" text-anchor="middle">Tombstone delete</text>
+<rect class="dg-node dg-std" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="232.4" font-size="12.5" text-anchor="middle">Vector index</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<path class="dg-loop" d="M864.4,280.0 V300.0 H155.6 V284.0" marker-end="url(#ah-ingestion-one-time-ingestion)"/>
+<text class="dg-loop-t" x="510.0" y="295.0" text-anchor="middle" font-size="11.5">Nightly reconciliation sweep</text>
+<text class="dg-note dg-note-good" x="28" y="333.0" font-size="12.5">Freshness SLA measured; deletes propagate within minutes</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build ingestion as a <strong>continuously synchronized pipeline</strong>:</p>
+<ul>
+<li>Subscribe to change events (Graph API delta queries, S3 events, Confluence webhooks, database CDC) instead of polling everything.</li>
+<li>Hash content at document and chunk level. Re-embed only chunks whose hash changed.</li>
+<li>Propagate <strong>deletes as tombstones</strong> keyed by <code>doc_id</code>. Never rely on "we'll overwrite it next time".</li>
+<li>Run a periodic <strong>reconciliation job</strong> that compares source inventory with index inventory and fixes drift.</li>
+<li>Publish freshness metrics (p95 lag from source change to searchable) and alert when the SLA is breached.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Event-driven sync keeps the index within minutes of the source, at a fraction of the cost of full
+rebuilds, because only changed chunks are re-embedded. Tombstones and reconciliation close the
+compliance gap for deleted content. A measured freshness SLA turns "is the bot up to date?" into an
+operational metric with an owner.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">on_change</span><span class="p">(</span><span class="n">event</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"deleted"</span><span class="p">:</span>
+        <span class="n">index</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">"doc_id"</span><span class="p">:</span> <span class="n">event</span><span class="o">.</span><span class="n">doc_id</span><span class="p">});</span> <span class="n">audit</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">"purge"</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">doc_id</span><span class="p">);</span> <span class="k">return</span>
+    <span class="n">doc</span> <span class="o">=</span> <span class="n">fetch</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">uri</span><span class="p">)</span>
+    <span class="n">new_chunks</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">chunk_document</span><span class="p">(</span><span class="n">parse</span><span class="p">(</span><span class="n">doc</span><span class="p">))}</span>
+    <span class="n">old_hashes</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">get_hashes</span><span class="p">(</span><span class="n">doc_id</span><span class="o">=</span><span class="n">event</span><span class="o">.</span><span class="n">doc_id</span><span class="p">)</span>
+    <span class="n">changed</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">new_chunks</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">old_hashes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span> <span class="o">!=</span> <span class="n">sha256</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">text</span><span class="p">)]</span>
+    <span class="n">stale</span>   <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">old_hashes</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">new_chunks</span><span class="p">)</span>
+    <span class="n">index</span><span class="o">.</span><span class="n">upsert</span><span class="p">([</span><span class="n">embed_chunk</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">changed</span><span class="p">]);</span> <span class="n">index</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">ids</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">stale</span><span class="p">))</span>
+    <span class="n">metrics</span><span class="o">.</span><span class="n">observe</span><span class="p">(</span><span class="s2">"freshness_lag_s"</span><span class="p">,</span> <span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="n">event</span><span class="o">.</span><span class="n">modified_at</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">reconcile</span><span class="p">():</span>                                    <span class="c1"># nightly safety net</span>
+    <span class="n">drift</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">doc_ids</span><span class="p">())</span> <span class="o">^</span> <span class="nb">set</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">doc_ids</span><span class="p">())</span>
+    <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">drift</span><span class="p">:</span> <span class="n">on_change</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">event_for</span><span class="p">(</span><span class="n">d</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A RAG index is a replica of the enterprise&#x27;s knowledge. Treat it like any replica, with change data capture, delete propagation and a freshness SLA.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you handle a right-to-be-forgotten request that touches embeddings and caches?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="pii-ingestion">
+  <header class="ap-h">
+    <div class="ap-num">1.5</div>
+    <div>
+      <h2><a href="#pii-ingestion">Ingesting PII and secrets without redaction</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A support assistant is trained on five years of ticket history. A user asks how a refund was
+handled and gets back another customer's full name, phone number and partial card number.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Raw tickets, emails and chat logs are embedded as-is. PII, PHI, credentials and API keys
+pasted into tickets all become retrievable context.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Cross-user leakage.</strong> Any user who can query the assistant can surface any other customer's personal data.</li>
+<li><strong>Regulatory exposure.</strong> GDPR, HIPAA, PCI-DSS and similar rules apply to the vector store, logs and caches as much as to the source system.</li>
+<li><strong>Secrets exposure.</strong> Credentials pasted into tickets become retrievable by anyone.</li>
+<li><strong>Irreversible spread.</strong> Once PII is in embeddings, prompt logs and caches, deleting it means finding every copy.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-ingestion-pii-ingestion" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">Tickets</text>
+<rect class="dg-node dg-std" x="84.0" y="108.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="135.4" font-size="12.5" text-anchor="middle">Emails</text>
+<rect class="dg-node dg-bad" x="261.2" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="332.8" y="108.4" font-size="12.5" text-anchor="middle">Embed raw text</text>
+<circle class="dg-badge-bad" cx="400.4" cy="85.0" r="8"/><text class="dg-badge-t" x="400.4" y="89.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="438.4" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="108.4" font-size="12.5" text-anchor="middle">Vector index</text>
+<rect class="dg-node dg-std" x="615.6" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="108.4" font-size="12.5" text-anchor="middle">LLM</text>
+<rect class="dg-node dg-std" x="792.8" y="81.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="108.4" font-size="12.5" text-anchor="middle">PII in answers</text>
+<line class="dg-edge" x1="230.2" y1="104.0" x2="257.2" y2="104.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="407.4" y1="104.0" x2="434.4" y2="104.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="584.6" y1="104.0" x2="611.6" y2="104.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="761.8" y1="104.0" x2="788.8" y2="104.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<text class="dg-note dg-note-bad" x="28" y="175.0" font-size="12.5">Personal data and secrets become retrievable by any user</text>
+<rect class="dg-band dg-band-good" x="8" y="202.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="222.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="259.4" font-size="12.5" text-anchor="middle">Tickets</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="313.4" font-size="12.5" text-anchor="middle">Emails</text>
+<rect class="dg-node dg-new" x="261.2" y="259.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="279.1" font-size="12.5" text-anchor="middle">PII / secret</text>
+<text class="dg-t dg-t-new" x="332.8" y="293.6" font-size="12.5" text-anchor="middle">detection</text>
+<circle class="dg-badge-new" cx="400.4" cy="263.0" r="8"/><text class="dg-badge-t" x="400.4" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="259.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="286.4" font-size="12.5" text-anchor="middle">Redact or tokenize</text>
+<circle class="dg-badge-new" cx="577.6" cy="263.0" r="8"/><text class="dg-badge-t" x="577.6" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="259.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="286.4" font-size="12.5" text-anchor="middle">Embed</text>
+<rect class="dg-node dg-new" x="792.8" y="259.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="286.4" font-size="12.5" text-anchor="middle">Output PII filter</text>
+<circle class="dg-badge-new" cx="932.0" cy="263.0" r="8"/><text class="dg-badge-t" x="932.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="282.0" x2="257.2" y2="282.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="407.4" y1="282.0" x2="434.4" y2="282.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="584.6" y1="282.0" x2="611.6" y2="282.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<line class="dg-edge" x1="761.8" y1="282.0" x2="788.8" y2="282.0" marker-end="url(#ah-ingestion-pii-ingestion)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Sensitive values never enter the index; re-identification is gated by policy</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Apply <strong>privacy by design</strong> at ingestion and again at output:</p>
+<ul>
+<li>Run PII/PHI and secret detectors (Microsoft Presidio, Amazon Comprehend PII, Google Cloud DLP, or Sensitive Data Protection) before chunking.</li>
+<li><strong>Redact</strong> what the use case doesn't need. <strong>Pseudonymize</strong> what it does (reversible tokens in a vault, so authorized workflows can re-identify).</li>
+<li>Classify every document and set <code>classification</code> metadata. Restricted classes go into separate, tightly scoped indexes or are excluded.</li>
+<li>Add an <strong>output filter</strong> as defense in depth, and apply the same redaction to prompt and response logs.</li>
+<li>Record a data-protection impact assessment (DPIA) for the use case.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Sensitive values never become retrievable context, so leakage can't happen through retrieval no
+matter what the user asks. Tokenization keeps analytical value ("same customer across tickets")
+without exposing identity. Redacted logs prevent the observability stack from becoming a second
+copy of the PII. The design is explainable to a privacy officer.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">presidio_analyzer</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnalyzerEngine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">presidio_anonymizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnonymizerEngine</span>
+
+<span class="n">analyzer</span><span class="p">,</span> <span class="n">anonymizer</span> <span class="o">=</span> <span class="n">AnalyzerEngine</span><span class="p">(),</span> <span class="n">AnonymizerEngine</span><span class="p">()</span>
+<span class="n">ENTITIES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"PERSON"</span><span class="p">,</span> <span class="s2">"PHONE_NUMBER"</span><span class="p">,</span> <span class="s2">"EMAIL_ADDRESS"</span><span class="p">,</span> <span class="s2">"CREDIT_CARD"</span><span class="p">,</span> <span class="s2">"US_SSN"</span><span class="p">,</span> <span class="s2">"IBAN_CODE"</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">sanitize</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">doc_id</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">secret_scanner</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>                     <span class="c1"># API keys, passwords, tokens</span>
+        <span class="n">quarantine</span><span class="p">(</span><span class="n">doc_id</span><span class="p">);</span> <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="n">analyzer</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">entities</span><span class="o">=</span><span class="n">ENTITIES</span><span class="p">,</span> <span class="n">language</span><span class="o">=</span><span class="s2">"en"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">anonymizer</span><span class="o">.</span><span class="n">anonymize</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">analyzer_results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span>
+                                <span class="n">operators</span><span class="o">=</span><span class="p">{</span><span class="s2">"DEFAULT"</span><span class="p">:</span> <span class="n">vault_tokenize_operator</span><span class="p">()})</span><span class="o">.</span><span class="n">text</span>
+
+<span class="n">clean</span> <span class="o">=</span> <span class="n">sanitize</span><span class="p">(</span><span class="n">ticket</span><span class="o">.</span><span class="n">body</span><span class="p">,</span> <span class="n">ticket</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">clean</span><span class="p">:</span> <span class="n">ingest</span><span class="p">(</span><span class="n">clean</span><span class="p">,</span> <span class="n">meta</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"classification"</span><span class="p">:</span> <span class="s2">"internal-redacted"</span><span class="p">})</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Data protection has to happen before embedding. Once PII is in the vector store, the logs and the caches, it can no longer be cleaned up reliably.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you choose pseudonymization over redaction?</p></div>
+  </section>
+</article>
+
+<div class="pn"><span></span><a class="next" href="embeddings.html">2. Embeddings &amp; Vector Stores →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+id: leadership
+num: 17
+short: Leadership Anti-Patterns
+title: AI Leadership Anti-Patterns
+summary: Most enterprise AI value is lost in operating models, not architectures. These are the organizational patterns that keep good technology from reaching production.
+patterns:
+  - id: poc-purgatory
+    title: Proof-of-concept purgatory
+    tags: [Adoption, Cost]
+    scenario: |
+      A bank has run 60 GenAI proofs of concept in 18 months. Four reached production. Each PoC had its own
+      stack, no production owner, and success criteria of "the demo worked".
+    antipattern: |
+      PoCs are funded as innovation theatre: easy to start, no path to production, no exit criteria, and no
+      production-grade requirements (security, data, evals) in scope.
+    fails: |
+      - **Demos skip the hard 80%:** data access, security review, evaluation, integration and change management.
+      - **No owner or budget for production.** PoCs end and nothing happens.
+      - **Fragmented stacks** make each success a one-off.
+    diagram:
+      bad: ["Idea", "!Isolated PoC (own stack)", "\"Demo worked\"", "No production path"]
+      bad_note: "Many starts, few finishes"
+      good: ["Prioritized use case", "+Production-intent pilot on the platform", "+Exit criteria: evals, KPIs, risk sign-off", "Scale | Stop"]
+      good_note: "Pilots designed to graduate, or to stop quickly"
+    solution: |
+      Replace PoCs with **production-intent pilots**:
+
+      - Entry: business owner, value hypothesis with a KPI baseline, data access confirmed, risk tier assigned.
+      - Build on the **shared platform** (gateway, guardrails, evals, observability) from day one.
+      - Exit criteria agreed upfront: eval thresholds, KPI movement in a controlled pilot, security and risk sign-off.
+      - **Stage gates** with a scale/stop decision at 8–12 weeks, and production budget pre-allocated for winners.
+    works: |
+      Every pilot exercises the real path to production, so successes can scale immediately. Clear exit
+      criteria kill weak ideas early and free capacity, and the shared platform makes each new pilot cheaper than the last.
+    code: |
+      PILOT_GATES = {
+          "entry":   ["business_owner", "kpi_baseline", "data_access_approved", "risk_tier"],
+          "week_6":  ["eval_suite_passing", "security_review_started", "pilot_users_onboarded"],
+          "week_12": ["kpi_delta >= target", "risk_signoff", "run_cost_per_unit <= budget"],
+      }
+      decision = "scale" if all(check(g) for g in PILOT_GATES["week_12"]) else "stop_or_pivot"
+    takeaway: "Run pilots that are designed to graduate: production platform, agreed exit criteria, and a scale-or-stop decision on a fixed date."
+    followup: "How would you triage a portfolio of 60 stalled PoCs?"
+
+  - id: tech-first-use-cases
+    title: Technology-first use-case selection
+    tags: [Adoption, Cost]
+    scenario: |
+      An executive asks "Where can we use agents?" Teams respond with agent ideas for low-value, low-volume
+      processes, and the portfolio produces impressive demos with negligible financial impact.
+    antipattern: |
+      Starting from a technology ("we need an agent strategy") and searching for problems, rather than
+      starting from value pools and constraints.
+    fails: |
+      - **Low business impact:** use cases chosen for novelty, not value.
+      - **Feasibility blind spots:** data readiness and risk are discovered late.
+      - **Loss of sponsor confidence** when results don't move P&L metrics.
+    diagram:
+      bad: ["\"We need agents\"", "!Find problems to fit", "Novel demos, low value"]
+      bad_note: "Solution looking for a problem"
+      good: ["Value pools (cost, revenue, risk)", "+Score: value × feasibility × risk", "+Pick the right AI pattern per use case", "Prioritized roadmap"]
+      good_note: "Problem-first portfolio with the simplest effective technique"
+    solution: |
+      Run a **value-led portfolio process**:
+
+      - Map value pools by function (process volumes, cost per transaction, error costs, revenue levers).
+      - Score candidates on **value**, **feasibility** (data readiness, integration, skills) and **risk** (regulatory tier, reversibility).
+      - Choose the **simplest effective technique** for each: rules, classical ML, RAG, workflow plus LLM, or agent.
+      - Balance the portfolio between quick wins and strategic bets, and review quarterly.
+    works: |
+      Investment flows to measurable value, and feasibility and risk are known before build. Matching
+      technique to problem avoids over-engineering, which keeps sponsors confident and funding flowing.
+    code: |
+      def priority(uc):
+          value = uc.annual_volume * uc.unit_cost_saved + uc.revenue_uplift
+          feasibility = mean([uc.data_readiness, uc.integration_ease, uc.team_skill])        # 0–1
+          risk_penalty = {"low": 1.0, "medium": 0.8, "high": 0.6}[uc.risk_tier]
+          return value * feasibility * risk_penalty
+
+      roadmap = sorted(candidates, key=priority, reverse=True)[:12]
+    takeaway: "Start from value pools, not technology. Score by value, feasibility and risk, then use the simplest technique that works."
+    followup: "What would a 6-week use-case discovery look like at a new client?"
+
+  - id: no-platform-team
+    title: Every team builds its own AI stack
+    tags: [Cost, Scale, Security]
+    scenario: |
+      Twelve product teams each build their own RAG pipeline, prompt management, guardrails and logging.
+      Security reviews take months because every stack is different, and a vulnerability fix has to be applied twelve times.
+    antipattern: |
+      No shared AI platform. Each team re-solves the same infrastructure problems, with inconsistent
+      quality and controls.
+    fails: |
+      - **Duplicated cost and effort** on undifferentiated plumbing.
+      - **Inconsistent controls** and slow, bespoke security reviews.
+      - **No economies of scale** in evaluation, observability, vendor commitments or skills.
+    diagram:
+      bad: ["Team 1 | Team 2 | Team 3", "!Own RAG, guardrails, logging each", "12× effort, uneven controls"]
+      bad_note: "Every team rebuilds the platform"
+      good: ["Product teams", "+AI platform (paved road)", "Gateway | Retrieval service | Eval harness | Observability | Guardrails", "+Center of excellence: standards + enablement"]
+      good_note: "Shared paved road; product teams focus on use cases"
+    solution: |
+      Establish an **AI platform team and a "paved road"**:
+
+      - Platform capabilities: model gateway (routing, metering, guardrails), retrieval and ingestion services, prompt registry, evaluation harness, tracing, agent runtime, MCP registry, identity integration.
+      - **Pre-approved patterns** with security sign-off already done, so teams using the paved road get fast-track reviews.
+      - A **center of excellence** for standards, reusable assets, training and architecture review.
+      - Measure platform success by **time-to-production** and adoption, not by features shipped.
+    works: |
+      Teams ship faster because the hard, common parts are solved once. Security and risk review the
+      platform once and the patterns many times. Costs fall through shared capacity and vendor leverage.
+    code: |
+      # Paved road: a new use case is mostly configuration on shared services
+      app = PlatformApp(
+          name="claims-summary", owner="claims-ops", risk_tier="medium",
+          model_policy="mid-tier-default", guardrails="baseline+pii",
+          retrieval=platform.retrieval(index="claims-kb", acl=True),
+          evals=platform.evals(suite="claims_summary_v1", gate=0.9),
+          tracing=True, budget_usd_month=4000)
+      app.deploy(env="pilot")
+    takeaway: "Build the paved road once. A shared AI platform turns every new use case into configuration plus domain work, and makes security reviews fast."
+    followup: "How do you staff and fund an AI platform team?"
+
+  - id: accuracy-not-kpis
+    title: Measuring success by model accuracy instead of business KPIs
+    tags: [Adoption]
+    scenario: |
+      A document-processing program reports 96% extraction accuracy to the board. Finance asks how much
+      processing cost fell, and nobody knows. The manual team is the same size because exceptions still go to humans.
+    antipattern: |
+      Success is defined by technical metrics (accuracy, F1, latency) without connecting them to business
+      outcomes, baselines or process change.
+    fails: |
+      - **Technical success, business failure:** accuracy gains don't automatically change cost or revenue.
+      - **No baseline,** so impact can't be shown.
+      - **Process unchanged:** humans still do the same work around the AI.
+    diagram:
+      bad: ["Model", "!96% accuracy reported", "Process unchanged", "No P&L impact"]
+      bad_note: "Technical metrics in isolation"
+      good: ["Business KPI baseline", "+Process redesign (straight-through + exceptions)", "Model + harness metrics", "+KPI tracking (cost / case, cycle time, NPS)"]
+      good_note: "Value tree links model metrics to P&L"
+    solution: |
+      Build a **value tree**:
+
+      - **Business KPI:** cost per case, cycle time, revenue per rep, loss ratio, CSAT.
+      - **Operational drivers:** straight-through-processing rate, handling time, exception rate.
+      - **AI metrics:** accuracy, confidence calibration, latency, cost per call.
+
+      Baseline the KPIs before launch. Redesign the process so AI changes work allocation (for example,
+      auto-approve high-confidence cases and route only exceptions). Report all three levels together.
+    works: |
+      Leadership sees AI performance in financial terms, and technical teams see which model improvements
+      actually move the business. Process redesign is where the value is realized.
+    code: |
+      value_tree = {
+          "cost_per_invoice":      {"baseline": 4.10, "target": 1.80},
+          "straight_through_rate": {"baseline": 0.00, "target": 0.70},     # driver
+          "field_accuracy":        {"baseline": None, "target": 0.97},     # AI metric
+          "confidence_calibration_ece": {"target": "< 0.05"},              # enables auto-approval
+      }
+      auto_approve = lambda doc: doc.min_field_confidence >= 0.95 and doc.vendor in TRUSTED_VENDORS
+    takeaway: "Accuracy is an input, not an outcome. Tie model metrics to business KPIs through a value tree, and redesign the process to capture the value."
+    followup: "How would you report AI value to a board?"
+
+  - id: ignoring-change-management
+    title: Ignoring change management and workforce impact
+    tags: [Adoption]
+    scenario: |
+      A contact center deploys an excellent agent-assist tool. Agents distrust it, fear it's monitoring them
+      for headcount cuts, and ignore suggestions. Usage falls to 20% within two months.
+    antipattern: |
+      AI deployment is treated as a technology project. Users aren't involved in design, roles and
+      incentives aren't updated, and concerns aren't addressed.
+    fails: |
+      - **Distrust and passive resistance** regardless of tool quality.
+      - **Misaligned incentives:** metrics still reward old behaviours.
+      - **Missed design insight** from frontline users.
+    diagram:
+      bad: ["Great tool", "!Deployed to users", "Distrust, low usage", "Value not realized"]
+      bad_note: "Technology without people change"
+      good: ["Co-design with users", "+Clear narrative + role impact", "+Training + champions", "+Updated incentives", "Sustained adoption"]
+      good_note: "People, process and technology change together"
+    solution: |
+      - **Co-design** with frontline users, using their workflows and their language.
+      - Communicate a clear **narrative**: what changes, what doesn't, how roles evolve, and how data is (and isn't) used.
+      - **Training and champions** in each team, with feedback loops into the product backlog.
+      - Update **KPIs and incentives** to reward effective AI-assisted work.
+      - Engage HR, works councils and unions early where relevant.
+    works: |
+      Users trust tools they helped shape and understand. Aligned incentives make usage rational, and
+      feedback loops keep improving the tool, which increases trust further.
+    code: |
+      adoption_dashboard = {
+          "suggestion_acceptance_rate": by_team(accepted / shown),
+          "trust_score_survey": quarterly_survey("I trust the assistant's suggestions"),
+          "feedback_items_closed": backlog.closed(label="user-feedback", period="month"),
+          "handle_time_delta": compare(handle_time, cohort="assisted", control="unassisted"),
+      }
+    takeaway: "AI adoption is a people change. Co-design, communicate, train, and realign incentives, or the best tool goes unused."
+    followup: "How would you address workforce concerns in a unionized environment?"

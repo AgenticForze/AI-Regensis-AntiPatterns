@@ -1,0 +1,225 @@
+id: evals-ops
+num: 11
+short: Evaluation & LLMOps
+title: Evaluation, Observability & LLMOps
+summary: You can't manage what you can't measure. In AI systems that applies to quality as much as to uptime.
+patterns:
+  - id: vibe-checks
+    title: Shipping on "vibe checks" with no evaluation suite
+    tags: [Quality, Reliability]
+    scenario: |
+      A procurement assistant is approved after a demo where five stakeholders tried a dozen questions each and
+      "it looked good". Two weeks after launch, it's answering 18% of contract-term questions incorrectly.
+    antipattern: |
+      Quality is judged by manual spot checks. There's no golden dataset, no defined metrics, no thresholds,
+      and no record of what was tested.
+    fails: |
+      - **Small, biased samples.** Demo questions are easy and favourable, not representative.
+      - **No regression detection.** Every prompt, model or data change is a leap of faith.
+      - **No go/no-go criteria.** Launch decisions rest on opinion, not evidence.
+    diagram:
+      bad: ["Change", "!A few manual tries", "\"Looks good\"", "Production surprises"]
+      bad_note: "No dataset, metrics or thresholds"
+      good: ["Change", "+Golden dataset (versioned)", "+Automated metrics", "+Threshold gate", "Release"]
+      good_note: "Evidence-based release with known quality per segment"
+      good_loop: "Production failures added to the dataset"
+    solution: |
+      Build an **evaluation suite** as a core asset:
+
+      - **Golden dataset:** 200–1,000 representative cases with expected answers or rubrics, stratified by segment (topic, difficulty, language, risk). Include adversarial and out-of-scope cases.
+      - **Metrics per use case:** correctness, faithfulness, answer relevance, retrieval recall, format adherence, refusal correctness, latency and cost.
+      - **Thresholds** agreed with the business and risk owners, per segment.
+      - **Flywheel:** sample production traffic, label failures, and add them to the dataset.
+      - Use an eval framework (Ragas, DeepEval, promptfoo, or the evaluation services in Bedrock, Vertex and Foundry) so runs are repeatable.
+    works: |
+      Quality becomes a number with a trend line, so launch and change decisions are evidence-based.
+      Segmenting shows *where* the system is weak. The production flywheel keeps the dataset representative
+      as usage evolves. Over time the eval suite becomes the organization's most valuable AI asset.
+    code: |
+      suite = EvalSuite.load("procurement_qa@v7")            # 640 cases, 9 segments
+      metrics = [Correctness(judge=calibrated_judge), Faithfulness(), RetrievalRecall(k=8),
+                 RefusalCorrectness(), Latency(p95_ms=4000), CostPerAnswer(max_usd=0.02)]
+      report = suite.run(pipeline=candidate, metrics=metrics)
+
+      for seg, m in report.by_segment().items():
+          assert m["correctness"] >= THRESHOLDS[seg], f"{seg} below threshold"
+      publish(report, compare_to="prod")
+    takeaway: "No eval suite, no production. The golden dataset and thresholds are how you turn a demo into a decision."
+    followup: "How do you build a golden dataset quickly when subject-matter experts have little time?"
+
+  - id: e2e-only-evals
+    title: Only end-to-end evaluation, nothing per component
+    tags: [Quality]
+    scenario: |
+      End-to-end accuracy drops from 86% to 79% after a release. The team spends a week arguing whether the
+      cause is the new chunker, the reranker, the prompt or the model.
+    antipattern: |
+      The only metric is final-answer quality. Retrieval, reranking, tool selection and generation are never
+      measured separately.
+    fails: |
+      - **No fault isolation.** End-to-end scores show *that* something broke, not *where*.
+      - **Misattributed fixes.** Teams tune the prompt when retrieval is the problem.
+      - **Slow iteration.** Every experiment needs the full pipeline.
+    diagram:
+      bad: ["Pipeline", "!Final answer score only", "\"Something got worse\""]
+      bad_note: "No fault isolation"
+      good: ["Retrieval: recall@k | Rerank: precision@k | Tools: selection accuracy | Generation: faithfulness", "+Per-stage dashboard", "Root cause in minutes"]
+      good_note: "Every stage has its own metric and dataset"
+    solution: |
+      Use **layered evaluation**:
+
+      | Stage | Metric | Data |
+      |---|---|---|
+      | Parsing | Text and table extraction accuracy | Golden documents |
+      | Retrieval | Recall@k, MRR, nDCG | Query → relevant-chunk labels |
+      | Reranking | Precision@k | Same |
+      | Tool use | Tool-selection and argument accuracy | Task → expected call |
+      | Generation | Faithfulness, completeness, format | Context → answer rubric |
+      | End to end | Task success, user satisfaction | Golden cases + production |
+
+      Run component evals in CI on every change to that component.
+    works: |
+      Regressions are localized immediately. Component datasets are cheaper to run than full pipelines, so
+      iteration is faster. Teams that own components get their own quality metrics.
+    code: |
+      def retrieval_eval(retriever, labelled):
+          return mean(len(set(retriever(q.text, k=8)) & q.relevant) / len(q.relevant) for q in labelled)
+
+      def tool_eval(agent, cases):
+          return mean(agent.plan(c.task).first_call.name == c.expected_tool for c in cases)
+
+      CI_GATES = {"retrieval_recall@8": (retrieval_eval, 0.90),
+                  "tool_selection":      (tool_eval, 0.95),
+                  "faithfulness":        (faithfulness_eval, 0.93)}
+    takeaway: "Evaluate the pipeline the way you'd test software: unit metrics per stage, integration metrics end to end."
+    followup: "What's the minimum labelling effort to get useful retrieval metrics?"
+
+  - id: no-agent-tracing
+    title: No tracing of agent trajectories
+    tags: [Reliability, Compliance]
+    scenario: |
+      A customer complains that the billing agent cancelled their add-on service. The logs show the final
+      message, but not which tools were called, with which arguments, on what reasoning.
+    antipattern: |
+      Only inputs and outputs are logged, if anything. Multi-step agent runs (LLM calls, retrievals, tool
+      calls, hand-offs) are invisible.
+    fails: |
+      - **Undebuggable.** You can't reproduce or understand failures.
+      - **No accountability.** You can't show regulators or customers why an action was taken.
+      - **No optimization data.** Latency and cost per step are unknown.
+    diagram:
+      bad: ["User input", "!Black-box agent run", "Final output logged"]
+      bad_note: "No visibility into steps, tools or reasoning"
+      good: ["Request (trace id)", "+Span: LLM call | Span: retrieval | Span: tool call", "+Attributes: tokens, cost, args", "Trace store + dashboards"]
+      good_note: "Every step is a span; every action is attributable and replayable"
+    solution: |
+      Instrument with **distributed tracing for AI**:
+
+      - Use **OpenTelemetry** with the GenAI semantic conventions. Each LLM call, retrieval, tool call and agent hand-off is a span within one trace.
+      - Record model, prompt version, token counts, cost, latency, tool name and arguments (redacted), and outcome.
+      - Send traces to an LLM-observability backend (Langfuse, Arize Phoenix, LangSmith, Datadog, or the cloud-native tracing in AgentCore, Foundry and Agent Platform).
+      - Link traces to user feedback and eval scores.
+    works: |
+      Any decision can be replayed step by step, which turns debugging from guesswork into inspection.
+      Auditable action trails satisfy accountability requirements, and per-span cost and latency show
+      exactly where to optimize.
+    code: |
+      from opentelemetry import trace
+      tracer = trace.get_tracer("billing-agent")
+
+      def traced_tool(tool):
+          def run(**args):
+              with tracer.start_as_current_span(f"tool.{tool.name}") as s:
+                  s.set_attribute("gen_ai.tool.name", tool.name)
+                  s.set_attribute("tool.args", redact(json.dumps(args)))
+                  result = tool(**args)
+                  s.set_attribute("tool.status", result.status)
+                  return result
+          return run
+    takeaway: "If you can't replay an agent's trajectory, you can't debug it, defend it or optimize it. Trace every step with OpenTelemetry."
+    followup: "How do you trace across agents running in different services or clouds?"
+
+  - id: uncalibrated-judge
+    title: LLM-as-judge without calibration
+    tags: [Quality]
+    scenario: |
+      An LLM judge rates 94% of a legal assistant's answers as correct. A lawyer reviews 100 samples and
+      agrees with only 71% of them. The judge prefers longer, confident answers.
+    antipattern: |
+      An LLM grades outputs on vague 1–10 scales with no rubric, and its scores are reported as ground truth
+      without ever being compared to expert judgment.
+    fails: |
+      - **Known judge biases:** verbosity, position, self-preference (favouring its own model family's style).
+      - **Vague criteria** produce noisy, unrepeatable scores.
+      - **False confidence.** Inflated scores mislead launch decisions.
+    diagram:
+      bad: ["Answers", "!Judge: \"rate 1–10\"", "94% \"good\"", "Wrong launch decision"]
+      bad_note: "Unvalidated judge with biased scoring"
+      good: ["Answers", "+Binary rubric criteria", "+Judge (different model family)", "+Agreement vs. experts ≥ target", "Trusted score"]
+      good_note: "Judge validated like any other classifier"
+    solution: |
+      **Validate the judge like a model**:
+
+      - Write specific, mostly **binary rubric questions** ("Does the answer state the notice period?", "Is every claim supported by a cited source?").
+      - Have experts label 100–300 samples. Measure judge–expert agreement (accuracy, Cohen's kappa) and iterate on the rubric until it meets target.
+      - Use a judge from a different model family where possible. Randomize answer order in pairwise comparisons.
+      - Re-calibrate periodically and whenever the judge model changes.
+      - Keep humans reviewing a sample of high-risk segments.
+    works: |
+      Binary criteria reduce noise and make failures specific. Measured agreement turns "the judge says 94%"
+      into "the judge agrees with experts 92% of the time", which is defensible. Ongoing calibration keeps
+      automated evaluation trustworthy as models change.
+    code: |
+      RUBRIC = ["States the governing clause number", "Every factual claim has a supporting citation",
+                "Does not give legal advice beyond the document", "Mentions applicable exceptions"]
+
+      def judge(answer, sources):
+          return {c: judge_llm.yes_no(criterion=c, answer=answer, sources=sources) for c in RUBRIC}
+
+      expert = load_labels("legal_expert_200.jsonl")
+      agree = cohen_kappa([all(judge(x.answer, x.sources).values()) for x in expert],
+                          [x.expert_pass for x in expert])
+      assert agree >= 0.75, "judge not calibrated, fix rubric before trusting scores"
+    takeaway: "An LLM judge is a classifier. Give it a binary rubric, measure its agreement with experts, and re-calibrate it before trusting its numbers."
+    followup: "When would you use pairwise comparison instead of absolute scoring?"
+
+  - id: no-regression-gate
+    title: No regression gating in CI/CD
+    tags: [Reliability, Quality]
+    scenario: |
+      A provider retires a model version and the team switches to the successor "since it's newer". Extraction
+      accuracy on handwritten forms drops 12%, and nobody notices for a month.
+    antipattern: |
+      Prompt, model, retrieval and dependency changes deploy without automated quality checks. Model
+      upgrades are treated as safe by default.
+    fails: |
+      - **Silent regressions** from any change, including the provider's.
+      - **Fear of change.** Teams avoid improvements because they can't verify them.
+      - **Forced migrations** (deprecations) become emergencies.
+    diagram:
+      bad: ["PR: prompt / model change", "Unit tests", "!Deploy", "Regression found by users"]
+      bad_note: "No AI quality gate"
+      good: ["PR", "Unit tests", "+Eval suite (smoke + full)", "+Compare vs. prod baseline", "+Canary + online evals", "Promote"]
+      good_note: "Quality regressions block the release"
+    solution: |
+      Add **AI quality gates** to the delivery pipeline:
+
+      - **PR stage:** fast smoke eval (50–100 cases) on any change to prompts, models, retrieval or tool definitions.
+      - **Pre-release:** full eval suite compared against the production baseline, with per-segment thresholds and tolerance for noise.
+      - **Canary:** route 5% of traffic, monitor online metrics (feedback, groundedness, escalations), and roll back automatically.
+      - **Model lifecycle:** track provider deprecation dates, and pre-evaluate successors well before forced migration.
+    works: |
+      Regressions are caught before users see them. Teams can ship improvements confidently because the
+      safety net exists. Deprecations become planned upgrades with evidence instead of emergencies.
+    code: |
+      # .github/workflows/ai-quality.yml (excerpt) runs on changes to prompts/, retrieval/, models.yaml
+      #   - run: python -m evals.run --suite smoke --candidate $GITHUB_SHA --baseline prod
+      #   - run: python -m evals.gate --max-drop 0.01 --segments all
+
+      def gate(candidate, baseline, max_drop=0.01):
+          failures = [s for s in candidate.segments
+                      if candidate[s].score < baseline[s].score - max_drop - noise_margin(s)]
+          if failures:
+              sys.exit(f"Blocked: regression in {failures}")
+    takeaway: "Every prompt, model and retrieval change is a release. Gate it with evals in CI, canary it, and plan model deprecations ahead."
+    followup: "How do you handle eval noise so the gate isn't flaky?"

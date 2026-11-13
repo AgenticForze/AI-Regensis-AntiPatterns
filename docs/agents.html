@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Single-Agent Design &amp; Tool Use · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="active" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part C · Agentic AI</div>
+  <h1><span class="sn">7</span>Single-Agent Design &amp; Tool Use</h1>
+  <p class="lede">An agent is an LLM in a loop with tools and state. Most production failures come from the loop, the tools or the state, not from the model.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+<figure class="fig"><svg class="dg" viewBox="0 0 960 168" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-i-f0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-good" x="8" y="24.0" width="944" height="126.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="140.8" y="81.4" font-size="12.5" text-anchor="middle">Goal + context</text>
+<rect class="dg-node dg-std" x="231.7" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="288.5" y="81.4" font-size="12.5" text-anchor="middle">Plan / decide</text>
+<rect class="dg-node dg-std" x="379.3" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="436.2" y="74.1" font-size="12.5" text-anchor="middle">Tool call</text>
+<text class="dg-t dg-t-std" x="436.2" y="88.6" font-size="12.5" text-anchor="middle">(validated)</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="583.8" y="81.4" font-size="12.5" text-anchor="middle">Observe result</text>
+<rect class="dg-node dg-new" x="674.7" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="731.5" y="74.1" font-size="12.5" text-anchor="middle">Check budget &amp;</text>
+<text class="dg-t dg-t-new" x="731.5" y="88.6" font-size="12.5" text-anchor="middle">stop rules</text>
+<circle class="dg-badge-new" cx="784.3" cy="58.0" r="8"/><text class="dg-badge-t" x="784.3" y="62.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="822.3" y="54.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="879.2" y="81.4" font-size="12.5" text-anchor="middle">Final answer</text>
+<line class="dg-edge" x1="200.7" y1="77.0" x2="227.7" y2="77.0" marker-end="url(#ah-agents-i-f0)"/>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-agents-i-f0)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-agents-i-f0)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-agents-i-f0)"/>
+<line class="dg-edge" x1="791.3" y1="77.0" x2="818.3" y2="77.0" marker-end="url(#ah-agents-i-f0)"/>
+<path class="dg-loop" d="M879.2,102.0 V122.0 H140.8 V106.0" marker-end="url(#ah-agents-i-f0)"/>
+<text class="dg-loop-t" x="510.0" y="117.0" text-anchor="middle" font-size="11.5">Loop until goal met or budget exhausted</text>
+</svg><figcaption>The agent loop: every step crosses a boundary that needs a control</figcaption></figure>
+<div class="toc"><div class="toc-h">In this section</div><a href="#agent-for-workflow"><span>7.1</span>Building an agent where a deterministic workflow would do</a><a href="#tool-sprawl"><span>7.2</span>Too many tools with vague descriptions</a><a href="#unvalidated-tools"><span>7.3</span>Tools with no input validation, idempotency or blast-radius limits</a><a href="#unbounded-loops"><span>7.4</span>Unbounded loops with no step, time or cost budget</a><a href="#no-checkpointing"><span>7.5</span>No state persistence or checkpointing</a></div>
+
+<article class="ap" id="agent-for-workflow">
+  <header class="ap-h">
+    <div class="ap-num">7.1</div>
+    <div>
+      <h2><a href="#agent-for-workflow">Building an agent where a deterministic workflow would do</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An "autonomous onboarding agent" decides at runtime which steps to run to provision a new employee:
+create the account, assign licenses, order a laptop, enrol in training. It occasionally skips the security
+training step, and nobody can explain why.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>A known, fixed business process is handed to an LLM to orchestrate freely, because "agentic" is the
+goal rather than the means.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Non-determinism where you need guarantees.</strong> Mandatory steps become probabilistic.</li>
+<li><strong>Harder to test and audit.</strong> Every run can take a different path.</li>
+<li><strong>Higher cost and latency.</strong> Each step adds a reasoning call that a workflow engine does for free.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-agent-for-workflow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Onboarding request</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">LLM decides every step</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Steps vary per run</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Skipped mandatory step</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Autonomy applied to a process that should be fixed</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Onboarding request</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Workflow engine</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(fixed steps)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">LLM only for</text>
+<text class="dg-t dg-t-std" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">judgment steps</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Validation</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Complete, auditable</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">run</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-agents-agent-for-workflow)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Deterministic backbone; LLM calls where interpretation is needed</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Apply an <strong>autonomy spectrum</strong> and pick the least autonomous design that solves the problem:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Pattern</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Single LLM call</td>
+<td>One transformation</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Fixed workflow / prompt chain</td>
+<td>Known steps, LLM for judgment inside steps</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Router + workflows</td>
+<td>A few known paths, selected by input</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Agent with constrained tools</td>
+<td>Path genuinely unknown in advance; open-ended tasks</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Multi-agent</td>
+<td>Clear separation of expertise or context, proven necessary</td>
+</tr>
+</tbody>
+</table>
+<p>Implement level 1–2 in a workflow engine (Step Functions, Temporal, Logic Apps, Cloud Workflows, LangGraph
+with fixed edges), and reserve agent loops for steps that genuinely need exploration.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Mandatory steps are guaranteed by code. LLM judgment is applied where it adds value, such as reading
+documents or drafting emails. Workflows are testable, observable and cheap. You can still promote a step
+to agentic later, with evidence.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># LangGraph-style: fixed edges for the process, LLM nodes only for judgment</span>
+<span class="n">g</span> <span class="o">=</span> <span class="n">StateGraph</span><span class="p">(</span><span class="n">OnboardingState</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">"create_account"</span><span class="p">,</span>  <span class="n">create_account</span><span class="p">)</span>          <span class="c1"># deterministic</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">"assign_licenses"</span><span class="p">,</span> <span class="n">assign_licenses</span><span class="p">)</span>         <span class="c1"># deterministic</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">"pick_equipment"</span><span class="p">,</span>  <span class="n">llm_pick_equipment</span><span class="p">)</span>      <span class="c1"># LLM judgment from role description</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">"security_training"</span><span class="p">,</span> <span class="n">enroll_training</span><span class="p">)</span>       <span class="c1"># mandatory, cannot be skipped</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">START</span><span class="p">,</span> <span class="s2">"create_account"</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">"create_account"</span><span class="p">,</span> <span class="s2">"assign_licenses"</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">"assign_licenses"</span><span class="p">,</span> <span class="s2">"pick_equipment"</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">"pick_equipment"</span><span class="p">,</span> <span class="s2">"security_training"</span><span class="p">)</span>
+<span class="n">g</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">"security_training"</span><span class="p">,</span> <span class="n">END</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Start with the least autonomy that solves the problem. Agents are for unknown paths, not for running a process you already know.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Give an example where an agent clearly beats a workflow, and explain why.</p></div>
+  </section>
+</article>
+
+<article class="ap" id="tool-sprawl">
+  <header class="ap-h">
+    <div class="ap-num">7.2</div>
+    <div>
+      <h2><a href="#tool-sprawl">Too many tools with vague descriptions</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An IT-operations agent is given 120 tools, auto-generated from internal API specs, with descriptions like
+"Gets data". It routinely calls the wrong tool, passes malformed parameters, and its prompt is 30K tokens
+before the user says anything.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Every available API is exposed as a tool, with names and descriptions taken straight from the spec, all
+loaded into context on every turn.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Selection accuracy drops</strong> as the tool count grows and descriptions overlap.</li>
+<li><strong>Context bloat.</strong> Tool schemas consume a large share of tokens on every call.</li>
+<li><strong>Ambiguous parameters</strong> lead to invalid or dangerous calls.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-tool-sprawl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">User task</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">120 tools in context</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Wrong tool / bad params</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Selection errors and token bloat</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">User task</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Tool search /</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">router</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">5–10 relevant tools</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Rich descriptions +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">examples</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Correct call</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-agents-tool-sprawl)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Curated, documented tools loaded on demand</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Design tools for a model, not a programmer</strong>:</p>
+<ul>
+<li>Curate: group low-level endpoints into task-level tools (<code>restart_service(service, env)</code> rather than five raw calls).</li>
+<li>Write descriptions that say <em>when</em> to use the tool, <em>when not to</em>, parameter formats, and an example.</li>
+<li>Use strict JSON schemas with enums and patterns.</li>
+<li><strong>Load tools on demand</strong> using tool search, a router, or skill/toolbox grouping, so only relevant tools are in context.</li>
+<li>Evaluate tool selection accuracy as its own metric.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Fewer, clearer choices raise selection accuracy. Strict schemas block malformed calls before they
+reach systems. On-demand loading recovers context budget for the actual task. Measuring selection makes
+tool design an iterative, data-driven activity.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@tool</span><span class="p">(</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"restart_service"</span><span class="p">,</span>
+  <span class="n">description</span><span class="o">=</span><span class="p">(</span><span class="s2">"Restart ONE application service in a given environment. Use after diagnosing a hung "</span>
+               <span class="s2">"process. Do NOT use for databases (use failover_db). Example: "</span>
+               <span class="s2">"restart_service(service='checkout-api', env='staging')"</span><span class="p">),</span>
+  <span class="n">schema</span><span class="o">=</span><span class="p">{</span><span class="s2">"service"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">,</span> <span class="s2">"pattern"</span><span class="p">:</span> <span class="s2">"^[a-z0-9-]+$"</span><span class="p">},</span>
+          <span class="s2">"env"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">,</span> <span class="s2">"enum"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"dev"</span><span class="p">,</span> <span class="s2">"staging"</span><span class="p">,</span> <span class="s2">"prod"</span><span class="p">]}},</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">restart_service</span><span class="p">(</span><span class="n">service</span><span class="p">,</span> <span class="n">env</span><span class="p">):</span> <span class="o">...</span>
+
+<span class="n">relevant</span> <span class="o">=</span> <span class="n">tool_index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">task_description</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>       <span class="c1"># on-demand tool loading</span>
+<span class="n">agent</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">relevant</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Tools are a model-facing API. Curate them, describe them like documentation, constrain their schemas, and load them on demand.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you measure tool-selection accuracy in your evaluation suite?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="unvalidated-tools">
+  <header class="ap-h">
+    <div class="ap-num">7.3</div>
+    <div>
+      <h2><a href="#unvalidated-tools">Tools with no input validation, idempotency or blast-radius limits</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A finance-ops agent retries a timed-out <code>issue_refund</code> call. The first call had in fact succeeded, so
+the customer is refunded twice. In another run, a hallucinated amount of $45,000 instead of $450 goes through.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Tools are thin wrappers that pass model-generated arguments straight to production APIs. No validation,
+no idempotency keys, no limits.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Model arguments are untrusted input</strong>, just like user input, and can be wrong, hallucinated or injected.</li>
+<li><strong>Retries duplicate side effects</strong> without idempotency.</li>
+<li><strong>Unbounded blast radius.</strong> One bad call can move money, delete data or email thousands of customers.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-unvalidated-tools" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Agent</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Raw args → prod API</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Retry on timeout</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Double refund</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Untrusted arguments, duplicated side effects</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Agent</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Schema + business</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">validation</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Policy limits /</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">approval</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Idempotency key</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Prod API</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-agents-unvalidated-tools)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Every side effect is validated, bounded and exactly-once</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Wrap side-effecting tools in a <strong>safe-action layer</strong>:</p>
+<ul>
+<li>Validate schema <em>and</em> business rules (amount ≤ original charge, account exists, status allows refund).</li>
+<li>Enforce <strong>policy limits</strong>: per-call caps, per-session totals, and an approval threshold above which a human must approve.</li>
+<li>Use <strong>idempotency keys</strong> derived from intent (<code>refund:{order_id}:{amount}</code>) so retries are safe.</li>
+<li>Prefer <strong>reversible</strong> operations (draft, schedule, soft-delete) and give the agent a dry-run mode.</li>
+<li>Log every action with the agent session, reasoning summary and approver.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Validation catches hallucinated or injected arguments before they cause harm, idempotency makes
+retries safe, and limits bound the worst case. Together these turn agent actions from "hope it's right"
+into controlled transactions that risk and audit teams can sign off.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@tool</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">issue_refund</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">amount</span><span class="p">:</span> <span class="n">Decimal</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">AgentCtx</span><span class="p">):</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">orders</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">order_id</span><span class="p">)</span> <span class="ow">or</span> <span class="n">reject</span><span class="p">(</span><span class="s2">"unknown order"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">amount</span> <span class="o">&gt;</span> <span class="n">order</span><span class="o">.</span><span class="n">captured_amount</span> <span class="o">-</span> <span class="n">order</span><span class="o">.</span><span class="n">refunded</span><span class="p">:</span> <span class="n">reject</span><span class="p">(</span><span class="s2">"exceeds refundable amount"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">session_total</span><span class="p">(</span><span class="s2">"refund"</span><span class="p">)</span> <span class="o">+</span> <span class="n">amount</span> <span class="o">&gt;</span> <span class="n">SESSION_CAP</span><span class="p">:</span> <span class="n">reject</span><span class="p">(</span><span class="s2">"session cap reached"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">amount</span> <span class="o">&gt;</span> <span class="n">APPROVAL_THRESHOLD</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">approvals</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">"refund"</span><span class="p">,</span> <span class="n">order_id</span><span class="o">=</span><span class="n">order_id</span><span class="p">,</span> <span class="n">amount</span><span class="o">=</span><span class="n">amount</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span>
+                                 <span class="n">requested_by</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">agent_id</span><span class="p">)</span>          <span class="c1"># human-in-the-loop</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"refund:</span><span class="si">{</span><span class="n">order_id</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">amount</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">return</span> <span class="n">payments</span><span class="o">.</span><span class="n">refund</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">amount</span><span class="p">,</span> <span class="n">idempotency_key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>     <span class="c1"># exactly-once</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Treat every model-generated argument as untrusted input. Validate it, bound it, make it idempotent, and require approval above a risk threshold.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you decide which actions need human approval?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="unbounded-loops">
+  <header class="ap-h">
+    <div class="ap-num">7.4</div>
+    <div>
+      <h2><a href="#unbounded-loops">Unbounded loops with no step, time or cost budget</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A research agent gets stuck alternating between two searches that return nothing new. It runs for six
+hours and makes 1,900 model calls before someone notices the cost alert.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><code>while not done: agent.step()</code>. Termination is left to the model deciding it's finished. No caps, no
+progress detection.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Agents can loop</strong> on repeated failures, oscillate between strategies, or chase ever-growing subtasks.</li>
+<li><strong>Costs grow without bound</strong>, and context grows each turn, so later steps cost more.</li>
+<li><strong>No graceful exit.</strong> When it does stop, there's no partial result.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 364" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-unbounded-loops" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Task</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">while not done: step()</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">1,900 calls</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Cost alert</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Termination delegated entirely to the model</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="198.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Task</text>
+<rect class="dg-node dg-std" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="232.4" font-size="12.5" text-anchor="middle">Step</text>
+<rect class="dg-node dg-new" x="438.4" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="218.8" font-size="11" text-anchor="middle">Budget check</text>
+<text class="dg-t dg-t-new" x="510.0" y="231.8" font-size="11" text-anchor="middle">(steps, tokens, $,</text>
+<text class="dg-t dg-t-new" x="510.0" y="244.8" font-size="11" text-anchor="middle">time)</text>
+<circle class="dg-badge-new" cx="577.6" cy="209.0" r="8"/><text class="dg-badge-t" x="577.6" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="225.1" font-size="12.5" text-anchor="middle">Progress /</text>
+<text class="dg-t dg-t-new" x="687.2" y="239.6" font-size="12.5" text-anchor="middle">repetition detector</text>
+<circle class="dg-badge-new" cx="754.8" cy="209.0" r="8"/><text class="dg-badge-t" x="754.8" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Answer</text>
+<rect class="dg-node dg-std" x="792.8" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="259.4" font-size="12.5" text-anchor="middle">Partial + escalate</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<path class="dg-loop" d="M864.4,280.0 V300.0 H155.6 V284.0" marker-end="url(#ah-agents-unbounded-loops)"/>
+<text class="dg-loop-t" x="510.0" y="295.0" text-anchor="middle" font-size="11.5">Continue only while within budget and making progress</text>
+<text class="dg-note dg-note-good" x="28" y="333.0" font-size="12.5">Hard limits and stall detection; graceful partial results</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Wrap every agent run in a <strong>budget envelope</strong>:</p>
+<ul>
+<li>Hard caps on steps, tokens, wall-clock time and dollar cost, set per task type.</li>
+<li><strong>Stall detection</strong>: identical tool calls repeated, no new information in N steps, or error loops.</li>
+<li>Escalation on breach: return the best partial result with a summary of what was tried, and hand off to a human or queue.</li>
+<li>Emit budget usage as trace attributes and alert on outliers.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Worst-case cost per run becomes bounded and predictable, which finance needs before approving agents
+at scale. Stall detection catches the common loop patterns early. Partial results mean the user gets
+value even when the agent can't finish.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Budget</span><span class="p">:</span> <span class="n">steps</span><span class="o">=</span><span class="mi">25</span><span class="p">;</span> <span class="n">tokens</span><span class="o">=</span><span class="mi">200_000</span><span class="p">;</span> <span class="n">usd</span><span class="o">=</span><span class="mf">2.00</span><span class="p">;</span> <span class="n">seconds</span><span class="o">=</span><span class="mi">300</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_agent</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">budget</span><span class="o">=</span><span class="n">Budget</span><span class="p">()):</span>
+    <span class="n">state</span><span class="p">,</span> <span class="n">seen</span><span class="p">,</span> <span class="n">t0</span> <span class="o">=</span> <span class="n">init</span><span class="p">(</span><span class="n">task</span><span class="p">),</span> <span class="n">Counter</span><span class="p">(),</span> <span class="n">time</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">budget</span><span class="o">.</span><span class="n">steps</span><span class="p">):</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="n">sig</span> <span class="o">=</span> <span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">tool</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+        <span class="n">seen</span><span class="p">[</span><span class="n">sig</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">seen</span><span class="p">[</span><span class="n">sig</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>                         <span class="k">return</span> <span class="n">escalate</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">"repeating action"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">usd</span> <span class="o">&gt;</span> <span class="n">budget</span><span class="o">.</span><span class="n">usd</span> <span class="ow">or</span> <span class="n">state</span><span class="o">.</span><span class="n">tokens</span> <span class="o">&gt;</span> <span class="n">budget</span><span class="o">.</span><span class="n">tokens</span> <span class="ow">or</span> <span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span> <span class="o">&gt;</span> <span class="n">budget</span><span class="o">.</span><span class="n">seconds</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">escalate</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">"budget exhausted"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">final</span><span class="p">:</span>                          <span class="k">return</span> <span class="n">action</span><span class="o">.</span><span class="n">answer</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">observe</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">execute</span><span class="p">(</span><span class="n">action</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">escalate</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">"step limit"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>An agent without a budget is an open-ended cost commitment. Cap steps, tokens, time and money, detect stalls, and exit gracefully.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you set sensible budgets for a new agent type with no history?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-checkpointing">
+  <header class="ap-h">
+    <div class="ap-num">7.5</div>
+    <div>
+      <h2><a href="#no-checkpointing">No state persistence or checkpointing</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A contract-review agent works through a 200-page agreement for 25 minutes. A container restart at
+minute 22 loses everything, and the job starts again from the beginning, including the expensive steps.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agent state lives in process memory. Long-running tasks have no checkpoints, can't be paused for human
+input, and can't resume after failure.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Lost work and money</strong> on any crash, deploy or timeout.</li>
+<li><strong>No human-in-the-loop pauses.</strong> Waiting hours for an approval is impossible if state is in RAM.</li>
+<li><strong>No replay.</strong> Debugging needs the exact sequence of states, which is gone.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-agents-no-checkpointing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Long task</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">State in memory</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Crash at minute 22</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Restart from zero</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No durability, no pause, no replay</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Long task</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Step</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Checkpoint to</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">durable store</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Interrupt for</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">approval</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Resume from last</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">checkpoint</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-agents-no-checkpointing)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Durable execution: pause, resume, replay, time-travel debugging</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>durable execution</strong> for agents:</p>
+<ul>
+<li>Persist state after every step (a LangGraph checkpointer on Postgres or Redis, a Temporal workflow, or managed agent runtimes with session state such as Bedrock AgentCore, Foundry Agent Service or Vertex Agent Engine).</li>
+<li>Model human approvals as <strong>interrupts</strong> that persist state and resume on callback.</li>
+<li>Make steps idempotent so replay after a crash is safe.</li>
+<li>Keep the checkpoint history for debugging and audit ("time-travel" through states).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Crashes and deploys cost one step, not the whole run. Human approvals can take minutes or days
+without holding resources. The checkpoint trail becomes the debugging and audit record that regulators
+and engineers both need.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">langgraph.checkpoint.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostgresSaver</span>
+
+<span class="n">graph</span> <span class="o">=</span> <span class="n">builder</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">checkpointer</span><span class="o">=</span><span class="n">PostgresSaver</span><span class="o">.</span><span class="n">from_conn_string</span><span class="p">(</span><span class="n">DB_URL</span><span class="p">),</span>
+                        <span class="n">interrupt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"send_to_counterparty"</span><span class="p">])</span>     <span class="c1"># human approval gate</span>
+<span class="n">cfg</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"configurable"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"thread_id"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"contract-</span><span class="si">{</span><span class="n">contract_id</span><span class="si">}</span><span class="s2">"</span><span class="p">}}</span>
+
+<span class="n">graph</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">"doc"</span><span class="p">:</span> <span class="n">contract</span><span class="p">},</span> <span class="n">cfg</span><span class="p">)</span>          <span class="c1"># runs until the interrupt, state persisted</span>
+<span class="c1"># ... hours later, after legal approves in the UI:</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">update_state</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="p">{</span><span class="s2">"approved_by"</span><span class="p">:</span> <span class="s2">"j.smith"</span><span class="p">})</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>                       <span class="c1"># resumes from the last checkpoint</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Long-running agents are workflows. Give them durable state, interrupts for humans, and replayable history.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you migrate in-flight agent sessions when the agent&#x27;s code changes?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="models.html">← 6. Model Selection &amp; Routing</a><a class="next" href="multi-agent.html">8. Multi-Agent Systems →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

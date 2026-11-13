@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced RAG · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="active" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part A · Retrieval &amp; Knowledge</div>
+  <h1><span class="sn">4</span>Advanced RAG</h1>
+  <p class="lede">GraphRAG, agentic retrieval and citation verification solve real problems, but only when chosen for the right reason and verified in production.</p>
+  <span class="pill">4 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#overengineered-rag"><span>4.1</span>GraphRAG or agentic RAG where simple RAG works</a><a href="#no-citation-verification"><span>4.2</span>No citation or grounding verification</a><a href="#temporal-blindness"><span>4.3</span>Ignoring temporal freshness and document validity</a><a href="#rag-vs-finetune-confusion"><span>4.4</span>Using RAG to fix behaviour, or fine-tuning to add knowledge</a></div>
+
+<article class="ap" id="overengineered-rag">
+  <header class="ap-h">
+    <div class="ap-num">4.1</div>
+    <div>
+      <h2><a href="#overengineered-rag">GraphRAG or agentic RAG where simple RAG works</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A retailer's FAQ assistant answers return-policy questions. The team builds a knowledge graph,
+a multi-step agentic retriever and a reflection loop. Latency is 14 seconds and accuracy is no better than
+a basic pipeline.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Architecture is chosen by trend, not by query profile. Every question goes through the most complex path:
+graph traversal, iterative tool calls, self-critique.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Complexity without benefit.</strong> Most enterprise queries are single-hop lookups that hybrid retrieval plus a reranker handles well.</li>
+<li><strong>Latency and cost multiply</strong> with every extra LLM call and traversal.</li>
+<li><strong>More failure surface.</strong> Graph extraction errors, entity-resolution mistakes and agent loops each add new ways to be wrong.</li>
+<li><strong>Maintenance burden.</strong> Knowledge graphs need schema design, entity resolution and continuous curation.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-overengineered-rag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Every query</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Graph build + traverse</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Agent loop + reflection</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">14 s answer</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Maximum complexity applied uniformly</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Query</text>
+<rect class="dg-node dg-new" x="305.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="259.4" font-size="12.5" text-anchor="middle">Classify query type</text>
+<circle class="dg-badge-new" cx="489.0" cy="236.0" r="8"/><text class="dg-badge-t" x="489.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Simple RAG (≈80%)</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="259.4" font-size="12.5" text-anchor="middle">Multi-hop agentic</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="306.1" font-size="12.5" text-anchor="middle">Graph: relationship</text>
+<text class="dg-t dg-t-std" x="620.8" y="320.6" font-size="12.5" text-anchor="middle">queries</text>
+<rect class="dg-node dg-std" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Answer</text>
+<line class="dg-edge" x1="274.5" y1="255.0" x2="301.5" y2="255.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<line class="dg-edge" x1="496.0" y1="255.0" x2="523.0" y2="255.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<line class="dg-edge" x1="717.5" y1="255.0" x2="744.5" y2="255.0" marker-end="url(#ah-advanced-rag-overengineered-rag)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Complexity spent only where query types demand it</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Route by query complexity</strong>, and justify each advanced technique with evaluation:</p>
+<table>
+<thead>
+<tr>
+<th>Technique</th>
+<th>Use when</th>
+<th>Avoid when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hybrid + rerank</td>
+<td>Default for lookups and how-tos</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Query decomposition</td>
+<td>Multi-part, comparative questions</td>
+<td>Single facts</td>
+</tr>
+<tr>
+<td>Agentic retrieval</td>
+<td>Open-ended research, needs iteration across tools</td>
+<td>Latency-critical UX</td>
+</tr>
+<tr>
+<td>GraphRAG</td>
+<td>Relationship / aggregation questions ("which suppliers share a parent company?"), global summaries</td>
+<td>Flat FAQ or policy corpora</td>
+</tr>
+</tbody>
+</table>
+<p>Profile real queries first. Build the simple pipeline and its eval set, then add a technique only when a
+measured query segment fails and the technique fixes it.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Most traffic takes the fast, cheap path. Advanced techniques run only where they add measurable
+value, so average latency and cost stay low while hard queries still get answered. Each component earns
+its place through evidence, which keeps the architecture explainable and maintainable.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">ROUTES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"lookup"</span><span class="p">:</span> <span class="n">simple_rag</span><span class="p">,</span> <span class="s2">"multi_hop"</span><span class="p">:</span> <span class="n">decomposed_rag</span><span class="p">,</span>
+          <span class="s2">"relationship"</span><span class="p">:</span> <span class="n">graph_rag</span><span class="p">,</span> <span class="s2">"research"</span><span class="p">:</span> <span class="n">agentic_rag</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">route</span><span class="p">(</span><span class="n">q</span><span class="p">):</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="n">classifier</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>              <span class="c1"># small fine-tuned model or cheap LLM call</span>
+    <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ROUTES</span> <span class="ow">or</span> <span class="n">classifier</span><span class="o">.</span><span class="n">confidence</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">:</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="s2">"lookup"</span>                       <span class="c1"># safe, fast default</span>
+    <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="sa">f</span><span class="s2">"route.</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ROUTES</span><span class="p">[</span><span class="n">label</span><span class="p">](</span><span class="n">q</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Advanced RAG is a tool, not a maturity level. Profile the queries, default to simple, and escalate only for the segments that measurably need it.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What query signals would tell you a knowledge graph is worth the investment?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-citation-verification">
+  <header class="ap-h">
+    <div class="ap-num">4.2</div>
+    <div>
+      <h2><a href="#no-citation-verification">No citation or grounding verification</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A compliance assistant cites "Policy AML-7, section 4.2" for a transaction-monitoring threshold. The
+section exists, but it says something different. An auditor finds it.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The model is asked to "include citations", and they're displayed as-is. Nobody checks whether the cited
+passage actually supports the sentence it's attached to.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Citation hallucination.</strong> Models can attach plausible references to claims that came from parametric memory, or misattribute between sources.</li>
+<li><strong>False trust.</strong> A citation looks like evidence, so users check less, which makes wrong answers more dangerous.</li>
+<li><strong>No measurement.</strong> Without verification, there's no faithfulness metric to manage.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-no-citation-verification" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Sources</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">LLM: &quot;add citations&quot;</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Display as-is</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Plausible but wrong cite</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Citations look authoritative but are never checked</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Sources (IDs)</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Generate with span</text>
+<text class="dg-t dg-t-std" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">IDs</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Claim-level</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">verification</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Drop / flag</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">unsupported</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Verified answer</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-advanced-rag-no-citation-verification)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Every claim is mapped to a source span that entails it</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Make citations <strong>structural and verified</strong>:</p>
+<ul>
+<li>Give each source passage a stable ID and require structured output: <code>[{claim, source_ids, quote}]</code>. Use native citation features where the model API provides them.</li>
+<li><strong>Verify each claim</strong> against its cited passages with an entailment/NLI model or an LLM judge, and confirm that quoted spans really exist in the source text (string match).</li>
+<li>Remove or flag unsupported claims, and show users the exact supporting passage on hover.</li>
+<li>Track <strong>faithfulness rate</strong> and <strong>citation precision</strong> in offline and online evals.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Citations become checkable facts instead of decoration. Exact-span matching catches fabricated quotes
+cheaply, and entailment checks catch misattribution. Users and auditors can verify any claim in one
+click, and the faithfulness metric gives leadership a number to govern.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">out</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate_structured</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">AnswerWithClaims</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="n">ev</span><span class="p">,</span> <span class="n">question</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<span class="n">verified</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">claims</span><span class="p">:</span>
+    <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">src</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">c</span><span class="o">.</span><span class="n">source_ids</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">src</span><span class="p">]</span>
+    <span class="n">quote_ok</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">quote</span> <span class="ow">in</span> <span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">)</span>                       <span class="c1"># exact span exists</span>
+    <span class="n">entailed</span> <span class="o">=</span> <span class="n">nli</span><span class="o">.</span><span class="n">entails</span><span class="p">(</span><span class="n">premise</span><span class="o">=</span><span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">texts</span><span class="p">),</span> <span class="n">hypothesis</span><span class="o">=</span><span class="n">c</span><span class="o">.</span><span class="n">claim</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.8</span>
+    <span class="k">if</span> <span class="n">quote_ok</span> <span class="ow">and</span> <span class="n">entailed</span><span class="p">:</span>
+        <span class="n">verified</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">metrics</span><span class="o">.</span><span class="n">inc</span><span class="p">(</span><span class="s2">"citation.rejected"</span><span class="p">)</span>
+<span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">verified</span><span class="p">,</span> <span class="n">show_sources</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A citation nobody verified is decoration. Make citations structured, check them claim by claim, and measure faithfulness.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you verify citations at scale without doubling latency?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="temporal-blindness">
+  <header class="ap-h">
+    <div class="ap-num">4.3</div>
+    <div>
+      <h2><a href="#temporal-blindness">Ignoring temporal freshness and document validity</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A travel-policy assistant tells an employee the hotel cap is $250 a night. That was the 2024 policy;
+the 2026 policy says $300. Both versions are in the index and the older one ranked higher.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Retrieval is purely semantic. Policy versions, superseded documents and dated facts compete on
+similarity alone, and older documents (with more cross-references) often win.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Superseded content wins</strong> because it's similar, longer or more linked.</li>
+<li><strong>Time-relative questions</strong> ("current", "last quarter", "as of today") aren't resolved to dates.</li>
+<li><strong>Mixed answers.</strong> The model blends old and new versions into a hybrid that matches neither.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-temporal-blindness" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">&quot;Current hotel cap?&quot;</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Semantic search</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">2024 + 2026 policies</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Blended or stale answer</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Validity dates ignored at retrieval</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">&quot;Current hotel</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">cap?&quot;</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Resolve time (as of</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">today)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Validity filter</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Recency-aware rank</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Answer + effective</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">date</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-advanced-rag-temporal-blindness)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Only in-force versions compete; the answer states its effective date</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Model <strong>time explicitly</strong>:</p>
+<ul>
+<li>Store <code>effective_from</code>, <code>effective_to</code>, <code>version</code> and <code>status</code> on every chunk (see the metadata contract).</li>
+<li>Resolve temporal expressions in the query to concrete dates, defaulting to "as of today".</li>
+<li><strong>Filter</strong> to versions valid at that date. For time-series facts, add a recency decay to the ranking score.</li>
+<li>Show the effective date with the answer, and explicitly support historical questions ("what was the policy in 2024?").</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Superseded versions can no longer be retrieved for current questions, which removes the most common
+source of confidently wrong policy answers. Showing the effective date lets users verify currency at a
+glance, and historical questions still work because versioned content is kept, not deleted.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">as_of</span> <span class="o">=</span> <span class="n">resolve_time</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">today</span><span class="p">())</span>                  <span class="c1"># "last quarter" → date range</span>
+<span class="n">flt</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"effective_from"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"$lte"</span><span class="p">:</span> <span class="n">as_of</span><span class="p">},</span>
+       <span class="s2">"$or"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"effective_to"</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span> <span class="p">{</span><span class="s2">"effective_to"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"$gt"</span><span class="p">:</span> <span class="n">as_of</span><span class="p">}}],</span>
+       <span class="s2">"status"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"$ne"</span><span class="p">:</span> <span class="s2">"draft"</span><span class="p">}}</span>
+<span class="n">hits</span> <span class="o">=</span> <span class="n">hybrid_retrieve</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="n">flt</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>                                            <span class="c1"># mild recency boost for dated facts</span>
+    <span class="n">h</span><span class="o">.</span><span class="n">score</span> <span class="o">*=</span> <span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">DECAY</span> <span class="o">*</span> <span class="p">(</span><span class="n">as_of</span> <span class="o">-</span> <span class="n">h</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">"published"</span><span class="p">])</span><span class="o">.</span><span class="n">days</span><span class="p">)</span> <span class="k">if</span> <span class="n">h</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">"doc_type"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"bulletin"</span> <span class="k">else</span> <span class="mi">1</span>
+<span class="n">answer</span> <span class="o">=</span> <span class="n">generate</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">hits</span><span class="p">,</span> <span class="n">footer</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Policy version effective </span><span class="si">{</span><span class="n">hits</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">'effective_from'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>&quot;Correct&quot; is time-dependent. Index validity dates, resolve the question&#x27;s time frame, and filter before ranking.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you handle a question that spans two policy versions, such as a claim filed under the old policy and paid under the new one?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="rag-vs-finetune-confusion">
+  <header class="ap-h">
+    <div class="ap-num">4.4</div>
+    <div>
+      <h2><a href="#rag-vs-finetune-confusion">Using RAG to fix behaviour, or fine-tuning to add knowledge</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Team A fine-tunes a model on the product catalog so it "knows" prices. Prices change weekly and the
+model keeps quoting old ones. Team B puts 40 pages of style guide into every RAG prompt to get answers in the
+brand voice and JSON format, and it's still inconsistent.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The wrong lever for the problem: fine-tuning to inject frequently changing facts, or retrieval and prompt
+stuffing to change stable behaviours such as format, tone and domain reasoning style.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Fine-tuning is a poor knowledge store.</strong> Facts can't be updated, cited or access-controlled, and models may blend or hallucinate memorized facts.</li>
+<li><strong>Prompts are a poor behaviour store at scale.</strong> Long instructions cost tokens on every call and are followed inconsistently.</li>
+<li><strong>Expensive iteration.</strong> Every fact change triggers a retraining cycle.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-advanced-rag-rag-vs-finetune-confusion" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Weekly price changes</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Fine-tune model</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Stale prices, no citations</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Volatile knowledge baked into weights</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Volatile facts</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">RAG / tools (live)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Base or tuned model</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="191.8" font-size="11" text-anchor="middle">Fine-tune /</text>
+<text class="dg-t dg-t-new" x="687.2" y="204.8" font-size="11" text-anchor="middle">prompts: format &amp;</text>
+<text class="dg-t dg-t-new" x="687.2" y="217.8" font-size="11" text-anchor="middle">style</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Grounded, on-brand</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">answer</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-advanced-rag-rag-vs-finetune-confusion)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Knowledge via retrieval and tools; behaviour via instructions, examples or tuning</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Apply a simple decision rule:</p>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Lever</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Facts that change, must be cited, or are permissioned</td>
+<td>RAG / tool calls to systems of record</td>
+</tr>
+<tr>
+<td>Exact values (prices, balances, inventory)</td>
+<td>Tool/API call, not retrieval of text</td>
+</tr>
+<tr>
+<td>Output format, tone, domain style</td>
+<td>Structured output + few-shot, then fine-tuning if still inconsistent</td>
+</tr>
+<tr>
+<td>Specialized reasoning on stable patterns, latency/cost at scale</td>
+<td>Fine-tune or distill a smaller model</td>
+</tr>
+</tbody>
+</table>
+<p>Start with prompting and RAG, establish an eval baseline, and fine-tune only for a measured behaviour gap
+at volume.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Knowledge stays live, cited and governed in the systems that own it. Behaviour is learned once rather
+than paid for in every prompt. Separating the two levers makes each one cheaper to change and easier to
+evaluate. Distilled or fine-tuned small models can then cut serving cost for high-volume, stable tasks.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># Facts: call the system of record, don't memorize</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">Tool</span><span class="p">(</span><span class="s2">"get_price"</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">sku</span><span class="p">:</span> <span class="n">pricing_api</span><span class="o">.</span><span class="n">current</span><span class="p">(</span><span class="n">sku</span><span class="p">)),</span>
+         <span class="n">Tool</span><span class="p">(</span><span class="s2">"search_policies"</span><span class="p">,</span> <span class="n">secure_search</span><span class="p">)]</span>
+
+<span class="c1"># Behaviour: schema + few-shot first; fine-tune only if eval shows a persistent gap</span>
+<span class="n">resp</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="o">=</span><span class="n">BRAND_VOICE_SHORT</span><span class="p">,</span> <span class="n">examples</span><span class="o">=</span><span class="n">FEW_SHOT</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span>
+                    <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span> <span class="n">response_schema</span><span class="o">=</span><span class="n">QuoteResponse</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">eval_report</span><span class="p">[</span><span class="s2">"format_adherence"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.97</span> <span class="ow">and</span> <span class="n">monthly_calls</span> <span class="o">&gt;</span> <span class="mi">2_000_000</span><span class="p">:</span>
+    <span class="n">start_finetune</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="s2">"small-model"</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">curated_pairs</span><span class="p">,</span> <span class="n">eval_gate</span><span class="o">=</span><span class="n">eval_suite</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>RAG and tools for knowledge, prompting or fine-tuning for behaviour. Mixing them up produces stale facts or bloated prompts.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you distill a frontier model into a smaller one for a production task?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="rag-core.html">← 3. Retrieval &amp; RAG Core</a><a class="next" href="prompts.html">5. Prompt Engineering →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

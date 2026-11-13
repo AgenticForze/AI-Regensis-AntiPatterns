@@ -1,0 +1,273 @@
+id: ingestion
+num: 1
+short: Ingestion & Chunking
+title: Data Ingestion & Chunking
+summary: Retrieval quality is capped by ingestion quality. These anti-patterns corrupt knowledge before a single query is run.
+patterns:
+  - id: fixed-size-chunking
+    title: Fixed-size chunking that ignores document structure
+    tags: [Quality]
+    scenario: |
+      An insurer indexes 40,000 policy documents for a claims-adjuster assistant. Adjusters ask
+      "Is water damage from a burst pipe covered under the HO-3 endorsement?" The answer is often
+      wrong or incomplete, even though the clause is in the corpus.
+    antipattern: |
+      Every document is split into 512-token windows with a 50-token overlap, regardless of headings,
+      clauses, tables or lists. The same splitter is used for contracts, FAQs, spreadsheets and emails.
+    fails: |
+      - **Semantic units are cut in half.** A coverage clause and its exclusion end up in different chunks, so the retriever returns the clause without the exception.
+      - **Headings are lost.** A chunk that says "This does not apply" has no anchor to which section "this" refers to.
+      - **Embedding dilution.** Chunks that straddle two topics produce vectors that sit between both, so they rank poorly for either.
+      - **Blind tuning.** Teams adjust chunk size by trial and error with no evaluation set, which trades one failure for another.
+    diagram:
+      bad: ["Policy PDF", "Text extract", "!512-token split", "Embed", "Vector index"]
+      bad_note: "Clause and its exclusion land in different chunks; heading context is lost"
+      good: ["Policy PDF", "+Layout-aware parse", "+Structure-aware chunk | Heading path", "+Contextual header", "Embed + index"]
+      good_note: "Each chunk is a complete semantic unit carrying its section path"
+    solution: |
+      Use **structure-aware chunking** driven by the document layout:
+
+      1. Parse into a document tree (title → section → clause → paragraph/table) with a layout-aware parser.
+      2. Split on semantic boundaries (sections, clauses, list items). Merge small siblings and recursively split oversized nodes.
+      3. **Prepend a contextual header** to each chunk: document title, section breadcrumb, effective date. Optionally add a one-sentence LLM summary of where the chunk sits in the document ("contextual retrieval").
+      4. Store a **parent-child relationship**. Retrieve on small child chunks for precision, then expand to the parent section for generation.
+      5. Pick a chunking strategy per document type (contracts, FAQs, tables, transcripts) and validate it against a labeled retrieval set.
+    works: |
+      Chunks now line up with how meaning is actually organized, so each embedding represents one idea.
+      The breadcrumb restores the context that splitting removes, which raises recall on queries that
+      reference section names. The parent-child expansion delivers complete clauses, exceptions included,
+      to the generator. Because the strategy is chosen per document type and measured, changes are
+      evidence-based rather than guesswork.
+    code: |
+      def chunk_document(doc_tree, max_tokens=400):
+          chunks = []
+          for node in doc_tree.walk(levels=("section", "clause")):
+              breadcrumb = " > ".join(node.path_titles())          # Policy > Coverage A > Water damage
+              for piece in split_on_boundaries(node.text, max_tokens):
+                  header = f"[{doc_tree.title} | {breadcrumb} | eff. {doc_tree.effective_date}]"
+                  chunks.append({
+                      "id": f"{doc_tree.id}:{node.id}:{piece.idx}",
+                      "text": f"{header}\n{piece.text}",
+                      "parent_id": node.id,          # expand to full clause at generation time
+                      "doc_type": doc_tree.doc_type,
+                  })
+          return chunks
+
+      # Retrieval: match on children, generate on parents
+      hits = index.search(query, k=20)
+      context = dedupe(store.get_parent(h.parent_id) for h in rerank(query, hits)[:5])
+    takeaway: "Chunking is a modelling decision, not a preprocessing default. Chunk along document structure, carry the heading path into every chunk, and prove the choice with a retrieval eval."
+    followup: "How would you chunk a 300-page contract with nested tables and cross-references?"
+
+  - id: no-metadata-lineage
+    title: No metadata or lineage on chunks
+    tags: [Compliance, Quality]
+    scenario: |
+      A pharmaceutical company's regulatory assistant cites an SOP. An auditor asks which version,
+      which approval date, and which source system the answer came from. Nobody can tell.
+    antipattern: |
+      Chunks are stored as `{id, text, vector}`. Source system, version, owner, effective date,
+      classification and ingestion run are discarded during ingestion.
+    fails: |
+      - **No filtering.** Retrieval can't be restricted to current, approved or region-specific documents, so superseded SOPs compete with live ones.
+      - **No auditability.** In regulated industries, an answer without provenance is unusable however accurate it is.
+      - **No targeted fixes.** When a source document is wrong or withdrawn, nobody can find and purge its chunks.
+      - **No freshness signals.** The ranker can't prefer newer content.
+    diagram:
+      bad: ["SharePoint | Confluence", "Extract text", "!{id, text, vector}", "Retriever", "Answer (no source)"]
+      bad_note: "Cannot filter, cite, version or purge"
+      good: ["SharePoint | Confluence", "+Metadata harvest", "+Lineage record", "Chunk + embed", "+Filtered retrieval", "Cited answer"]
+      good_note: "Every chunk is traceable to source, version, owner and ingestion run"
+    solution: |
+      Define a **chunk metadata contract** and enforce it at ingestion:
+
+      | Field | Purpose |
+      |---|---|
+      | `source_uri`, `source_system`, `doc_id`, `version` | Citation and lineage |
+      | `effective_from`, `effective_to`, `status` | Freshness and supersession filtering |
+      | `classification`, `acl_groups`, `region` | Security trimming and residency |
+      | `owner`, `doc_type`, `language` | Routing, ranking and stewardship |
+      | `ingest_run_id`, `parser_version`, `embed_model` | Reproducibility and rollback |
+
+      Reject chunks that fail the contract. Register every ingestion run in a lineage store
+      (OpenLineage, a data catalog, or a simple run table) so you can trace any answer back to raw bytes.
+    works: |
+      Metadata turns the vector index from a bag of text into a governed data product. Filters keep
+      superseded and unauthorized content out before ranking. Citations carry version and date, which
+      satisfies auditors. A withdrawn document can be purged by `doc_id` in seconds, and a bad parser
+      release can be rolled back by `ingest_run_id`.
+    code: |
+      from pydantic import BaseModel, Field
+      from datetime import date
+
+      class ChunkMeta(BaseModel):
+          doc_id: str; version: str; source_uri: str; source_system: str
+          status: str = Field(pattern="^(approved|draft|superseded)$")
+          effective_from: date; effective_to: date | None = None
+          classification: str; acl_groups: list[str]; region: str
+          ingest_run_id: str; parser_version: str; embed_model: str
+
+      def ingest(chunk_text, raw_meta, run):
+          meta = ChunkMeta(**raw_meta, ingest_run_id=run.id,
+                           parser_version=run.parser, embed_model=run.embedder)  # raises if invalid
+          index.upsert(id=chunk_id(meta), vector=embed(chunk_text), text=chunk_text, metadata=meta.model_dump())
+
+      # Retrieval only sees approved, in-force, permitted content
+      index.search(q, filter={"status": "approved", "effective_to": {"$gte": today()},
+                              "acl_groups": {"$in": user.groups}})
+    takeaway: "If you can't answer \"where did this answer come from, which version, and who approved it\", the system isn't production-ready for a regulated client."
+    followup: "How do you handle a document that is withdrawn after it has already been cited in answers?"
+
+  - id: flat-pdf-tables
+    title: Parsing PDFs, tables and scans as flat text
+    tags: [Quality]
+    scenario: |
+      A bank's credit-risk assistant answers questions from annual reports and rate sheets. Asked for
+      "the Tier 1 capital ratio for 2025", it returns a number from the wrong column or the wrong year.
+    antipattern: |
+      A basic text extractor flattens PDFs. Tables become whitespace-separated number soup, multi-column
+      layouts interleave, headers and footers repeat on every chunk, and scanned pages are skipped silently.
+    fails: |
+      - **Row and column relationships are destroyed.** "12.4 13.1 11.8" no longer says which number belongs to which year or metric.
+      - **Reading order breaks** on two-column layouts, so sentences are stitched across columns.
+      - **Boilerplate pollution.** Repeated headers and footers dominate embeddings and crowd out real hits.
+      - **Silent gaps.** Scanned or image-only pages produce no text and no error, so the knowledge isn't there and nobody knows.
+    diagram:
+      bad: ["Annual report PDF", "!pdftotext", "Number soup", "Chunk", "Wrong figure cited"]
+      bad_note: "Table structure and reading order are lost; scans silently dropped"
+      good: ["Annual report PDF", "+Layout / OCR model", "+Tables → Markdown | Figures → captions", "+Quality checks", "Typed chunks"]
+      good_note: "Tables keep headers per row; low-confidence pages are flagged, not skipped"
+    solution: |
+      Treat parsing as a **multimodal extraction pipeline**:
+
+      - Use a layout-aware parser or document-intelligence service (for example Azure Document Intelligence, Amazon Textract, Google Document AI, or open-source Docling/Unstructured) that returns blocks, reading order and table cells.
+      - **Serialize tables** as Markdown or HTML, and for large tables also emit *row-level chunks* that repeat the column headers ("2025 · Tier 1 capital ratio · 13.1%").
+      - Run OCR on image-only pages. For charts and diagrams, generate captions with a vision model and index those.
+      - Strip repeated headers and footers by detecting text that recurs across pages.
+      - Add **quality gates**: text-per-page thresholds, OCR confidence, table-detection counts. Route failures to a review queue.
+    works: |
+      Numbers stay attached to their row and column labels, so retrieval and generation see
+      "2025 Tier 1 ratio = 13.1%" instead of an ambiguous string. Row-level chunks make single facts directly
+      retrievable. Quality gates turn silent data loss into a visible operational metric, which matters most
+      in finance, where one wrong figure destroys trust.
+    code: |
+      def parse(pdf):
+          doc = layout_parser.analyze(pdf)                 # blocks, reading order, tables, confidence
+          out = []
+          for page in doc.pages:
+              if page.text_chars < 50:                     # image-only page
+                  page = ocr.run(page)
+                  if page.confidence < 0.85: review_queue.put(pdf.id, page.no)
+              for t in page.tables:
+                  out.append(chunk(t.to_markdown(), kind="table", page=page.no))
+                  for row in t.rows:                       # row-level facts with headers repeated
+                      out.append(chunk(" · ".join(f"{h}: {v}" for h, v in zip(t.headers, row)),
+                                       kind="table_row", page=page.no))
+              for fig in page.figures:
+                  out.append(chunk(vision_caption(fig.image), kind="figure", page=page.no))
+              out += text_chunks(strip_boilerplate(page.blocks, doc.repeated_lines))
+          return out
+    takeaway: "In document-heavy industries the parser is the most underrated component. Bad parsing produces confident wrong numbers that no prompt can fix."
+    followup: "When would you index a table as structured data in SQL rather than as text chunks?"
+
+  - id: one-time-ingestion
+    title: One-time ingestion with no incremental refresh or deletes
+    tags: [Reliability, Compliance]
+    scenario: |
+      An HR policy assistant was loaded once at launch. Six months later it still quotes the old
+      parental-leave policy, and documents that were deleted from SharePoint for legal reasons are still being cited.
+    antipattern: |
+      Ingestion is a notebook someone ran once. Updates mean re-running everything by hand. Deletions in
+      the source system never reach the index.
+    fails: |
+      - **Stale answers.** The index drifts from the source of truth, and users get confident answers based on outdated policy.
+      - **Zombie documents.** Content removed for legal, privacy or confidentiality reasons stays retrievable, which is a compliance incident waiting to happen.
+      - **Full re-index cost.** Rebuilding everything to pick up a handful of changes is slow and expensive, so it happens rarely.
+      - **No freshness SLA.** Nobody owns how stale the index is allowed to be.
+    diagram:
+      bad: ["Source systems", "!Manual notebook run", "Vector index", "Users"]
+      bad_note: "Index drifts from the source; deleted documents keep being served"
+      good: ["Source systems", "+Change feed (CDC / webhooks)", "+Diff by content hash", "Upsert | Tombstone delete", "Vector index"]
+      good_note: "Freshness SLA measured; deletes propagate within minutes"
+      good_loop: "Nightly reconciliation sweep"
+    solution: |
+      Build ingestion as a **continuously synchronized pipeline**:
+
+      - Subscribe to change events (Graph API delta queries, S3 events, Confluence webhooks, database CDC) instead of polling everything.
+      - Hash content at document and chunk level. Re-embed only chunks whose hash changed.
+      - Propagate **deletes as tombstones** keyed by `doc_id`. Never rely on "we'll overwrite it next time".
+      - Run a periodic **reconciliation job** that compares source inventory with index inventory and fixes drift.
+      - Publish freshness metrics (p95 lag from source change to searchable) and alert when the SLA is breached.
+    works: |
+      Event-driven sync keeps the index within minutes of the source, at a fraction of the cost of full
+      rebuilds, because only changed chunks are re-embedded. Tombstones and reconciliation close the
+      compliance gap for deleted content. A measured freshness SLA turns "is the bot up to date?" into an
+      operational metric with an owner.
+    code: |
+      def on_change(event):
+          if event.type == "deleted":
+              index.delete(filter={"doc_id": event.doc_id}); audit.log("purge", event.doc_id); return
+          doc = fetch(event.uri)
+          new_chunks = {c.id: c for c in chunk_document(parse(doc))}
+          old_hashes = index.get_hashes(doc_id=event.doc_id)
+          changed = [c for cid, c in new_chunks.items() if old_hashes.get(cid) != sha256(c.text)]
+          stale   = set(old_hashes) - set(new_chunks)
+          index.upsert([embed_chunk(c) for c in changed]); index.delete(ids=list(stale))
+          metrics.observe("freshness_lag_s", now() - event.modified_at)
+
+      def reconcile():                                    # nightly safety net
+          drift = set(index.doc_ids()) ^ set(source.doc_ids())
+          for d in drift: on_change(source.event_for(d))
+    takeaway: "A RAG index is a replica of the enterprise's knowledge. Treat it like any replica, with change data capture, delete propagation and a freshness SLA."
+    followup: "How would you handle a right-to-be-forgotten request that touches embeddings and caches?"
+
+  - id: pii-ingestion
+    title: Ingesting PII and secrets without redaction
+    tags: [Security, Compliance]
+    scenario: |
+      A support assistant is trained on five years of ticket history. A user asks how a refund was
+      handled and gets back another customer's full name, phone number and partial card number.
+    antipattern: |
+      Raw tickets, emails and chat logs are embedded as-is. PII, PHI, credentials and API keys
+      pasted into tickets all become retrievable context.
+    fails: |
+      - **Cross-user leakage.** Any user who can query the assistant can surface any other customer's personal data.
+      - **Regulatory exposure.** GDPR, HIPAA, PCI-DSS and similar rules apply to the vector store, logs and caches as much as to the source system.
+      - **Secrets exposure.** Credentials pasted into tickets become retrievable by anyone.
+      - **Irreversible spread.** Once PII is in embeddings, prompt logs and caches, deleting it means finding every copy.
+    diagram:
+      bad: ["Tickets | Emails", "!Embed raw text", "Vector index", "LLM", "PII in answers"]
+      bad_note: "Personal data and secrets become retrievable by any user"
+      good: ["Tickets | Emails", "+PII / secret detection", "+Redact or tokenize", "Embed", "+Output PII filter"]
+      good_note: "Sensitive values never enter the index; re-identification is gated by policy"
+    solution: |
+      Apply **privacy by design** at ingestion and again at output:
+
+      - Run PII/PHI and secret detectors (Microsoft Presidio, Amazon Comprehend PII, Google Cloud DLP, or Sensitive Data Protection) before chunking.
+      - **Redact** what the use case doesn't need. **Pseudonymize** what it does (reversible tokens in a vault, so authorized workflows can re-identify).
+      - Classify every document and set `classification` metadata. Restricted classes go into separate, tightly scoped indexes or are excluded.
+      - Add an **output filter** as defense in depth, and apply the same redaction to prompt and response logs.
+      - Record a data-protection impact assessment (DPIA) for the use case.
+    works: |
+      Sensitive values never become retrievable context, so leakage can't happen through retrieval no
+      matter what the user asks. Tokenization keeps analytical value ("same customer across tickets")
+      without exposing identity. Redacted logs prevent the observability stack from becoming a second
+      copy of the PII. The design is explainable to a privacy officer.
+    code: |
+      from presidio_analyzer import AnalyzerEngine
+      from presidio_anonymizer import AnonymizerEngine
+
+      analyzer, anonymizer = AnalyzerEngine(), AnonymizerEngine()
+      ENTITIES = ["PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "CREDIT_CARD", "US_SSN", "IBAN_CODE"]
+
+      def sanitize(text, doc_id):
+          if secret_scanner.find(text):                     # API keys, passwords, tokens
+              quarantine(doc_id); return None
+          results = analyzer.analyze(text=text, entities=ENTITIES, language="en")
+          return anonymizer.anonymize(text=text, analyzer_results=results,
+                                      operators={"DEFAULT": vault_tokenize_operator()}).text
+
+      clean = sanitize(ticket.body, ticket.id)
+      if clean: ingest(clean, meta | {"classification": "internal-redacted"})
+    takeaway: "Data protection has to happen before embedding. Once PII is in the vector store, the logs and the caches, it can no longer be cleaned up reliably."
+    followup: "When would you choose pseudonymization over redaction?"

@@ -1,0 +1,244 @@
+id: agents
+num: 7
+short: Agent Design & Tool Use
+title: Single-Agent Design & Tool Use
+summary: An agent is an LLM in a loop with tools and state. Most production failures come from the loop, the tools or the state, not from the model.
+intro:
+  - flow:
+      good: ["Goal + context", "Plan / decide", "Tool call (validated)", "Observe result", "+Check budget & stop rules", "Final answer"]
+      good_loop: "Loop until goal met or budget exhausted"
+    caption: "The agent loop: every step crosses a boundary that needs a control"
+patterns:
+  - id: agent-for-workflow
+    title: Building an agent where a deterministic workflow would do
+    tags: [Reliability, Cost]
+    scenario: |
+      An "autonomous onboarding agent" decides at runtime which steps to run to provision a new employee:
+      create the account, assign licenses, order a laptop, enrol in training. It occasionally skips the security
+      training step, and nobody can explain why.
+    antipattern: |
+      A known, fixed business process is handed to an LLM to orchestrate freely, because "agentic" is the
+      goal rather than the means.
+    fails: |
+      - **Non-determinism where you need guarantees.** Mandatory steps become probabilistic.
+      - **Harder to test and audit.** Every run can take a different path.
+      - **Higher cost and latency.** Each step adds a reasoning call that a workflow engine does for free.
+    diagram:
+      bad: ["Onboarding request", "!LLM decides every step", "Steps vary per run", "Skipped mandatory step"]
+      bad_note: "Autonomy applied to a process that should be fixed"
+      good: ["Onboarding request", "+Workflow engine (fixed steps)", "LLM only for judgment steps", "+Validation", "Complete, auditable run"]
+      good_note: "Deterministic backbone; LLM calls where interpretation is needed"
+    solution: |
+      Apply an **autonomy spectrum** and pick the least autonomous design that solves the problem:
+
+      | Level | Pattern | Use when |
+      |---|---|---|
+      | 0 | Single LLM call | One transformation |
+      | 1 | Fixed workflow / prompt chain | Known steps, LLM for judgment inside steps |
+      | 2 | Router + workflows | A few known paths, selected by input |
+      | 3 | Agent with constrained tools | Path genuinely unknown in advance; open-ended tasks |
+      | 4 | Multi-agent | Clear separation of expertise or context, proven necessary |
+
+      Implement level 1–2 in a workflow engine (Step Functions, Temporal, Logic Apps, Cloud Workflows, LangGraph
+      with fixed edges), and reserve agent loops for steps that genuinely need exploration.
+    works: |
+      Mandatory steps are guaranteed by code. LLM judgment is applied where it adds value, such as reading
+      documents or drafting emails. Workflows are testable, observable and cheap. You can still promote a step
+      to agentic later, with evidence.
+    code: |
+      # LangGraph-style: fixed edges for the process, LLM nodes only for judgment
+      g = StateGraph(OnboardingState)
+      g.add_node("create_account",  create_account)          # deterministic
+      g.add_node("assign_licenses", assign_licenses)         # deterministic
+      g.add_node("pick_equipment",  llm_pick_equipment)      # LLM judgment from role description
+      g.add_node("security_training", enroll_training)       # mandatory, cannot be skipped
+      g.add_edge(START, "create_account")
+      g.add_edge("create_account", "assign_licenses")
+      g.add_edge("assign_licenses", "pick_equipment")
+      g.add_edge("pick_equipment", "security_training")
+      g.add_edge("security_training", END)
+    takeaway: "Start with the least autonomy that solves the problem. Agents are for unknown paths, not for running a process you already know."
+    followup: "Give an example where an agent clearly beats a workflow, and explain why."
+
+  - id: tool-sprawl
+    title: Too many tools with vague descriptions
+    tags: [Quality, Cost]
+    scenario: |
+      An IT-operations agent is given 120 tools, auto-generated from internal API specs, with descriptions like
+      "Gets data". It routinely calls the wrong tool, passes malformed parameters, and its prompt is 30K tokens
+      before the user says anything.
+    antipattern: |
+      Every available API is exposed as a tool, with names and descriptions taken straight from the spec, all
+      loaded into context on every turn.
+    fails: |
+      - **Selection accuracy drops** as the tool count grows and descriptions overlap.
+      - **Context bloat.** Tool schemas consume a large share of tokens on every call.
+      - **Ambiguous parameters** lead to invalid or dangerous calls.
+    diagram:
+      bad: ["User task", "!120 tools in context", "Wrong tool / bad params"]
+      bad_note: "Selection errors and token bloat"
+      good: ["User task", "+Tool search / router", "5–10 relevant tools", "+Rich descriptions + examples", "Correct call"]
+      good_note: "Curated, documented tools loaded on demand"
+    solution: |
+      **Design tools for a model, not a programmer**:
+
+      - Curate: group low-level endpoints into task-level tools (`restart_service(service, env)` rather than five raw calls).
+      - Write descriptions that say *when* to use the tool, *when not to*, parameter formats, and an example.
+      - Use strict JSON schemas with enums and patterns.
+      - **Load tools on demand** using tool search, a router, or skill/toolbox grouping, so only relevant tools are in context.
+      - Evaluate tool selection accuracy as its own metric.
+    works: |
+      Fewer, clearer choices raise selection accuracy. Strict schemas block malformed calls before they
+      reach systems. On-demand loading recovers context budget for the actual task. Measuring selection makes
+      tool design an iterative, data-driven activity.
+    code: |
+      @tool(
+        name="restart_service",
+        description=("Restart ONE application service in a given environment. Use after diagnosing a hung "
+                     "process. Do NOT use for databases (use failover_db). Example: "
+                     "restart_service(service='checkout-api', env='staging')"),
+        schema={"service": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+                "env": {"type": "string", "enum": ["dev", "staging", "prod"]}},
+      )
+      def restart_service(service, env): ...
+
+      relevant = tool_index.search(task_description, k=8)       # on-demand tool loading
+      agent.run(task, tools=relevant)
+    takeaway: "Tools are a model-facing API. Curate them, describe them like documentation, constrain their schemas, and load them on demand."
+    followup: "How would you measure tool-selection accuracy in your evaluation suite?"
+
+  - id: unvalidated-tools
+    title: Tools with no input validation, idempotency or blast-radius limits
+    tags: [Security, Reliability]
+    scenario: |
+      A finance-ops agent retries a timed-out `issue_refund` call. The first call had in fact succeeded, so
+      the customer is refunded twice. In another run, a hallucinated amount of $45,000 instead of $450 goes through.
+    antipattern: |
+      Tools are thin wrappers that pass model-generated arguments straight to production APIs. No validation,
+      no idempotency keys, no limits.
+    fails: |
+      - **Model arguments are untrusted input**, just like user input, and can be wrong, hallucinated or injected.
+      - **Retries duplicate side effects** without idempotency.
+      - **Unbounded blast radius.** One bad call can move money, delete data or email thousands of customers.
+    diagram:
+      bad: ["Agent", "!Raw args → prod API", "Retry on timeout", "Double refund"]
+      bad_note: "Untrusted arguments, duplicated side effects"
+      good: ["Agent", "+Schema + business validation", "+Policy limits / approval", "+Idempotency key", "Prod API"]
+      good_note: "Every side effect is validated, bounded and exactly-once"
+    solution: |
+      Wrap side-effecting tools in a **safe-action layer**:
+
+      - Validate schema *and* business rules (amount ≤ original charge, account exists, status allows refund).
+      - Enforce **policy limits**: per-call caps, per-session totals, and an approval threshold above which a human must approve.
+      - Use **idempotency keys** derived from intent (`refund:{order_id}:{amount}`) so retries are safe.
+      - Prefer **reversible** operations (draft, schedule, soft-delete) and give the agent a dry-run mode.
+      - Log every action with the agent session, reasoning summary and approver.
+    works: |
+      Validation catches hallucinated or injected arguments before they cause harm, idempotency makes
+      retries safe, and limits bound the worst case. Together these turn agent actions from "hope it's right"
+      into controlled transactions that risk and audit teams can sign off.
+    code: |
+      @tool
+      def issue_refund(order_id: str, amount: Decimal, reason: str, ctx: AgentCtx):
+          order = orders.get(order_id) or reject("unknown order")
+          if amount > order.captured_amount - order.refunded: reject("exceeds refundable amount")
+          if ctx.session_total("refund") + amount > SESSION_CAP: reject("session cap reached")
+          if amount > APPROVAL_THRESHOLD:
+              return approvals.request(action="refund", order_id=order_id, amount=amount, reason=reason,
+                                       requested_by=ctx.agent_id)          # human-in-the-loop
+          key = f"refund:{order_id}:{amount}"
+          return payments.refund(order_id, amount, idempotency_key=key)     # exactly-once
+    takeaway: "Treat every model-generated argument as untrusted input. Validate it, bound it, make it idempotent, and require approval above a risk threshold."
+    followup: "How do you decide which actions need human approval?"
+
+  - id: unbounded-loops
+    title: Unbounded loops with no step, time or cost budget
+    tags: [Cost, Reliability]
+    scenario: |
+      A research agent gets stuck alternating between two searches that return nothing new. It runs for six
+      hours and makes 1,900 model calls before someone notices the cost alert.
+    antipattern: |
+      `while not done: agent.step()`. Termination is left to the model deciding it's finished. No caps, no
+      progress detection.
+    fails: |
+      - **Agents can loop** on repeated failures, oscillate between strategies, or chase ever-growing subtasks.
+      - **Costs grow without bound**, and context grows each turn, so later steps cost more.
+      - **No graceful exit.** When it does stop, there's no partial result.
+    diagram:
+      bad: ["Task", "!while not done: step()", "1,900 calls", "Cost alert"]
+      bad_note: "Termination delegated entirely to the model"
+      good: ["Task", "Step", "+Budget check (steps, tokens, $, time)", "+Progress / repetition detector", "Answer | Partial + escalate"]
+      good_note: "Hard limits and stall detection; graceful partial results"
+      good_loop: "Continue only while within budget and making progress"
+    solution: |
+      Wrap every agent run in a **budget envelope**:
+
+      - Hard caps on steps, tokens, wall-clock time and dollar cost, set per task type.
+      - **Stall detection**: identical tool calls repeated, no new information in N steps, or error loops.
+      - Escalation on breach: return the best partial result with a summary of what was tried, and hand off to a human or queue.
+      - Emit budget usage as trace attributes and alert on outliers.
+    works: |
+      Worst-case cost per run becomes bounded and predictable, which finance needs before approving agents
+      at scale. Stall detection catches the common loop patterns early. Partial results mean the user gets
+      value even when the agent can't finish.
+    code: |
+      @dataclass
+      class Budget: steps=25; tokens=200_000; usd=2.00; seconds=300
+
+      def run_agent(task, budget=Budget()):
+          state, seen, t0 = init(task), Counter(), time()
+          for step in range(budget.steps):
+              action = agent.decide(state)
+              sig = (action.tool, frozenset(action.args.items()))
+              seen[sig] += 1
+              if seen[sig] > 2:                         return escalate(state, "repeating action")
+              if state.usd > budget.usd or state.tokens > budget.tokens or time() - t0 > budget.seconds:
+                  return escalate(state, "budget exhausted")
+              if action.final:                          return action.answer
+              state = observe(state, execute(action))
+          return escalate(state, "step limit")
+    takeaway: "An agent without a budget is an open-ended cost commitment. Cap steps, tokens, time and money, detect stalls, and exit gracefully."
+    followup: "How would you set sensible budgets for a new agent type with no history?"
+
+  - id: no-checkpointing
+    title: No state persistence or checkpointing
+    tags: [Reliability]
+    scenario: |
+      A contract-review agent works through a 200-page agreement for 25 minutes. A container restart at
+      minute 22 loses everything, and the job starts again from the beginning, including the expensive steps.
+    antipattern: |
+      Agent state lives in process memory. Long-running tasks have no checkpoints, can't be paused for human
+      input, and can't resume after failure.
+    fails: |
+      - **Lost work and money** on any crash, deploy or timeout.
+      - **No human-in-the-loop pauses.** Waiting hours for an approval is impossible if state is in RAM.
+      - **No replay.** Debugging needs the exact sequence of states, which is gone.
+    diagram:
+      bad: ["Long task", "!State in memory", "Crash at minute 22", "Restart from zero"]
+      bad_note: "No durability, no pause, no replay"
+      good: ["Long task", "Step", "+Checkpoint to durable store", "+Interrupt for approval", "Resume from last checkpoint"]
+      good_note: "Durable execution: pause, resume, replay, time-travel debugging"
+    solution: |
+      Use **durable execution** for agents:
+
+      - Persist state after every step (a LangGraph checkpointer on Postgres or Redis, a Temporal workflow, or managed agent runtimes with session state such as Bedrock AgentCore, Foundry Agent Service or Vertex Agent Engine).
+      - Model human approvals as **interrupts** that persist state and resume on callback.
+      - Make steps idempotent so replay after a crash is safe.
+      - Keep the checkpoint history for debugging and audit ("time-travel" through states).
+    works: |
+      Crashes and deploys cost one step, not the whole run. Human approvals can take minutes or days
+      without holding resources. The checkpoint trail becomes the debugging and audit record that regulators
+      and engineers both need.
+    code: |
+      from langgraph.checkpoint.postgres import PostgresSaver
+
+      graph = builder.compile(checkpointer=PostgresSaver.from_conn_string(DB_URL),
+                              interrupt_before=["send_to_counterparty"])     # human approval gate
+      cfg = {"configurable": {"thread_id": f"contract-{contract_id}"}}
+
+      graph.invoke({"doc": contract}, cfg)          # runs until the interrupt, state persisted
+      # ... hours later, after legal approves in the UI:
+      graph.update_state(cfg, {"approved_by": "j.smith"})
+      graph.invoke(None, cfg)                       # resumes from the last checkpoint
+    takeaway: "Long-running agents are workflows. Give them durable state, interrupts for humans, and replayable history."
+    followup: "How would you migrate in-flight agent sessions when the agent's code changes?"

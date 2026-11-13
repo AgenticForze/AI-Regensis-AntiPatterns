@@ -1,0 +1,579 @@
+id: ai-tools
+num: 16
+short: Claude & AI Tools
+title: Claude & Other AI Tools
+summary: Frontier model APIs, agent frameworks, coding agents and workplace assistants each come with their own adoption traps. These are the ones that recur across enterprise programs.
+intro:
+  - md: |
+      ### Landscape
+
+      | Tier | Representative tools | Enterprise role |
+      |---|---|---|
+      | Frontier model APIs | Anthropic Claude (Haiku, Sonnet, Opus tiers), OpenAI GPT, Google Gemini, Meta Llama, Mistral, Microsoft MAI | Reasoning engines for custom apps and agents |
+      | Agent SDKs & frameworks | Claude Agent SDK and Managed Agents, OpenAI Agents SDK, Google ADK, AWS Strands, Microsoft Agent Framework, LangGraph, CrewAI, LlamaIndex | Orchestration, tool use, state, multi-agent |
+      | AI coding agents | Claude Code, GitHub Copilot, OpenAI Codex, Cursor, Gemini CLI, Windsurf | Developer productivity across the SDLC |
+      | Workplace assistants | Claude (Team / Enterprise), ChatGPT Enterprise, Microsoft 365 Copilot, Gemini Enterprise | Knowledge-worker productivity, enterprise search, lightweight agents |
+
+      Claude is available directly from Anthropic and through Amazon Bedrock, Google Cloud's Agent Platform and
+      Microsoft Foundry. Feature availability and release timing can differ between routes.
+patterns:
+  - id: claude-no-prompt-caching
+    title: "Claude: Large stable prompts re-sent without prompt caching"
+    tags: [Cost, Latency]
+    scenario: |
+      A policy-analysis agent sends a 60K-token system prompt (instructions, tool definitions and a reference
+      handbook) with every turn. Most of each bill is for the same tokens, re-processed on every call.
+    antipattern: |
+      Long, stable prefixes (system prompts, tool schemas, reference documents, conversation history) are
+      sent uncached. Prompts are also structured so that volatile content comes first, which breaks any cache.
+    fails: |
+      - **Repeated full-price input tokens** on every turn.
+      - **Higher time-to-first-token** from re-processing the prefix.
+      - **Cache-hostile prompt layout:** a timestamp or user ID at the top invalidates everything after it.
+    diagram:
+      bad: ["Turn N", "!Timestamp + 60K static prefix (uncached)", "Full price, slow TTFT"]
+      bad_note: "Same tokens billed at full rate every call"
+      good: ["Turn N", "+Static prefix first (tools, system, docs)", "+cache_control breakpoint", "Volatile content last", "Cached reads"]
+      good_note: "Stable-first layout; cache breakpoints on reusable prefixes"
+    solution: |
+      - **Order prompts for caching:** tools → system instructions → reference documents → conversation history → the new user turn. Keep volatile values (dates, IDs) out of the prefix.
+      - Mark **cache breakpoints** on the stable prefix, and choose cache lifetimes that match the session pattern.
+      - Monitor cache-read versus cache-write tokens in usage metadata, and fix layouts that miss.
+      - Combine with **context compaction** for long sessions, so cached history doesn't grow without limit.
+    works: |
+      Cached prefix reads are billed at a fraction of the normal input price and processed faster, so
+      long-context agents become affordable. Watching usage metadata shows when a layout change has broken the cache.
+    code: |
+      import anthropic
+      client = anthropic.Anthropic()
+
+      resp = client.messages.create(
+          model="claude-sonnet-5-5", max_tokens=2000,
+          tools=TOOLS,                                              # stable
+          system=[{"type": "text", "text": SYSTEM_INSTRUCTIONS},
+                  {"type": "text", "text": HANDBOOK_60K,
+                   "cache_control": {"type": "ephemeral"}}],        # cache breakpoint on stable prefix
+          messages=history + [{"role": "user", "content": f"[{today()}] {question}"}])  # volatile last
+
+      u = resp.usage
+      metrics.record(cache_read=u.cache_read_input_tokens, cache_write=u.cache_creation_input_tokens,
+                     uncached=u.input_tokens)
+    takeaway: "With Claude, prompt layout is a cost decision. Put stable content first, set cache breakpoints, and check the cache-read tokens."
+    followup: "What breaks a prompt cache, and how do you design multi-tenant prompts to stay cache-friendly?"
+
+  - id: claude-thinking-misuse
+    title: "Claude: Reasoning effort not matched to the task"
+    tags: [Cost, Latency, Quality]
+    scenario: |
+      One team runs maximum extended reasoning on a ticket classifier, which is slow and expensive. Another
+      runs complex multi-step contract-risk analysis with reasoning switched off and gets shallow answers.
+    antipattern: |
+      Extended reasoning and effort settings are set globally (always maximum or always off) instead of
+      per task. Teams also ask the model to "think step by step" in visible output and then parse around it.
+    fails: |
+      - **Over-thinking** simple tasks adds cost and latency with no quality gain.
+      - **Under-thinking** complex tasks reduces accuracy on planning, analysis and agentic tool use.
+      - **Visible chain-of-thought hacks** pollute outputs and complicate parsing.
+    diagram:
+      bad: ["All tasks", "!One global reasoning setting", "Slow classifiers / shallow analysis"]
+      bad_note: "Reasoning budget unrelated to difficulty"
+      good: ["Task type", "+Effort / thinking per task", "Low: classify, extract | High: plan, analyse, agentic", "+Eval-tuned settings"]
+      good_note: "Reasoning spend proportional to difficulty"
+    solution: |
+      - Treat **effort / extended thinking** as a per-task parameter, tuned on the eval suite like model choice.
+      - Use low effort or no extended thinking for classification, extraction and formatting. Use higher effort for planning, complex analysis, coding and multi-step agentic work.
+      - Use the platform's thinking features rather than prompt hacks, and keep reasoning out of user-facing output.
+      - Track the quality/latency/cost frontier per setting.
+    works: |
+      Reasoning spend tracks task difficulty, so simple paths stay fast and cheap and hard paths get the
+      depth they need. Tuning on evals turns a configuration guess into a measured choice.
+    code: |
+      TASK_PROFILE = {                      # tuned on eval suite per task
+          "classify_ticket": {"model": "claude-haiku-5-5",  "effort": "low"},
+          "extract_invoice": {"model": "claude-haiku-5-5",  "effort": "low"},
+          "contract_risk":   {"model": "claude-opus-5-5",   "effort": "high"},
+          "agent_planning":  {"model": "claude-sonnet-5-5", "effort": "high"},
+      }
+
+      def run(task, payload):
+          p = TASK_PROFILE[task]
+          return claude_call(model=p["model"], effort=p["effort"], **payload)   # thin wrapper over the Messages API
+    takeaway: "Reasoning effort is a dial, not a switch. Set it per task from eval results, low for routine work and high for planning and analysis."
+    followup: "How would you show a client that more reasoning effort is worth the extra latency?"
+
+  - id: claude-skills-ignored
+    title: "Claude: Procedures pasted into every prompt instead of packaged as Skills"
+    tags: [Cost, Quality, Scale]
+    scenario: |
+      A finance team's agent prompt includes the full month-end close procedure, the house style for board
+      reports and the Excel modelling conventions: 25K tokens, mostly irrelevant to any given request.
+    antipattern: |
+      Organizational know-how is pasted into system prompts, copied across apps, and loaded on every call
+      whether or not it's needed.
+    fails: |
+      - **Context and cost bloat** from irrelevant procedures.
+      - **Copy drift:** each app's version of the procedure diverges.
+      - **No reuse or governance** of institutional knowledge.
+    diagram:
+      bad: ["Every request", "!25K tokens of procedures in prompt", "Bloat + drift across apps"]
+      bad_note: "Know-how hard-coded into prompts"
+      good: ["Request", "Skill index (names + descriptions)", "+Load only the matching skill(s)", "+Bundled scripts / templates", "Consistent output"]
+      good_note: "Progressive disclosure: know-how loaded on demand, versioned centrally"
+    solution: |
+      Package repeatable know-how as **Agent Skills**: folders with a `SKILL.md` (instructions), plus optional
+      scripts, templates and reference files.
+
+      - The agent sees only a short **name and description** for each skill and loads the full content when a task matches (progressive disclosure).
+      - Version, review and distribute skills centrally, and share them across Claude apps, Claude Code, the API and agent SDKs.
+      - Put deterministic steps in **bundled scripts** rather than prose instructions.
+      - Review third-party skills like code, since they can include executable content.
+    works: |
+      Context holds only what the current task needs, which cuts cost and improves instruction-following.
+      One governed source of know-how serves every surface, and scripted steps make outputs repeatable.
+    code: |
+      # skills/month-end-close/SKILL.md
+      # ---
+      # name: month-end-close
+      # description: Run the month-end close checklist and produce the variance commentary in house format.
+      # ---
+      # 1. Run scripts/pull_tb.py for the period ...
+      # 2. Flag variances > 5% using scripts/variance.py ...
+      # 3. Draft commentary following templates/commentary.md ...
+      #
+      # The agent sees only name + description until a request matches;
+      # then it reads SKILL.md and runs the bundled scripts in its sandbox.
+    lang: markdown
+    takeaway: "Institutional know-how belongs in versioned, on-demand Skills, not pasted into every prompt."
+    followup: "How would you govern a library of skills across business units?"
+
+  - id: claude-single-tier
+    title: "Claude: One model tier for everything"
+    tags: [Cost, Latency]
+    scenario: |
+      An enterprise standardizes on the most capable Claude tier for every workload, including high-volume
+      email tagging and simple extraction. Costs are far above plan and throughput limits are hit early.
+    antipattern: |
+      The model tier is chosen once for the brand ("we use Opus") rather than per workload.
+    fails: |
+      - **Cost and latency** are driven by the top tier.
+      - **Capacity pressure** on the most constrained tier.
+    diagram:
+      bad: ["All workloads", "!Top tier only", "High cost, rate limits"]
+      bad_note: "Tier chosen for the brand, not the task"
+      good: ["Workload", "+Tier router", "Haiku: high-volume simple | Sonnet: most production work | Opus: hardest reasoning", "+Escalation"]
+      good_note: "Each tier used where it wins on the eval"
+    solution: |
+      - Map workloads to tiers with the eval suite: the smallest tier for high-volume, latency-sensitive simple tasks; the middle tier as the general production workhorse; the top tier for complex reasoning, difficult coding and long-horizon agents.
+      - Use the top tier as an **orchestrator** with smaller tiers as sub-agents for parallel subtasks.
+      - Combine with batch processing and prompt caching.
+    works: |
+      Cost and capacity follow task difficulty, and quality is protected because tier choice is validated
+      by evals and backed by escalation.
+    code: |
+      orchestrator = Agent(model="claude-opus-5-5", tools=[spawn_subagent])
+      def spawn_subagent(subtask):
+          return Agent(model="claude-haiku-5-5", tools=subtask.tools, budget=Budget(steps=8)).run(subtask)
+    takeaway: "Use the model family as a portfolio: small tiers for volume, the middle tier for most production work, the top tier where reasoning is the bottleneck."
+    followup: "How do you decide when an orchestrator–sub-agent split across tiers is worth it?"
+
+  - id: claude-computer-use-misuse
+    title: "Claude: Computer use where an API exists, or without a sandbox"
+    tags: [Security, Reliability, Cost]
+    scenario: |
+      A team automates CRM data entry with a screen-driving agent that clicks through the web UI, even though
+      the CRM has a well-documented API. It's slow, breaks when the UI changes, and runs on a developer's
+      logged-in workstation.
+    antipattern: |
+      GUI automation (computer use or browser agents) is used as the default integration method, running
+      with real user sessions and no isolation.
+    fails: |
+      - **Brittle and slow** compared with APIs.
+      - **Security exposure:** screen agents see everything on screen and can be steered by injected page content.
+      - **Over-broad access** through the user's live sessions.
+    diagram:
+      bad: ["Task", "!Screen-driving agent on user's desktop", "Brittle, slow, exposed"]
+      bad_note: "GUI automation as the default integration"
+      good: ["Task", "+API / MCP connector available?", "Yes → API tool | No → sandboxed VM / browser agent", "+Allow-listed domains + human checkpoints"]
+      good_note: "APIs first; GUI agents isolated and supervised"
+    solution: |
+      - Integration order: **API / MCP connector → RPA with known selectors → computer use.**
+      - Use computer use for legacy apps with no API, exploratory or cross-application tasks, and testing.
+      - Run it in **isolated VMs or containers** with minimal privileges, dedicated test accounts, allow-listed domains and no access to secrets.
+      - Require human confirmation for submissions, payments and irreversible actions, and record sessions.
+    works: |
+      APIs give speed and reliability where they exist. Computer use fills real gaps safely, and isolation
+      plus checkpoints contain the injection and over-access risks specific to screen-reading agents.
+    code: |
+      def integrate(task):
+          if (conn := connectors.find(task.system)):            # MCP / API first
+              return api_agent.run(task, tools=conn.tools)
+          vm = sandbox.vm(image="legacy-erp-client", network=allow_list(task.system_domains),
+                          creds=vault.test_account(task.system))
+          return computer_use_agent.run(task, env=vm, confirm_before=["submit", "pay", "delete"],
+                                        record=True)
+    takeaway: "Computer use is the integration of last resort. Use APIs and MCP first, and when you do drive a screen, do it in a sandbox with checkpoints."
+    followup: "What new attack vectors does computer use introduce?"
+
+  - id: claude-access-route
+    title: "Claude: Not choosing deliberately between direct and cloud-marketplace access"
+    tags: [Compliance, Cost]
+    scenario: |
+      Different business units consume Claude through the Anthropic API, Bedrock, Agent Platform and Foundry,
+      each with different data-handling terms, feature sets and billing. Nobody can say which controls apply where.
+    antipattern: |
+      Access routes are chosen ad hoc by each team, without comparing data residency, feature availability,
+      commercial terms and integration with existing cloud governance.
+    fails: |
+      - **Fragmented governance and spend.**
+      - **Feature mismatch:** some capabilities reach the first-party API before they reach cloud platforms, or vice versa.
+      - **Residency and contractual terms** differ by route and region.
+    diagram:
+      bad: ["BU A | BU B | BU C", "!Ad-hoc routes (API, Bedrock, Agent Platform, Foundry)", "Fragmented controls"]
+      bad_note: "No enterprise decision on access route"
+      good: ["Requirements", "+Route decision: residency, features, commits, governance", "Primary route | Approved secondary", "+Single gateway + metering"]
+      good_note: "Deliberate route choice, centrally metered"
+    solution: |
+      - Compare routes on **data residency and processing regions**, **feature availability** (newest tools and betas), **identity and network integration**, **commercial commitments** and **support**.
+      - Standardize on a primary route. Often that's the client's primary cloud, for governance and committed-spend reasons, with the first-party API approved where specific features are needed.
+      - Front all routes with one gateway for metering, guardrails and logging.
+    works: |
+      Governance applies consistently, spend counts toward the right commitments, and teams know where to
+      go for new capabilities.
+    code: |
+      CLAUDE_ROUTES = {
+          "default":       {"via": "client_primary_cloud", "region": "eu", "reason": "governance + commit"},
+          "early_features":{"via": "anthropic_api", "approved_for": ["internal_tools"], "reason": "feature timing"},
+      }
+    lang: python
+    takeaway: "Claude is available through several routes. Choose one deliberately on residency, features and governance, and meter them all through one gateway."
+    followup: "How would you evaluate a feature that's only available on one access route?"
+
+  - id: provider-quirk-prompts
+    title: "Frameworks: Prompts tuned to one provider's quirks with no portability layer"
+    tags: [Reliability, Cost]
+    scenario: |
+      A company's 200 prompts rely on one model family's formatting conventions and implicit behaviours.
+      A pricing change elsewhere is attractive, but switching breaks most outputs.
+    antipattern: |
+      Prompts, parsers and tool definitions are written against one model's undocumented habits. There
+      are no per-model variants and no cross-model eval.
+    fails: |
+      - **Vendor lock-in through prompts,** even when the APIs are similar.
+      - **Fragile to model upgrades** within the same provider too.
+    diagram:
+      bad: ["200 prompts", "!Tuned to one model's quirks", "Switch → breakage"]
+      bad_note: "Implicit coupling to model behaviour"
+      good: ["Task spec + schema", "+Per-model prompt variants", "+Cross-model eval matrix", "Gateway selects model + variant"]
+      good_note: "Behaviour pinned by schemas and evals, not quirks"
+    solution: |
+      - Specify behaviour with **schemas, examples and explicit instructions** rather than relying on habits.
+      - Keep **per-model prompt variants** in the registry where needed.
+      - Maintain a **cross-model eval matrix** so switching is a measured decision.
+    works: |
+      Model choice becomes a commercial and quality decision instead of a migration project, and the same
+      discipline protects against regressions from same-vendor upgrades.
+    code: |
+      matrix = {(m, p): eval_suite.run(model=m, prompt=prompts.get(p, variant=m))
+                for m in CANDIDATE_MODELS for p in CRITICAL_PROMPTS}
+      viable = [m for m in CANDIDATE_MODELS if all(matrix[(m, p)] >= TARGET[p] for p in CRITICAL_PROMPTS)]
+    takeaway: "Pin behaviour with schemas and evals, not model quirks, so switching models is a measured choice."
+    followup: "How long would it take your team to move a production workload to another model family?"
+
+  - id: framework-as-architecture
+    title: "Frameworks: The framework treated as the architecture"
+    tags: [Reliability, Cost]
+    scenario: |
+      A team adopts a heavyweight multi-agent framework for a three-step document workflow. Debugging goes
+      through layers of abstraction, and a minor framework release breaks production.
+    antipattern: |
+      Choosing a framework first and shaping the problem to fit it. Building on framework internals and
+      unpinned versions.
+    fails: |
+      - **Accidental complexity:** abstractions hide prompts, retries and state, so behaviour is hard to see.
+      - **Upgrade fragility:** fast-moving frameworks change APIs often.
+      - **Lock-in to a framework** instead of to a vendor.
+    diagram:
+      bad: ["3-step workflow", "!Heavy multi-agent framework", "Opaque behaviour, upgrade breakage"]
+      bad_note: "Framework chosen before the problem"
+      good: ["Problem shape", "Plain SDK calls | Graph framework | Agent SDK / managed harness", "+Pinned versions + upgrade tests", "+Own prompts & state visible"]
+      good_note: "Lightest abstraction that fits; dependencies managed like any other"
+    solution: |
+      - Start from the **problem shape** (autonomy spectrum, 7.1). Use plain SDK calls for simple chains, graph frameworks for stateful workflows, and agent SDKs or managed harnesses for open-ended agents.
+      - Keep prompts, state schemas and tool definitions in **your own code**, visible and testable.
+      - **Pin versions**, run the eval suite on upgrades, and read changelogs.
+    works: |
+      The architecture stays understandable and debuggable, and framework upgrades become routine. If a
+      framework is abandoned or changes direction, the core logic moves with little rework.
+    code: |
+      # requirements.txt pins exact versions; upgrades go through the eval gate
+      # langgraph==<pinned>
+      # anthropic==<pinned>
+
+      # Simple chain: no framework needed
+      summary = llm(SUMMARIZE, doc)
+      facts = llm(EXTRACT, summary, schema=Facts)
+      memo = llm(DRAFT_MEMO, facts)
+    lang: python
+    takeaway: "Pick the lightest abstraction that fits the problem. Frameworks are dependencies to manage, not architectures to adopt."
+    followup: "How do you evaluate an agent framework for enterprise use?"
+
+  - id: coding-adoption-metrics
+    title: "Coding agents: Measuring adoption by seats and lines of code"
+    tags: [Adoption, Cost]
+    scenario: |
+      A CIO reports "90% of developers activated AI coding tools and AI wrote 40% of our code". Delivery
+      speed hasn't changed, change-failure rate is up, and review queues are longer.
+    antipattern: |
+      Success is measured by license activation, suggestion acceptance and AI-generated line counts,
+      not by delivery outcomes.
+    fails: |
+      - **Vanity metrics:** more code isn't more value, and it can mean more review and maintenance.
+      - **Bottlenecks move:** faster coding exposes slow review, testing and deployment.
+      - **Quality risk** goes unmeasured.
+    diagram:
+      bad: ["Seats activated", "!Lines of AI code", "\"Success\" claimed", "No delivery change"]
+      bad_note: "Activity metrics, not outcomes"
+      good: ["Baseline DORA + cycle time", "+Targeted workflows (tests, migrations, reviews)", "+Measure: lead time, change-failure, rework", "Scale what works"]
+      good_note: "Outcome metrics against a baseline"
+    solution: |
+      - **Baseline** DORA metrics (lead time, deployment frequency, change-failure rate, time to restore), PR cycle time and developer experience before rollout.
+      - Target **high-leverage workflows**: test generation, migrations and upgrades, code review assistance, incident triage, documentation.
+      - Measure outcomes per team, and invest in the moved bottlenecks (review capacity, CI speed).
+      - Track quality signals: defect escape, rework, security findings in AI-assisted PRs.
+    works: |
+      Leadership sees whether AI improves delivery, not just usage. Targeting workflows produces visible
+      wins, and measuring bottlenecks prevents gains being lost downstream.
+    code: |
+      report = {
+          "lead_time_p50_days":  compare(dora.lead_time, before=Q2, after=Q4),
+          "change_failure_rate": compare(dora.cfr, before=Q2, after=Q4),
+          "pr_cycle_time_hours": compare(git.pr_cycle_time, before=Q2, after=Q4),
+          "ai_pr_rework_rate":   rework_rate(prs(labels=["ai-assisted"])) - rework_rate(prs(labels=["human"])),
+      }
+    takeaway: "Measure AI coding tools by delivery outcomes (lead time, change-failure rate, rework), not by seats or lines of code."
+    followup: "How would you design a fair experiment to measure AI coding-tool impact?"
+
+  - id: coding-agent-unguarded
+    title: "Coding agents: Write access to production repos and systems with no guardrails"
+    tags: [Security, Reliability]
+    scenario: |
+      A developer lets an autonomous coding agent run with broad shell permissions and cloud credentials in
+      their environment. A misinterpreted cleanup instruction deletes a shared staging database.
+    antipattern: |
+      Coding agents run with the developer's full credentials, unrestricted shell access and the ability to
+      push directly, with no sandbox, permission rules or review gate.
+    fails: |
+      - **Destructive commands** from misunderstanding or prompt injection (via README files, issues, dependencies).
+      - **Credential exposure** to agent context and logs.
+      - **Unreviewed changes** reach shared branches.
+    diagram:
+      bad: ["Coding agent", "!Full shell + cloud creds", "!Direct push", "Deleted staging DB"]
+      bad_note: "Agent inherits every privilege the developer has"
+      good: ["Coding agent", "+Sandbox / devcontainer", "+Permission rules + hooks (deny destructive)", "+Branch + PR only", "Human review + CI"]
+      good_note: "Least privilege, sandboxed execution, review-gated delivery"
+    solution: |
+      - Run agents in **sandboxes or devcontainers** with scoped, short-lived credentials and no production secrets.
+      - Configure **permission rules** (allowed, ask and deny lists for commands and paths) and **hooks** that block destructive operations.
+      - Protect branches: the agent opens **PRs**, and humans plus CI approve.
+      - Treat repository content as untrusted input, and scan for prompt-injection patterns in issues and docs the agent reads.
+      - Use the enterprise admin controls of your coding tools (managed settings, audit logs, allowed MCP servers).
+    works: |
+      The agent can work quickly inside a bounded space, and mistakes stay contained and reversible.
+      Review gates keep accountability with humans, and managed settings make the policy consistent across the organization.
+    code: |
+      // Managed settings for a coding agent (illustrative; deployed org-wide by IT)
+      {
+        "permissions": {
+          "allow": ["Bash(npm test:*)", "Bash(git diff:*)", "Edit(src/**)"],
+          "ask":   ["Bash(git push:*)"],
+          "deny":  ["Bash(rm -rf:*)", "Bash(terraform apply:*)", "Bash(kubectl delete:*)", "Read(.env*)"]
+        },
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "command": "./scripts/block_prod_targets.sh"}]}
+      }
+    lang: json
+    takeaway: "Give coding agents a sandbox, least-privilege credentials, deny rules for destructive commands, and a PR-only path to shared branches."
+    followup: "How do you roll out coding-agent policies consistently across hundreds of developers?"
+
+  - id: coding-no-context-files
+    title: "Coding agents: No repository context or conventions files"
+    tags: [Quality, Adoption]
+    scenario: |
+      Developers complain that the coding agent ignores the team's architecture, test framework and naming
+      conventions. Every session starts with ten minutes of re-explaining.
+    antipattern: |
+      Agents start each session with no persistent, repo-level guidance about build commands, conventions,
+      architecture boundaries or forbidden patterns.
+    fails: |
+      - **Inconsistent output** that violates conventions and creates review churn.
+      - **Wasted time** re-explaining context.
+      - **Unsafe defaults** (wrong commands, wrong directories).
+    diagram:
+      bad: ["New session", "!No repo guidance", "Convention violations", "Review churn"]
+      bad_note: "Agent re-learns the codebase every time"
+      good: ["New session", "+Repo context file (CLAUDE.md / AGENTS.md / rules)", "+Shared skills + commands", "Convention-aligned changes"]
+      good_note: "Codified team knowledge loaded automatically"
+    solution: |
+      - Maintain **repo context files** (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, Copilot instructions) with build and test commands, architecture map, conventions and do-not rules.
+      - Keep them **short and current**, and review them like code.
+      - Package recurring workflows as **skills or custom commands** (release notes, migrations, review checklists).
+      - Measure review comments per AI-assisted PR to see whether guidance is working.
+    works: |
+      Agents start every session with the team's conventions, so output fits the codebase and reviews get
+      faster. Context files also double as onboarding documentation for humans.
+    code: |
+      # CLAUDE.md
+      ## Build & test
+      - `make test` (unit), `make it` (integration, needs docker)
+      ## Architecture
+      - `api/` → `services/` → `repos/`. Services never import from `api/`.
+      ## Conventions
+      - Python 3.12, pydantic v2, no raw SQL outside `repos/`
+      ## Never
+      - Edit `migrations/` by hand; run `make migration name=...`
+    lang: markdown
+    takeaway: "Coding agents are only as good as the context they start with. Codify conventions in versioned repo context files and shared skills."
+    followup: "What belongs in a repo context file, and what doesn't?"
+
+  - id: coding-no-security-scan
+    title: "Coding agents: AI-generated code shipped without security and dependency scanning"
+    tags: [Security]
+    scenario: |
+      An AI-assisted PR adds a dependency whose name was hallucinated. An attacker had registered that
+      package name with malicious code ("slopsquatting"). Another PR introduces an injection-vulnerable query.
+    antipattern: |
+      AI-assisted changes go through lighter review because they "look clean", and dependency additions
+      aren't verified.
+    fails: |
+      - **Hallucinated or typo-squatted packages** introduce supply-chain attacks.
+      - **Plausible but insecure patterns** (injection, weak crypto, missing authorization checks).
+      - **Automation complacency** among reviewers.
+    diagram:
+      bad: ["AI-generated PR", "!Light review", "Hallucinated dependency + insecure query", "Merged"]
+      bad_note: "Plausible code treated as safe code"
+      good: ["AI-generated PR", "+SAST + secrets scan", "+Dependency allow-list / provenance", "+AI-assisted security review", "Human approval"]
+      good_note: "AI code held to (at least) the same security bar"
+    solution: |
+      - Run **SAST, secret scanning and SCA** on every PR, and block new dependencies not on an allow-list or without verified provenance.
+      - Label AI-assisted PRs and track their findings.
+      - Add **AI-assisted security review** as an extra check, never a replacement for human review.
+      - Train reviewers on AI-specific failure patterns.
+    works: |
+      Supply-chain and common vulnerability classes are caught automatically, whoever wrote the code.
+      Tracking AI-assisted findings shows whether the tools are improving or degrading security.
+    code: |
+      def check_new_dependencies(diff):
+          for pkg in added_packages(diff):
+              meta = registry.lookup(pkg.name)
+              if not meta or meta.age_days < 90 or meta.downloads_weekly < 1000:
+                  fail(f"Suspicious or unknown package: {pkg.name}")
+              if pkg.name not in ALLOWLIST:
+                  require_approval("security", pkg.name)
+    takeaway: "AI-generated code needs the same or a higher security bar. Scan everything and verify every new dependency."
+    followup: "What is slopsquatting and how do you defend against it?"
+
+  - id: assistant-oversharing
+    title: "Workplace assistants: Enterprise rollout before fixing oversharing"
+    tags: [Security, Compliance]
+    scenario: |
+      Within a week of an enterprise-wide workplace-assistant rollout, employees discover they can ask
+      "show me salary information" and get spreadsheets from overshared SharePoint sites.
+    antipattern: |
+      Assistants that search the organization's content with the user's permissions are switched on without
+      first cleaning up years of over-permissive sharing.
+    fails: |
+      - **The assistant makes oversharing discoverable.** Permissions were always wrong, but search hid them through obscurity.
+      - **Reputational and legal exposure** from HR, legal or M&A content.
+    diagram:
+      bad: ["Years of overshared sites", "!Assistant switched on org-wide", "Sensitive data surfaced"]
+      bad_note: "AI finds what permissions always allowed"
+      good: ["Permission audit", "+Sensitivity labels + DLP", "+Restricted search scope for risky sites", "Phased rollout", "+Monitoring"]
+      good_note: "Data-access hygiene before AI amplification"
+    solution: |
+      - Run **oversharing assessments** (access reports, "everyone" links, broad groups) and remediate high-risk sites first.
+      - Apply **sensitivity labels and DLP**, and exclude or restrict search on sensitive sites during remediation.
+      - Roll out in **phases**, starting with groups whose content is well governed.
+      - Monitor assistant interactions touching sensitive labels.
+    works: |
+      The assistant is safe because the data estate is. Phasing gives fast value to clean areas while
+      remediation continues elsewhere.
+    code: |
+      risky = [s for s in sites.all() if s.has_everyone_links or s.member_count > 5000 and s.label in {"Confidential", None}]
+      for s in sorted(risky, key=lambda s: s.sensitive_hits, reverse=True):
+          remediation.queue(s, actions=["remove_everyone_links", "apply_label", "restrict_search"])
+      rollout.enable(groups=["finance-ops", "it"], when=lambda g: g.sites_remediated_pct >= 0.95)
+    takeaway: "Workplace assistants respect permissions perfectly, including the wrong ones. Fix oversharing before switching AI on."
+    followup: "How would you sequence a 50,000-seat assistant rollout?"
+
+  - id: assistant-no-enablement
+    title: "Workplace assistants: Licenses with no enablement, use-case catalog or ROI tracking"
+    tags: [Adoption, Cost]
+    scenario: |
+      Twenty thousand assistant licenses are purchased. After six months, weekly active usage is 18%, most
+      prompts are "summarize this email", and renewal is in question.
+    antipattern: |
+      Deployment is treated as an IT rollout (provision licenses, send an announcement email) rather than
+      as change management.
+    fails: |
+      - **Low adoption:** users don't know what to do with a blank prompt box.
+      - **Shallow use** produces little measurable value.
+      - **Shadow AI** continues where the official tool feels limited.
+    diagram:
+      bad: ["Licenses purchased", "!Announcement email", "18% weekly use", "Renewal at risk"]
+      bad_note: "Technology rollout without behaviour change"
+      good: ["Persona use-case catalog", "+Champions + training", "+Prebuilt agents / prompts / skills", "+Value tracking", "Expand on evidence"]
+      good_note: "Adoption designed and measured like a product launch"
+    solution: |
+      - Build a **use-case catalog per persona** (sales, finance, legal, HR) with worked examples and prebuilt agents or skills.
+      - Train **champions** in each function, and run hands-on sessions on real work.
+      - Provide a **sanctioned path** for advanced users (custom agents, connectors) so they don't go to shadow tools.
+      - Track active usage *and* value: time saved per workflow, survey data, business KPIs.
+      - Reallocate licenses based on usage evidence.
+    works: |
+      Users learn concrete, valuable workflows, so adoption deepens. Champions spread practices peer to peer,
+      and value tracking produces the ROI evidence that secures renewal and expansion.
+    code: |
+      kpis = {
+          "weekly_active_pct": active_users(7) / licensed_users(),
+          "advanced_use_pct":  users_with(features=["agents", "connectors", "skills"]) / active_users(30),
+          "hours_saved_month": sum(w.minutes_saved * w.runs for w in tracked_workflows) / 60,
+      }
+      reallocate(licenses, from_=inactive_users(days=60), to=waitlist_by_function())
+    takeaway: "A workplace AI rollout is change management, not provisioning. Use persona playbooks, champions, sanctioned advanced paths and measured value."
+    followup: "How would you build the business case for renewing an enterprise assistant license?"
+
+  - id: shadow-ai-ban
+    title: "Workplace assistants: Banning AI tools with no sanctioned alternative"
+    tags: [Security, Adoption]
+    scenario: |
+      A firm blocks public AI chat sites. Survey data later shows 45% of staff use personal accounts on
+      their phones for work tasks, including pasting client data.
+    antipattern: |
+      Policy is prohibition only. There's no approved tool, no guidance on data classes, and no enterprise
+      controls such as SSO, audit, retention or DLP.
+    fails: |
+      - **Shadow AI** moves usage to channels with zero visibility.
+      - **Data leakage** to consumer services with unknown retention terms.
+      - **Lost productivity and talent frustration.**
+    diagram:
+      bad: ["Block AI sites", "!No approved alternative", "Personal accounts on phones", "Invisible data leakage"]
+      bad_note: "Prohibition pushes usage underground"
+      good: ["Approved enterprise AI (SSO, audit, DLP, no training on data)", "+Clear data-class guidance", "+Easy request path for new tools", "+Monitoring"]
+      good_note: "Make the safe path the easy path"
+    solution: |
+      - Provide **sanctioned enterprise AI tools** with SSO/SCIM, audit logs, retention controls, DLP integration and contractual terms excluding training on customer data.
+      - Publish a **one-page acceptable-use policy** with clear data-classification rules.
+      - Offer a **fast intake path** for new tools and use cases.
+      - Monitor for shadow usage through CASB/SSE tools, and use the findings to improve the sanctioned offering.
+    works: |
+      Usage moves to governed channels because they're better and easier. Visibility returns, and data
+      protection is enforced technically rather than by hope.
+    code: |
+      AI_ACCEPTABLE_USE = {
+          "public":       ["any approved AI tool"],
+          "internal":     ["enterprise assistant", "approved coding agents"],
+          "confidential": ["enterprise assistant (labelled workspaces)", "private-endpoint apps"],
+          "restricted":   ["approved in-house apps only"],
+      }
+    lang: python
+    takeaway: "Banning AI without a sanctioned alternative creates shadow AI. Make the governed path the easiest one."
+    followup: "How do you measure shadow AI usage?"

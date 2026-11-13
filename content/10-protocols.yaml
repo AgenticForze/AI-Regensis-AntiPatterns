@@ -1,0 +1,132 @@
+id: protocols
+num: 10
+short: Protocols (MCP & A2A)
+title: Protocols & Interoperability
+summary: The Model Context Protocol (MCP) standardizes how agents reach tools and data. Agent-to-agent (A2A) protocols standardize how agents reach each other. Both widen the attack surface if they're adopted without identity and governance.
+patterns:
+  - id: bespoke-integrations
+    title: Custom tool integrations per agent instead of a shared protocol
+    tags: [Cost, Scale]
+    scenario: |
+      Eight teams build agents that need Salesforce, ServiceNow and SharePoint. Each writes its own connector
+      with its own auth, error handling and schemas. Twenty-four integrations do roughly the same job, all
+      maintained separately.
+    antipattern: |
+      Tool integrations are hand-coded inside each agent codebase and tied to one framework or vendor SDK.
+    fails: |
+      - **N×M integration cost.** Every agent × system pair is built and maintained separately.
+      - **Inconsistent security.** Each connector handles credentials and permissions differently.
+      - **Lock-in.** Integrations written for one framework can't be reused by another.
+    diagram:
+      bad: ["Agent A | Agent B | Agent C", "!Custom connector each", "CRM | ITSM | Docs"]
+      bad_note: "N×M bespoke integrations with uneven security"
+      good: ["Agent A | Agent B | Agent C", "+MCP client", "+Gateway (auth, policy, audit)", "MCP servers: CRM | ITSM | Docs"]
+      good_note: "Build each integration once, govern centrally, reuse everywhere"
+    solution: |
+      Standardize on **MCP servers** for tools and data:
+
+      - Build or adopt one MCP server per system of record, owned by the platform or system team.
+      - Expose servers through an **MCP gateway or registry** that handles authentication, authorization, rate limits and audit. All three hyperscalers now offer managed gateways or toolboxes for this.
+      - Publish a catalog of approved servers. Agents discover and connect instead of re-implementing.
+      - Version server interfaces and test them like APIs.
+    works: |
+      Integration cost drops from N×M to N+M. Security controls are implemented once at the gateway and
+      applied consistently. Any MCP-capable framework or model can reuse the same integrations, which reduces lock-in.
+    code: |
+      # One MCP server per system of record, owned by the platform team
+      from mcp.server.fastmcp import FastMCP
+      mcp = FastMCP("servicenow")
+
+      @mcp.tool()
+      def create_incident(short_description: str, urgency: Literal["1", "2", "3"], ci: str) -> dict:
+          """Create a ServiceNow incident. Use for confirmed outages only."""
+          return snow.incidents.create(short_description=short_description, urgency=urgency, cmdb_ci=ci)
+
+      # Any agent, any framework: connect through the governed gateway
+      tools = mcp_client.connect("https://mcp-gateway.corp/servicenow", auth=user_obo_token).list_tools()
+    takeaway: "Integrate each system once as an MCP server, govern access at a gateway, and let every agent reuse it."
+    followup: "What belongs in an MCP gateway versus in the MCP server itself?"
+
+  - id: unauthenticated-mcp
+    title: MCP servers and A2A endpoints without authentication or trust boundaries
+    tags: [Security]
+    scenario: |
+      A developer installs a community MCP server that claims to summarize GitHub issues. Its tool description
+      contains hidden instructions telling the agent to read `~/.aws/credentials` and include them in a
+      "diagnostic" call.
+    antipattern: |
+      Any MCP server or remote agent can be connected. Tool descriptions and agent responses are trusted
+      implicitly. Remote endpoints have no authentication, or use shared static keys.
+    fails: |
+      - **Tool poisoning.** Malicious instructions hidden in tool metadata or results steer the agent.
+      - **Rug pulls.** A server's tools change after approval.
+      - **Impersonation.** Without mutual authentication, a rogue agent can pose as a trusted one in A2A exchanges.
+      - **Data exfiltration** through tools that send data to external endpoints.
+    diagram:
+      bad: ["Agent", "!Any MCP server / remote agent", "Poisoned tool description", "Credential exfiltration"]
+      bad_note: "Implicit trust in third-party tool metadata and peers"
+      good: ["Agent", "+Allow-listed registry (pinned versions)", "+OAuth / mTLS + agent identity", "+Egress policy", "+Tool-output sanitization"]
+      good_note: "Verified identity, pinned definitions, constrained egress"
+    solution: |
+      Apply **zero trust to tools and agents**:
+
+      - Only allow servers from an **internal registry**. Review them and pin versions with hashes of tool definitions, and alert on any change.
+      - Authenticate with **OAuth 2.1 / OIDC** (as the MCP authorization spec describes) or mTLS. Give each agent its own workload identity, and verify signed agent cards for A2A.
+      - Run local servers in sandboxes with no access to secrets. Restrict network **egress** to declared domains.
+      - Treat tool descriptions and outputs as **untrusted input**: scan them for injection patterns, and never let them change the agent's permissions.
+    works: |
+      Only reviewed, pinned code reaches agents. Strong identity prevents impersonation, and sandboxing plus
+      egress limits stop exfiltration even if a tool is compromised. Change detection closes the rug-pull gap.
+    code: |
+      APPROVED = registry.load("mcp-allowlist.yaml")      # name, url, version, sha256(tool_defs)
+
+      def connect_tool_server(name, agent_identity):
+          entry = APPROVED[name]
+          client = MCPClient(entry.url, auth=oauth.client_credentials(agent_identity, scope=entry.scope),
+                             mtls=True)
+          defs = client.list_tools()
+          if sha256(canonical(defs)) != entry.defs_hash:
+              security.alert("mcp_definition_changed", server=name); raise UntrustedServer(name)
+          return [wrap_untrusted_output(t) for t in defs]      # outputs scanned before reaching the model
+    takeaway: "MCP and A2A make integration easy, including for attackers. Allow-list, pin, authenticate, sandbox, and treat tool metadata as untrusted input."
+    followup: "How would you threat-model an MCP server before approving it?"
+
+  - id: overprivileged-agents
+    title: Over-privileged service accounts for agents
+    tags: [Security, Compliance]
+    scenario: |
+      A sales-assistant agent runs under a service account with admin rights to the CRM "to avoid permission
+      errors". A prompt-injected email causes it to export the full customer list.
+    antipattern: |
+      Agents run as one broad service identity, not as the user they act for, with standing access to
+      everything they might ever need.
+    fails: |
+      - **Confused-deputy attacks.** Agents act with more privilege than the requesting user.
+      - **Maximum blast radius** for any injection or bug.
+      - **Audit gaps.** Logs show "service account" rather than who actually triggered the action.
+    diagram:
+      bad: ["User (limited rights)", "Agent", "!Admin service account", "Full CRM export"]
+      bad_note: "Agent privilege exceeds the user's"
+      good: ["User", "Agent (own identity)", "+On-behalf-of token (user ∩ agent scopes)", "+Just-in-time elevation", "CRM (least privilege)"]
+      good_note: "Effective permission = intersection of user and agent entitlements"
+    solution: |
+      Apply **least privilege with delegated identity**:
+
+      - Give each agent its own **workload identity** (Entra Agent ID, AWS IAM roles with AgentCore Identity, Google service identities).
+      - Use **on-behalf-of (OBO) delegation**, so actions run with the intersection of the user's and the agent's permissions.
+      - Use narrow, task-scoped OAuth scopes and short-lived tokens. Grant elevation just in time, with approval.
+      - Log both the user and the agent identity on every action.
+    works: |
+      An agent can never do more than the user it serves, which neutralizes confused-deputy attacks. Short-lived
+      scoped tokens shrink blast radius, and dual-identity logs give auditors a complete chain of accountability.
+    code: |
+      def call_crm(action, args, user_token, agent):
+          token = idp.on_behalf_of(user_assertion=user_token, client=agent.identity,
+                                   scopes=SCOPES_FOR[action])            # e.g. crm.contacts.read
+          if action in HIGH_RISK:
+              approvals.require(user=token.sub, agent=agent.id, action=action)
+          resp = crm.request(action, args, bearer=token.access_token)    # expires in minutes
+          audit.log(user=token.sub, agent=agent.id, action=action, resource=args.get("id"))
+          return resp
+    takeaway: "An agent should never be more powerful than the person it serves. Give agents their own identity, delegate with OBO, and keep scopes narrow and short-lived."
+    followup: "How do you handle autonomous agents that act without a user present, such as scheduled jobs?"

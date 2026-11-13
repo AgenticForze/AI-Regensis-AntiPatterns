@@ -1,0 +1,188 @@
+id: advanced-rag
+num: 4
+short: Advanced RAG
+title: Advanced RAG
+summary: GraphRAG, agentic retrieval and citation verification solve real problems, but only when chosen for the right reason and verified in production.
+patterns:
+  - id: overengineered-rag
+    title: GraphRAG or agentic RAG where simple RAG works
+    tags: [Cost, Latency, Reliability]
+    scenario: |
+      A retailer's FAQ assistant answers return-policy questions. The team builds a knowledge graph,
+      a multi-step agentic retriever and a reflection loop. Latency is 14 seconds and accuracy is no better than
+      a basic pipeline.
+    antipattern: |
+      Architecture is chosen by trend, not by query profile. Every question goes through the most complex path:
+      graph traversal, iterative tool calls, self-critique.
+    fails: |
+      - **Complexity without benefit.** Most enterprise queries are single-hop lookups that hybrid retrieval plus a reranker handles well.
+      - **Latency and cost multiply** with every extra LLM call and traversal.
+      - **More failure surface.** Graph extraction errors, entity-resolution mistakes and agent loops each add new ways to be wrong.
+      - **Maintenance burden.** Knowledge graphs need schema design, entity resolution and continuous curation.
+    diagram:
+      bad: ["Every query", "!Graph build + traverse", "!Agent loop + reflection", "14 s answer"]
+      bad_note: "Maximum complexity applied uniformly"
+      good: ["Query", "+Classify query type", "Simple RAG (≈80%) | Multi-hop agentic | Graph: relationship queries", "Answer"]
+      good_note: "Complexity spent only where query types demand it"
+    solution: |
+      **Route by query complexity**, and justify each advanced technique with evaluation:
+
+      | Technique | Use when | Avoid when |
+      |---|---|---|
+      | Hybrid + rerank | Default for lookups and how-tos | — |
+      | Query decomposition | Multi-part, comparative questions | Single facts |
+      | Agentic retrieval | Open-ended research, needs iteration across tools | Latency-critical UX |
+      | GraphRAG | Relationship / aggregation questions ("which suppliers share a parent company?"), global summaries | Flat FAQ or policy corpora |
+
+      Profile real queries first. Build the simple pipeline and its eval set, then add a technique only when a
+      measured query segment fails and the technique fixes it.
+    works: |
+      Most traffic takes the fast, cheap path. Advanced techniques run only where they add measurable
+      value, so average latency and cost stay low while hard queries still get answered. Each component earns
+      its place through evidence, which keeps the architecture explainable and maintainable.
+    code: |
+      ROUTES = {"lookup": simple_rag, "multi_hop": decomposed_rag,
+                "relationship": graph_rag, "research": agentic_rag}
+
+      def route(q):
+          label = classifier.predict(q)              # small fine-tuned model or cheap LLM call
+          if label not in ROUTES or classifier.confidence < 0.6:
+              label = "lookup"                       # safe, fast default
+          metrics.inc(f"route.{label}")
+          return ROUTES[label](q)
+    takeaway: "Advanced RAG is a tool, not a maturity level. Profile the queries, default to simple, and escalate only for the segments that measurably need it."
+    followup: "What query signals would tell you a knowledge graph is worth the investment?"
+
+  - id: no-citation-verification
+    title: No citation or grounding verification
+    tags: [Quality, Compliance]
+    scenario: |
+      A compliance assistant cites "Policy AML-7, section 4.2" for a transaction-monitoring threshold. The
+      section exists, but it says something different. An auditor finds it.
+    antipattern: |
+      The model is asked to "include citations", and they're displayed as-is. Nobody checks whether the cited
+      passage actually supports the sentence it's attached to.
+    fails: |
+      - **Citation hallucination.** Models can attach plausible references to claims that came from parametric memory, or misattribute between sources.
+      - **False trust.** A citation looks like evidence, so users check less, which makes wrong answers more dangerous.
+      - **No measurement.** Without verification, there's no faithfulness metric to manage.
+    diagram:
+      bad: ["Sources", "LLM: \"add citations\"", "!Display as-is", "Plausible but wrong cite"]
+      bad_note: "Citations look authoritative but are never checked"
+      good: ["Sources (IDs)", "Generate with span IDs", "+Claim-level verification", "+Drop / flag unsupported", "Verified answer"]
+      good_note: "Every claim is mapped to a source span that entails it"
+    solution: |
+      Make citations **structural and verified**:
+
+      - Give each source passage a stable ID and require structured output: `[{claim, source_ids, quote}]`. Use native citation features where the model API provides them.
+      - **Verify each claim** against its cited passages with an entailment/NLI model or an LLM judge, and confirm that quoted spans really exist in the source text (string match).
+      - Remove or flag unsupported claims, and show users the exact supporting passage on hover.
+      - Track **faithfulness rate** and **citation precision** in offline and online evals.
+    works: |
+      Citations become checkable facts instead of decoration. Exact-span matching catches fabricated quotes
+      cheaply, and entailment checks catch misattribution. Users and auditors can verify any claim in one
+      click, and the faithfulness metric gives leadership a number to govern.
+    code: |
+      out = llm.generate_structured(schema=AnswerWithClaims, sources=ev, question=q)
+      verified = []
+      for c in out.claims:
+          texts = [src[i].text for i in c.source_ids if i in src]
+          quote_ok = any(c.quote in t for t in texts)                       # exact span exists
+          entailed = nli.entails(premise=" ".join(texts), hypothesis=c.claim) > 0.8
+          if quote_ok and entailed:
+              verified.append(c)
+          else:
+              metrics.inc("citation.rejected")
+      return render(verified, show_sources=True)
+    takeaway: "A citation nobody verified is decoration. Make citations structured, check them claim by claim, and measure faithfulness."
+    followup: "How would you verify citations at scale without doubling latency?"
+
+  - id: temporal-blindness
+    title: Ignoring temporal freshness and document validity
+    tags: [Quality, Compliance]
+    scenario: |
+      A travel-policy assistant tells an employee the hotel cap is $250 a night. That was the 2024 policy;
+      the 2026 policy says $300. Both versions are in the index and the older one ranked higher.
+    antipattern: |
+      Retrieval is purely semantic. Policy versions, superseded documents and dated facts compete on
+      similarity alone, and older documents (with more cross-references) often win.
+    fails: |
+      - **Superseded content wins** because it's similar, longer or more linked.
+      - **Time-relative questions** ("current", "last quarter", "as of today") aren't resolved to dates.
+      - **Mixed answers.** The model blends old and new versions into a hybrid that matches neither.
+    diagram:
+      bad: ["\"Current hotel cap?\"", "Semantic search", "!2024 + 2026 policies", "Blended or stale answer"]
+      bad_note: "Validity dates ignored at retrieval"
+      good: ["\"Current hotel cap?\"", "+Resolve time (as of today)", "+Validity filter", "+Recency-aware rank", "Answer + effective date"]
+      good_note: "Only in-force versions compete; the answer states its effective date"
+    solution: |
+      Model **time explicitly**:
+
+      - Store `effective_from`, `effective_to`, `version` and `status` on every chunk (see the metadata contract).
+      - Resolve temporal expressions in the query to concrete dates, defaulting to "as of today".
+      - **Filter** to versions valid at that date. For time-series facts, add a recency decay to the ranking score.
+      - Show the effective date with the answer, and explicitly support historical questions ("what was the policy in 2024?").
+    works: |
+      Superseded versions can no longer be retrieved for current questions, which removes the most common
+      source of confidently wrong policy answers. Showing the effective date lets users verify currency at a
+      glance, and historical questions still work because versioned content is kept, not deleted.
+    code: |
+      as_of = resolve_time(q, default=today())                  # "last quarter" → date range
+      flt = {"effective_from": {"$lte": as_of},
+             "$or": [{"effective_to": None}, {"effective_to": {"$gt": as_of}}],
+             "status": {"$ne": "draft"}}
+      hits = hybrid_retrieve(q, filter=flt)
+      for h in hits:                                            # mild recency boost for dated facts
+          h.score *= exp(-DECAY * (as_of - h.meta["published"]).days) if h.meta["doc_type"] == "bulletin" else 1
+      answer = generate(q, hits, footer=f"Policy version effective {hits[0].meta['effective_from']}")
+    takeaway: "\"Correct\" is time-dependent. Index validity dates, resolve the question's time frame, and filter before ranking."
+    followup: "How would you handle a question that spans two policy versions, such as a claim filed under the old policy and paid under the new one?"
+
+  - id: rag-vs-finetune-confusion
+    title: Using RAG to fix behaviour, or fine-tuning to add knowledge
+    tags: [Cost, Quality]
+    scenario: |
+      Team A fine-tunes a model on the product catalog so it "knows" prices. Prices change weekly and the
+      model keeps quoting old ones. Team B puts 40 pages of style guide into every RAG prompt to get answers in the
+      brand voice and JSON format, and it's still inconsistent.
+    antipattern: |
+      The wrong lever for the problem: fine-tuning to inject frequently changing facts, or retrieval and prompt
+      stuffing to change stable behaviours such as format, tone and domain reasoning style.
+    fails: |
+      - **Fine-tuning is a poor knowledge store.** Facts can't be updated, cited or access-controlled, and models may blend or hallucinate memorized facts.
+      - **Prompts are a poor behaviour store at scale.** Long instructions cost tokens on every call and are followed inconsistently.
+      - **Expensive iteration.** Every fact change triggers a retraining cycle.
+    diagram:
+      bad: ["Weekly price changes", "!Fine-tune model", "Stale prices, no citations"]
+      bad_note: "Volatile knowledge baked into weights"
+      good: ["Volatile facts", "+RAG / tools (live)", "Base or tuned model", "+Fine-tune / prompts: format & style", "Grounded, on-brand answer"]
+      good_note: "Knowledge via retrieval and tools; behaviour via instructions, examples or tuning"
+    solution: |
+      Apply a simple decision rule:
+
+      | Need | Lever |
+      |---|---|
+      | Facts that change, must be cited, or are permissioned | RAG / tool calls to systems of record |
+      | Exact values (prices, balances, inventory) | Tool/API call, not retrieval of text |
+      | Output format, tone, domain style | Structured output + few-shot, then fine-tuning if still inconsistent |
+      | Specialized reasoning on stable patterns, latency/cost at scale | Fine-tune or distill a smaller model |
+
+      Start with prompting and RAG, establish an eval baseline, and fine-tune only for a measured behaviour gap
+      at volume.
+    works: |
+      Knowledge stays live, cited and governed in the systems that own it. Behaviour is learned once rather
+      than paid for in every prompt. Separating the two levers makes each one cheaper to change and easier to
+      evaluate. Distilled or fine-tuned small models can then cut serving cost for high-volume, stable tasks.
+    code: |
+      # Facts: call the system of record, don't memorize
+      tools = [Tool("get_price", lambda sku: pricing_api.current(sku)),
+               Tool("search_policies", secure_search)]
+
+      # Behaviour: schema + few-shot first; fine-tune only if eval shows a persistent gap
+      resp = llm.generate(system=BRAND_VOICE_SHORT, examples=FEW_SHOT[:3],
+                          tools=tools, response_schema=QuoteResponse, user=q)
+
+      if eval_report["format_adherence"] < 0.97 and monthly_calls > 2_000_000:
+          start_finetune(base="small-model", data=curated_pairs, eval_gate=eval_suite)
+    takeaway: "RAG and tools for knowledge, prompting or fine-tuning for behaviour. Mixing them up produces stale facts or bloated prompts."
+    followup: "When would you distill a frontier model into a smaller one for a production task?"

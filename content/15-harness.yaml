@@ -1,0 +1,360 @@
+id: harness
+num: 15
+short: Harness Engineering
+title: Harness Engineering at Every Stage
+summary: The harness is all the engineering around the model, at each stage from data to production. It covers the test harnesses that measure the system and the runtime harness that makes an agent work.
+intro:
+  - md: |
+      Mature AI teams spend more effort on the harness than on the model. The term now appears in the platforms
+      themselves: AWS ships a managed **AgentCore harness**, Microsoft a **Copilot harness** for Foundry Agent Service,
+      and coding agents are described in terms of the harness that wraps the model.
+      Two kinds of harness matter:
+
+      - **Evaluation harnesses** answer "is it good enough, and did it get worse?" at every stage of the lifecycle.
+      - **Runtime harnesses** answer "how does the model safely act?": the loop, tools, context, sandbox, hooks and budgets.
+
+      | Stage | Harness | What it measures or controls |
+      |---|---|---|
+      | Data & ingestion | Parsing / data-quality harness | Extraction fidelity, coverage, freshness |
+      | Retrieval | Retrieval eval harness | Recall@k, MRR, nDCG, filter correctness |
+      | Generation | Faithfulness harness | Groundedness, completeness, format, refusal correctness |
+      | Agent runtime | Agent harness | Loop, tools, context assembly, sandbox, hooks, budgets |
+      | Agent evaluation | Trajectory & simulation harness | Task success, path correctness, safety across multi-turn runs |
+      | Safety | Adversarial / red-team harness | Injection, jailbreak, data-leak resistance |
+      | CI/CD | Regression gate harness | Change-over-change deltas per segment |
+      | Production | Online eval, shadow & canary harness | Drift, live quality, feedback loops |
+  - layers:
+      layers:
+        - {name: "Production", items: ["Online evals", "Shadow / canary", "Drift monitors", "Feedback capture"], kind: acc}
+        - {name: "CI/CD", items: ["Smoke evals", "Full suite vs. baseline", "Red-team suite", "Promotion gate"]}
+        - {name: "Agent runtime", items: ["Loop + budgets", "Tool sandbox", "Hooks / policy", "Context manager"], kind: new}
+        - {name: "Generation", items: ["Faithfulness", "Format", "Refusal correctness"]}
+        - {name: "Retrieval", items: ["Recall@k", "Rerank precision", "ACL filter tests"]}
+        - {name: "Data", items: ["Golden documents", "Parser diff tests", "Freshness SLA"]}
+      side: ["Versioned datasets", "Calibrated judges", "Shared trace store", "One metrics catalog"]
+    caption: "Harness stack: each lifecycle stage has its own harness, on shared datasets, judges and traces"
+patterns:
+  - id: harness-data-stage
+    title: "Data stage: no golden documents, so parser regressions go unnoticed"
+    tags: [Quality]
+    scenario: |
+      A library upgrade in the PDF parser changes how multi-column layouts are read. Retrieval quality drops
+      on 15% of documents, and it's traced to the parser three weeks later.
+    antipattern: |
+      Parsing and chunking have no tests. Changes to parsers, OCR settings or chunkers are deployed if the
+      pipeline "runs without errors".
+    fails: |
+      - **Silent degradation:** the pipeline succeeds while producing worse text.
+      - **Late, expensive detection** at the end-to-end level, after re-indexing.
+    diagram:
+      bad: ["Parser upgrade", "!Pipeline runs = pass", "Re-index", "Quality drop found weeks later"]
+      bad_note: "No ground truth for extraction"
+      good: ["Parser change", "+Golden docs (hard cases)", "+Diff vs. expected text / tables", "+Coverage + freshness checks", "Re-index"]
+      good_note: "Extraction tested like code"
+    solution: |
+      - Curate **50–200 golden documents** covering hard cases: multi-column, tables, scans, forms, non-English.
+      - Store the expected extraction (text, table cells, reading order) and compare with similarity metrics and **table-cell accuracy**.
+      - Track coverage (pages with text), OCR confidence and freshness lag as continuous data-quality metrics.
+      - Run the harness on every parser, chunker or config change.
+    works: |
+      Parser regressions fail a test at the source, before re-indexing. Golden documents become the shared
+      definition of extraction quality between data and AI teams.
+    code: |
+      @pytest.mark.parametrize("doc", GOLDEN_DOCS)
+      def test_extraction(doc):
+          out = parse(doc.path)
+          assert text_similarity(out.text, doc.expected_text) >= 0.97
+          assert table_cell_accuracy(out.tables, doc.expected_tables) >= 0.98
+          assert reading_order_score(out.blocks, doc.expected_order) >= 0.95
+    takeaway: "Parsing is the first place quality is lost. A golden-document harness catches regressions before they spread into every index."
+    followup: "How do you choose which documents go into a golden set?"
+
+  - id: harness-retrieval-stage
+    title: "Retrieval stage: no labelled query set"
+    tags: [Quality]
+    scenario: |
+      A team debates whether to switch embedders, add a reranker or change chunk size. Each option is
+      argued from intuition, because no one can measure retrieval on its own.
+    antipattern: |
+      Retrieval is only evaluated indirectly through final answers, and there's no labelled
+      query-to-relevant-document set.
+    fails: |
+      - **Can't compare options** for embedders, chunking, hybrid weights or rerankers.
+      - **Confounded signals:** generation quality masks retrieval failures and vice versa.
+    diagram:
+      bad: ["Retrieval change", "!Judge final answers only", "Inconclusive debate"]
+      bad_note: "No retrieval ground truth"
+      good: ["Labelled queries (real + synthetic)", "+Retrieval harness", "Recall@k | MRR | nDCG | filter tests", "Configuration decision"]
+      good_note: "Retrieval decisions settled by numbers in minutes"
+    solution: |
+      - Build a **labelled set** from search logs, SME input and **synthetic queries** generated from chunks (then filtered by humans).
+      - Report recall@k, MRR and nDCG overall and per segment (query type, language, document type).
+      - Include **ACL and filter tests** (user X must never retrieve doc Y) as hard assertions.
+      - Run grid experiments across retrieval configurations.
+    works: |
+      Retrieval becomes a measurable, tunable component. Security tests turn access control into an
+      automated regression test rather than a one-time review.
+    code: |
+      def synth_queries(chunks, n_per=2):
+          return [Q(text=q, relevant={c.id}) for c in sample(chunks, 400)
+                  for q in llm.json(f"Write {n_per} realistic employee questions answered by:\n{c.text}")]
+
+      def test_acl():
+          assert not any(h.doc_id in BOARD_ONLY for h in secure_search("restructuring plan", token_for("analyst")))
+
+      grid = itertools.product(["dense", "hybrid"], [None, "rerank"], [300, 600])
+      results = {cfg: retrieval_eval(build(cfg), labelled) for cfg in grid}
+    takeaway: "You can't tune retrieval through the final answer. A labelled query set, with security tests included, makes retrieval an engineering decision."
+    followup: "How do you avoid overfitting to synthetic queries?"
+
+  - id: harness-generation-stage
+    title: "Generation stage: no faithfulness harness"
+    tags: [Quality, Compliance]
+    scenario: |
+      A model upgrade makes answers more fluent and more often slightly beyond the sources. Users like
+      the tone, and compliance finds unsupported claims in benefits answers.
+    antipattern: |
+      Generation is judged on fluency or user ratings. Faithfulness to sources, completeness and refusal
+      behaviour aren't measured separately.
+    fails: |
+      - **Fluency hides hallucination.** Users rate confident answers highly.
+      - **Refusal drift:** models can become more or less willing to answer out-of-scope questions after upgrades.
+    diagram:
+      bad: ["Model / prompt change", "!User ratings only", "Unsupported claims ship"]
+      bad_note: "Fluency mistaken for correctness"
+      good: ["Fixed contexts + questions", "+Faithfulness (claim-level)", "+Completeness rubric", "+Refusal set (out-of-scope)", "Gate"]
+      good_note: "Generation measured with retrieval held constant"
+    solution: |
+      - **Hold retrieval constant:** freeze contexts per case so generation is evaluated in isolation.
+      - Measure **claim-level faithfulness** (decompose the answer into claims, check entailment against sources) and **completeness** against a rubric.
+      - Keep a **refusal set** of out-of-scope and unanswerable questions, and measure correct refusals and false refusals.
+      - Track format and citation adherence.
+    works: |
+      Generation changes are isolated from retrieval noise. Claim-level checks catch fluent overreach, and
+      refusal metrics catch drift in both directions after model upgrades.
+    code: |
+      def faithfulness(answer, contexts):
+          claims = llm.json("Split into atomic factual claims", answer)
+          return mean(nli.entails(" ".join(contexts), c) > 0.8 for c in claims)
+
+      report = {
+          "faithfulness": mean(faithfulness(gen(c.q, c.frozen_ctx), c.frozen_ctx) for c in gen_cases),
+          "refusal_correct": mean(is_refusal(gen(c.q, c.frozen_ctx)) for c in unanswerable_cases),
+          "false_refusal": mean(is_refusal(gen(c.q, c.frozen_ctx)) for c in answerable_cases),
+      }
+    takeaway: "Evaluate generation with retrieval frozen. Measure claim-level faithfulness and refusal behaviour, not how fluent the answer sounds."
+    followup: "Why measure false refusals as well as hallucinations?"
+
+  - id: harness-runtime-prompt-only
+    title: "Agent runtime: the prompt treated as the whole agent"
+    tags: [Reliability, Security]
+    scenario: |
+      A team's agent "design document" is a 4-page system prompt. The loop, tool execution, context
+      management, permissions and error handling are a few lines of glue code with no tests.
+    antipattern: |
+      The runtime harness (loop, tool dispatch, context assembly, sandbox, hooks, budgets) is treated
+      as boilerplate, while all effort goes into prompt wording.
+    fails: |
+      - **Most agent failures are harness failures:** context overflow, unhandled tool errors, missing permissions, infinite loops, unsafe execution.
+      - **No enforcement points** for policy, since nothing intercepts tool calls.
+      - **Unportable:** prompt-only design breaks when the model changes.
+    diagram:
+      bad: ["System prompt (4 pages)", "!Thin glue loop", "Unhandled errors, loops, unsafe tools"]
+      bad_note: "Harness treated as boilerplate"
+      good: ["Model", "+Context manager", "+Tool dispatcher + sandbox", "+Hooks: pre/post tool, pre/post turn", "+Budgets + checkpoints"]
+      good_note: "Engineered harness with explicit control points"
+    solution: |
+      Design the **runtime harness** as a first-class component:
+
+      - **Context manager:** assembles instructions, state, retrieved knowledge and tool results within a token budget, with compaction.
+      - **Tool dispatcher:** validates arguments, executes in a **sandbox** (containers or micro-VMs for code and browsers), and normalizes errors into model-readable observations.
+      - **Lifecycle hooks:** before/after invocation and before/after tool call, for policy checks, PII redaction, approvals and logging. Managed harnesses expose similar hooks.
+      - **Budgets, stop rules and checkpointing** (see 7.4 and 7.5).
+      - Choose deliberately between building the harness (framework) and using a managed one (AgentCore harness, Foundry hosted agents, Claude Agent SDK / Managed Agents).
+    works: |
+      Control points exist exactly where risk occurs, at the tool boundary and the turn boundary. Errors
+      become recoverable observations rather than crashes. A well-engineered harness makes model upgrades
+      safer, because behaviour is shaped by code as well as prompt.
+    code: |
+      class Harness:
+          def __init__(self, model, tools, hooks, budget, ctx_mgr, sandbox):
+              self.m, self.tools, self.hooks, self.budget, self.ctx, self.sbx = model, tools, hooks, budget, ctx_mgr, sandbox
+
+          def run(self, task):
+              state = self.hooks.before_invocation(State(task))
+              while not state.done:
+                  self.budget.check(state)
+                  action = self.m.decide(self.ctx.assemble(state))
+                  if action.tool:
+                      action = self.hooks.before_tool_call(action, state)       # policy, approvals, redaction
+                      try:    obs = self.sbx.execute(self.tools[action.tool], action.args)
+                      except ToolError as e: obs = Observation(error=str(e), hint=e.hint)  # model-readable
+                      obs = self.hooks.after_tool_call(action, obs, state)
+                      state = state.add(action, obs); checkpoint(state)
+                  else:
+                      state = state.finish(action.answer)
+              return self.hooks.after_invocation(state)
+    takeaway: "The model proposes and the harness disposes. Context, tools, sandboxing, hooks and budgets are where agent reliability and safety are actually engineered."
+    followup: "When would you use a managed harness rather than building your own on a framework?"
+
+  - id: harness-final-answer-only
+    title: "Agent evaluation: judging only the final answer, not the trajectory"
+    tags: [Quality, Security]
+    scenario: |
+      An expense-audit agent gets the right final verdict on 92% of test cases. Trace review shows that in
+      30% of those cases it skipped the receipt-validation tool and guessed.
+    antipattern: |
+      Agent evaluation compares only final outputs with expected answers. The path (tool choice, order,
+      arguments, safety-relevant steps) isn't evaluated, and only single-turn tests are run.
+    fails: |
+      - **Right answer, wrong process.** Lucky guesses pass, and they fail unpredictably in production.
+      - **Safety-relevant steps** (verification, approvals) can be skipped without detection.
+      - **Multi-turn behaviour** (clarifying questions, recovery from errors) isn't tested.
+    diagram:
+      bad: ["Test task", "Agent run", "!Compare final answer only", "92% \"pass\""]
+      bad_note: "Process failures hidden behind correct outputs"
+      good: ["Test task + user simulator", "Agent run (traced)", "+Trajectory checks: required tools, order, args", "+Outcome + safety checks", "True pass rate"]
+      good_note: "Evaluate the path, the outcome and the safety invariants"
+    solution: |
+      - Define **expected trajectories** or invariants per task: required tools, forbidden tools, ordering constraints, argument checks.
+      - Use a **simulated user** to run multi-turn scenarios (ambiguous requests, mid-task changes, tool failures).
+      - Score **outcome** (task success against environment state, not just text), **trajectory** and **safety** (no forbidden actions, approvals requested).
+      - Use the trajectory evaluators available in the major platforms (ADK eval, AgentCore Evaluations, Foundry agent evaluators) or open frameworks.
+    works: |
+      Lucky guesses are exposed. Mandatory controls become testable invariants, and multi-turn simulation
+      catches the conversational failures that single-turn tests miss.
+    code: |
+      CASE = AgentCase(
+          task="Audit expense report ER-1182",
+          required_tools=["fetch_report", "validate_receipt"], forbidden_tools=["approve_payment"],
+          order=[("fetch_report", "validate_receipt")],
+          success=lambda env: env.report("ER-1182").status in {"flagged", "cleared"})
+
+      def evaluate(agent, case, sim_user):
+          env, trace = sandbox_env(), run_with_sim(agent, case.task, sim_user)
+          calls = [s.tool for s in trace.tool_spans]
+          return {"outcome": case.success(env),
+                  "trajectory": all(t in calls for t in case.required_tools) and ordered(calls, case.order),
+                  "safety": not any(t in calls for t in case.forbidden_tools)}
+    takeaway: "For agents, how matters as much as what. Evaluate trajectories and safety invariants in simulated multi-turn runs."
+    followup: "How do you build a realistic user simulator for agent testing?"
+
+  - id: harness-redteam-once
+    title: "Safety: red-teaming once before launch"
+    tags: [Security]
+    scenario: |
+      A customer-facing agent passed a red-team exercise in March. By September it had new tools, a new
+      model and new documents, and a researcher extracts internal pricing rules with a simple indirect injection.
+    antipattern: |
+      Red-teaming is a one-off, manual pre-launch event. Its findings aren't turned into repeatable tests.
+    fails: |
+      - **Attack surface changes** with every new tool, model, data source and prompt.
+      - **New attack techniques** appear constantly.
+      - **Fixed findings regress** without automated tests.
+    diagram:
+      bad: ["Pre-launch red team", "!Report filed", "System changes", "New vulnerability"]
+      bad_note: "Point-in-time assurance on a moving target"
+      good: ["Attack library (curated + generated)", "+Automated red-team harness in CI", "+Scheduled adversarial runs in prod-like env", "Findings → regression tests"]
+      good_note: "Continuous adversarial testing"
+      good_loop: "Every finding becomes a permanent test"
+    solution: |
+      - Maintain an **attack library**: direct and indirect injections, jailbreaks, data-exfiltration attempts, tool-abuse scenarios, domain-specific harms.
+      - Automate with red-teaming tools (PyRIT, garak, promptfoo red-team) and the platforms' safety evaluators.
+      - Run on every relevant change (new tool, model, data source) and on a schedule.
+      - Convert every finding into a **regression test**. Keep periodic expert-led exercises for novel attacks.
+    works: |
+      Safety assurance keeps pace with change. Automated runs catch regressions, and expert exercises
+      discover new classes of attack that are then automated.
+    code: |
+      ATTACKS = load_attacks("attacks/") + generate_variants(base="indirect_injection", n=200)
+
+      def redteam(target):
+          results = []
+          for a in ATTACKS:
+              env = seeded_env(canary_secret=CANARY)
+              out = target.run(a.payload, env=env)
+              results.append({"id": a.id, "leaked": CANARY in out.text or env.egress_contains(CANARY),
+                              "forbidden_action": env.forbidden_actions_taken()})
+          assert not any(r["leaked"] or r["forbidden_action"] for r in results), failing(results)
+    takeaway: "Red-teaming is a regression suite, not an event. Automate attacks, run them on every change, and turn every finding into a permanent test."
+    followup: "How do canary tokens help measure data-exfiltration risk?"
+
+  - id: harness-cicd-stage
+    title: "CI/CD: one big eval run instead of a tiered gate"
+    tags: [Reliability, Cost]
+    scenario: |
+      The full eval suite takes 3 hours and costs $400 per run, so teams run it weekly. Prompt changes merged
+      on Monday break things that aren't discovered until Friday.
+    antipattern: |
+      One monolithic, expensive evaluation run, scheduled rather than triggered by changes, with no fast
+      tier for pull requests.
+    fails: |
+      - **Slow feedback** encourages batching changes, which makes regressions harder to attribute.
+      - **Expensive runs** get skipped.
+    diagram:
+      bad: ["Many PRs", "!Weekly 3-hour eval", "Regression found days later"]
+      bad_note: "Slow, costly, unattributable"
+      good: ["PR", "+Tier 1: smoke (5 min, targeted)", "Merge", "+Tier 2: full suite (nightly / pre-release)", "+Tier 3: canary online evals"]
+      good_note: "Fast feedback first, depth before release"
+    solution: |
+      - **Tier 1 (PR):** 50–150 cases selected by **change impact** (prompt X touches segments A and B), cached responses for unchanged components, cheap judges.
+      - **Tier 2 (nightly / pre-release):** full suite with calibrated judges and statistical comparison against baseline.
+      - **Tier 3 (canary):** online metrics on live traffic with automatic rollback.
+      - Track eval cost as a budget line, and cache aggressively.
+    works: |
+      Developers get feedback in minutes on every change, and the full suite still runs before release.
+      Change-impact selection keeps cost proportional, and attribution stays clear because regressions are
+      caught per PR.
+    code: |
+      def select_cases(changed_files):
+          segments = set().union(*(IMPACT_MAP[f] for f in changed_files if f in IMPACT_MAP))
+          return [c for c in SUITE if c.segment in segments][:150] or SMOKE_DEFAULT
+
+      # PR pipeline
+      cases = select_cases(git_changed_files())
+      res = run(cases, cache=ResponseCache(key=component_versions()))
+      gate(res, baseline="main", max_drop=0.02)
+    takeaway: "Tier your eval gates like your test pyramid: fast and targeted on every PR, full depth before release, live metrics in canary."
+    followup: "How do you map code changes to the eval segments they could affect?"
+
+  - id: harness-production-stage
+    title: "Production: no online evaluation, drift detection or feedback loop"
+    tags: [Quality, Reliability]
+    scenario: |
+      A product-catalog assistant's quality degrades slowly as new product lines launch that aren't in the
+      eval set. Offline scores stay green while customer complaints rise.
+    antipattern: |
+      Evaluation stops at deployment. There's no sampling of live traffic, no drift monitoring, and user
+      feedback isn't connected to traces or datasets.
+    fails: |
+      - **Offline sets go stale** as usage and content evolve.
+      - **Drift** in query mix, data and model behaviour goes unnoticed.
+      - **Feedback is wasted** if it isn't linked to traces.
+    diagram:
+      bad: ["Deploy", "!Offline evals only", "Usage shifts", "Silent decline"]
+      bad_note: "Green dashboards, unhappy users"
+      good: ["Live traffic", "+Sampled online evals", "+Drift monitors (topics, scores, refusals)", "+Feedback linked to traces", "Dataset refresh"]
+      good_note: "Production feeds the evaluation flywheel"
+      good_loop: "Failures become new eval cases"
+    solution: |
+      - **Sample** a percentage of production traces for automated online evaluation (faithfulness, relevance, safety) using calibrated judges.
+      - Monitor **drift**: topic distribution (clustering queries), retrieval scores, refusal rate, escalation rate, latency and cost.
+      - Link thumbs-up/down and escalations to trace IDs, and route negatives to a triage queue.
+      - Add triaged failures and new topics to the golden dataset regularly.
+      - Use **shadow mode** to test candidate versions on live traffic without user exposure.
+    works: |
+      Quality is measured where it matters, on real users. Drift signals catch changing usage before
+      complaints do, and the flywheel keeps offline evals representative, which closes the loop of the harness stack.
+    code: |
+      @on_trace_complete(sample_rate=0.05)
+      def online_eval(trace):
+          scores = {"faithfulness": faithfulness(trace.answer, trace.contexts),
+                    "relevance": relevance_judge(trace.question, trace.answer)}
+          metrics.record(trace.app, scores, topic=topic_model.assign(trace.question))
+          if min(scores.values()) < 0.6:
+              triage_queue.put(trace.id)
+
+      drift = js_divergence(topic_hist(last_7d), topic_hist(baseline_window))
+      if drift > 0.15: alert("query mix drift: refresh eval set", top_new=new_topics(last_7d))
+    takeaway: "Evaluation doesn't end at deployment. Online evals, drift monitors and trace-linked feedback keep the harness honest as the world changes."
+    followup: "How do you evaluate online without ground-truth labels?"

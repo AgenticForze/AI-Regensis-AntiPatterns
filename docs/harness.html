@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness Engineering at Every Stage · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="active" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part F · Harness Engineering</div>
+  <h1><span class="sn">15</span>Harness Engineering at Every Stage</h1>
+  <p class="lede">The harness is all the engineering around the model, at each stage from data to production. It covers the test harnesses that measure the system and the runtime harness that makes an agent work.</p>
+  <span class="pill">8 anti-patterns</span>
+</div>
+<div class="prose"><p>Mature AI teams spend more effort on the harness than on the model. The term now appears in the platforms
+themselves: AWS ships a managed <strong>AgentCore harness</strong>, Microsoft a <strong>Copilot harness</strong> for Foundry Agent Service,
+and coding agents are described in terms of the harness that wraps the model.
+Two kinds of harness matter:</p>
+<ul>
+<li><strong>Evaluation harnesses</strong> answer "is it good enough, and did it get worse?" at every stage of the lifecycle.</li>
+<li><strong>Runtime harnesses</strong> answer "how does the model safely act?": the loop, tools, context, sandbox, hooks and budgets.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Harness</th>
+<th>What it measures or controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data &amp; ingestion</td>
+<td>Parsing / data-quality harness</td>
+<td>Extraction fidelity, coverage, freshness</td>
+</tr>
+<tr>
+<td>Retrieval</td>
+<td>Retrieval eval harness</td>
+<td>Recall@k, MRR, nDCG, filter correctness</td>
+</tr>
+<tr>
+<td>Generation</td>
+<td>Faithfulness harness</td>
+<td>Groundedness, completeness, format, refusal correctness</td>
+</tr>
+<tr>
+<td>Agent runtime</td>
+<td>Agent harness</td>
+<td>Loop, tools, context assembly, sandbox, hooks, budgets</td>
+</tr>
+<tr>
+<td>Agent evaluation</td>
+<td>Trajectory &amp; simulation harness</td>
+<td>Task success, path correctness, safety across multi-turn runs</td>
+</tr>
+<tr>
+<td>Safety</td>
+<td>Adversarial / red-team harness</td>
+<td>Injection, jailbreak, data-leak resistance</td>
+</tr>
+<tr>
+<td>CI/CD</td>
+<td>Regression gate harness</td>
+<td>Change-over-change deltas per segment</td>
+</tr>
+<tr>
+<td>Production</td>
+<td>Online eval, shadow &amp; canary harness</td>
+<td>Drift, live quality, feedback loops</td>
+</tr>
+</tbody>
+</table></div>
+<figure class="fig"><svg class="dg" viewBox="0 0 960 434" role="img" xmlns="http://www.w3.org/2000/svg"><rect class="dg-layer dg-layer-acc" x="24" y="24" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="56.0" font-size="12.5">Production</text>
+<rect class="dg-chip" x="214.0" y="34" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="276.8" y="56.0" font-size="11.5" text-anchor="middle">Online evals</text>
+<rect class="dg-chip" x="347.5" y="34" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="410.2" y="56.0" font-size="11.5" text-anchor="middle">Shadow / canary</text>
+<rect class="dg-chip" x="481.0" y="34" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="543.8" y="56.0" font-size="11.5" text-anchor="middle">Drift monitors</text>
+<rect class="dg-chip" x="614.5" y="34" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="677.2" y="56.0" font-size="11.5" text-anchor="middle">Feedback capture</text>
+<rect class="dg-layer dg-layer-std" x="24" y="90" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="122.0" font-size="12.5">CI/CD</text>
+<rect class="dg-chip" x="214.0" y="100" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="276.8" y="122.0" font-size="11.5" text-anchor="middle">Smoke evals</text>
+<rect class="dg-chip" x="347.5" y="100" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="410.2" y="116.2" font-size="10.5" text-anchor="middle">Full suite vs.</text>
+<text class="dg-chip-t" x="410.2" y="127.8" font-size="10.5" text-anchor="middle">baseline</text>
+<rect class="dg-chip" x="481.0" y="100" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="543.8" y="122.0" font-size="11.5" text-anchor="middle">Red-team suite</text>
+<rect class="dg-chip" x="614.5" y="100" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="677.2" y="122.0" font-size="11.5" text-anchor="middle">Promotion gate</text>
+<rect class="dg-layer dg-layer-new" x="24" y="156" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="188.0" font-size="12.5">Agent runtime</text>
+<rect class="dg-chip" x="214.0" y="166" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="276.8" y="188.0" font-size="11.5" text-anchor="middle">Loop + budgets</text>
+<rect class="dg-chip" x="347.5" y="166" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="410.2" y="188.0" font-size="11.5" text-anchor="middle">Tool sandbox</text>
+<rect class="dg-chip" x="481.0" y="166" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="543.8" y="188.0" font-size="11.5" text-anchor="middle">Hooks / policy</text>
+<rect class="dg-chip" x="614.5" y="166" width="125.5" height="36" rx="6"/>
+<text class="dg-chip-t" x="677.2" y="188.0" font-size="11.5" text-anchor="middle">Context manager</text>
+<rect class="dg-layer dg-layer-std" x="24" y="222" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="254.0" font-size="12.5">Generation</text>
+<rect class="dg-chip" x="214.0" y="232" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="299.0" y="254.0" font-size="11.5" text-anchor="middle">Faithfulness</text>
+<rect class="dg-chip" x="392.0" y="232" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="477.0" y="254.0" font-size="11.5" text-anchor="middle">Format</text>
+<rect class="dg-chip" x="570.0" y="232" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="655.0" y="254.0" font-size="11.5" text-anchor="middle">Refusal correctness</text>
+<rect class="dg-layer dg-layer-std" x="24" y="288" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="320.0" font-size="12.5">Retrieval</text>
+<rect class="dg-chip" x="214.0" y="298" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="299.0" y="320.0" font-size="11.5" text-anchor="middle">Recall@k</text>
+<rect class="dg-chip" x="392.0" y="298" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="477.0" y="320.0" font-size="11.5" text-anchor="middle">Rerank precision</text>
+<rect class="dg-chip" x="570.0" y="298" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="655.0" y="320.0" font-size="11.5" text-anchor="middle">ACL filter tests</text>
+<rect class="dg-layer dg-layer-std" x="24" y="354" width="726" height="56" rx="10"/>
+<text class="dg-layer-name" x="38" y="386.0" font-size="12.5">Data</text>
+<rect class="dg-chip" x="214.0" y="364" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="299.0" y="386.0" font-size="11.5" text-anchor="middle">Golden documents</text>
+<rect class="dg-chip" x="392.0" y="364" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="477.0" y="386.0" font-size="11.5" text-anchor="middle">Parser diff tests</text>
+<rect class="dg-chip" x="570.0" y="364" width="170.0" height="36" rx="6"/>
+<text class="dg-chip-t" x="655.0" y="386.0" font-size="11.5" text-anchor="middle">Freshness SLA</text>
+<rect class="dg-side" x="766" y="24.0" width="170" height="90.5" rx="10"/>
+<text class="dg-side-t" x="851.0" y="73.2" font-size="12" text-anchor="middle">Versioned datasets</text>
+<rect class="dg-side" x="766" y="122.5" width="170" height="90.5" rx="10"/>
+<text class="dg-side-t" x="851.0" y="171.8" font-size="12" text-anchor="middle">Calibrated judges</text>
+<rect class="dg-side" x="766" y="221.0" width="170" height="90.5" rx="10"/>
+<text class="dg-side-t" x="851.0" y="270.2" font-size="12" text-anchor="middle">Shared trace store</text>
+<rect class="dg-side" x="766" y="319.5" width="170" height="90.5" rx="10"/>
+<text class="dg-side-t" x="851.0" y="368.8" font-size="12" text-anchor="middle">One metrics catalog</text></svg><figcaption>Harness stack: each lifecycle stage has its own harness, on shared datasets, judges and traces</figcaption></figure>
+<div class="toc"><div class="toc-h">In this section</div><a href="#harness-data-stage"><span>15.1</span>Data stage: no golden documents, so parser regressions go unnoticed</a><a href="#harness-retrieval-stage"><span>15.2</span>Retrieval stage: no labelled query set</a><a href="#harness-generation-stage"><span>15.3</span>Generation stage: no faithfulness harness</a><a href="#harness-runtime-prompt-only"><span>15.4</span>Agent runtime: the prompt treated as the whole agent</a><a href="#harness-final-answer-only"><span>15.5</span>Agent evaluation: judging only the final answer, not the trajectory</a><a href="#harness-redteam-once"><span>15.6</span>Safety: red-teaming once before launch</a><a href="#harness-cicd-stage"><span>15.7</span>CI/CD: one big eval run instead of a tiered gate</a><a href="#harness-production-stage"><span>15.8</span>Production: no online evaluation, drift detection or feedback loop</a></div>
+
+<article class="ap" id="harness-data-stage">
+  <header class="ap-h">
+    <div class="ap-num">15.1</div>
+    <div>
+      <h2><a href="#harness-data-stage">Data stage: no golden documents, so parser regressions go unnoticed</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A library upgrade in the PDF parser changes how multi-column layouts are read. Retrieval quality drops
+on 15% of documents, and it's traced to the parser three weeks later.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Parsing and chunking have no tests. Changes to parsers, OCR settings or chunkers are deployed if the
+pipeline "runs without errors".</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Silent degradation:</strong> the pipeline succeeds while producing worse text.</li>
+<li><strong>Late, expensive detection</strong> at the end-to-end level, after re-indexing.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-data-stage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Parser upgrade</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Pipeline runs = pass</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Re-index</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">Quality drop found weeks</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">later</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No ground truth for extraction</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Parser change</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Golden docs (hard</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">cases)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Diff vs. expected</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">text / tables</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Coverage +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">freshness checks</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Re-index</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-data-stage)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Extraction tested like code</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Curate <strong>50–200 golden documents</strong> covering hard cases: multi-column, tables, scans, forms, non-English.</li>
+<li>Store the expected extraction (text, table cells, reading order) and compare with similarity metrics and <strong>table-cell accuracy</strong>.</li>
+<li>Track coverage (pages with text), OCR confidence and freshness lag as continuous data-quality metrics.</li>
+<li>Run the harness on every parser, chunker or config change.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Parser regressions fail a test at the source, before re-indexing. Golden documents become the shared
+definition of extraction quality between data and AI teams.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">"doc"</span><span class="p">,</span> <span class="n">GOLDEN_DOCS</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_extraction</span><span class="p">(</span><span class="n">doc</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">text_similarity</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">doc</span><span class="o">.</span><span class="n">expected_text</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.97</span>
+    <span class="k">assert</span> <span class="n">table_cell_accuracy</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">tables</span><span class="p">,</span> <span class="n">doc</span><span class="o">.</span><span class="n">expected_tables</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.98</span>
+    <span class="k">assert</span> <span class="n">reading_order_score</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="n">doc</span><span class="o">.</span><span class="n">expected_order</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.95</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Parsing is the first place quality is lost. A golden-document harness catches regressions before they spread into every index.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you choose which documents go into a golden set?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-retrieval-stage">
+  <header class="ap-h">
+    <div class="ap-num">15.2</div>
+    <div>
+      <h2><a href="#harness-retrieval-stage">Retrieval stage: no labelled query set</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team debates whether to switch embedders, add a reranker or change chunk size. Each option is
+argued from intuition, because no one can measure retrieval on its own.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Retrieval is only evaluated indirectly through final answers, and there's no labelled
+query-to-relevant-document set.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Can't compare options</strong> for embedders, chunking, hybrid weights or rerankers.</li>
+<li><strong>Confounded signals:</strong> generation quality masks retrieval failures and vice versa.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-retrieval-stage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Retrieval change</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Judge final answers only</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Inconclusive debate</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-harness-harness-retrieval-stage)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-harness-harness-retrieval-stage)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No retrieval ground truth</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="272.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="279.1" font-size="12.5" text-anchor="middle">Labelled queries (real +</text>
+<text class="dg-t dg-t-std" x="177.8" y="293.6" font-size="12.5" text-anchor="middle">synthetic)</text>
+<rect class="dg-node dg-new" x="305.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="286.4" font-size="12.5" text-anchor="middle">Retrieval harness</text>
+<circle class="dg-badge-new" cx="489.0" cy="263.0" r="8"/><text class="dg-badge-t" x="489.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Recall@k</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="259.4" font-size="12.5" text-anchor="middle">MRR</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="313.4" font-size="12.5" text-anchor="middle">nDCG</text>
+<rect class="dg-node dg-std" x="527.0" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="367.4" font-size="12.5" text-anchor="middle">filter tests</text>
+<rect class="dg-node dg-std" x="748.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="286.4" font-size="12.5" text-anchor="middle">Configuration decision</text>
+<line class="dg-edge" x1="274.5" y1="282.0" x2="301.5" y2="282.0" marker-end="url(#ah-harness-harness-retrieval-stage)"/>
+<line class="dg-edge" x1="496.0" y1="282.0" x2="523.0" y2="282.0" marker-end="url(#ah-harness-harness-retrieval-stage)"/>
+<line class="dg-edge" x1="717.5" y1="282.0" x2="744.5" y2="282.0" marker-end="url(#ah-harness-harness-retrieval-stage)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Retrieval decisions settled by numbers in minutes</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Build a <strong>labelled set</strong> from search logs, SME input and <strong>synthetic queries</strong> generated from chunks (then filtered by humans).</li>
+<li>Report recall@k, MRR and nDCG overall and per segment (query type, language, document type).</li>
+<li>Include <strong>ACL and filter tests</strong> (user X must never retrieve doc Y) as hard assertions.</li>
+<li>Run grid experiments across retrieval configurations.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Retrieval becomes a measurable, tunable component. Security tests turn access control into an
+automated regression test rather than a one-time review.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">synth_queries</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">n_per</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">Q</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">q</span><span class="p">,</span> <span class="n">relevant</span><span class="o">=</span><span class="p">{</span><span class="n">c</span><span class="o">.</span><span class="n">id</span><span class="p">})</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">sample</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">llm</span><span class="o">.</span><span class="n">json</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Write </span><span class="si">{</span><span class="n">n_per</span><span class="si">}</span><span class="s2"> realistic employee questions answered by:</span><span class="se">\n</span><span class="si">{</span><span class="n">c</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">"</span><span class="p">)]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_acl</span><span class="p">():</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">doc_id</span> <span class="ow">in</span> <span class="n">BOARD_ONLY</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">secure_search</span><span class="p">(</span><span class="s2">"restructuring plan"</span><span class="p">,</span> <span class="n">token_for</span><span class="p">(</span><span class="s2">"analyst"</span><span class="p">)))</span>
+
+<span class="n">grid</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">([</span><span class="s2">"dense"</span><span class="p">,</span> <span class="s2">"hybrid"</span><span class="p">],</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s2">"rerank"</span><span class="p">],</span> <span class="p">[</span><span class="mi">300</span><span class="p">,</span> <span class="mi">600</span><span class="p">])</span>
+<span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="n">cfg</span><span class="p">:</span> <span class="n">retrieval_eval</span><span class="p">(</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">),</span> <span class="n">labelled</span><span class="p">)</span> <span class="k">for</span> <span class="n">cfg</span> <span class="ow">in</span> <span class="n">grid</span><span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>You can&#x27;t tune retrieval through the final answer. A labelled query set, with security tests included, makes retrieval an engineering decision.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you avoid overfitting to synthetic queries?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-generation-stage">
+  <header class="ap-h">
+    <div class="ap-num">15.3</div>
+    <div>
+      <h2><a href="#harness-generation-stage">Generation stage: no faithfulness harness</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A model upgrade makes answers more fluent and more often slightly beyond the sources. Users like
+the tone, and compliance finds unsupported claims in benefits answers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Generation is judged on fluency or user ratings. Faithfulness to sources, completeness and refusal
+behaviour aren't measured separately.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Fluency hides hallucination.</strong> Users rate confident answers highly.</li>
+<li><strong>Refusal drift:</strong> models can become more or less willing to answer out-of-scope questions after upgrades.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-generation-stage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Model / prompt change</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">User ratings only</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Unsupported claims ship</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Fluency mistaken for correctness</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Fixed contexts +</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">questions</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Faithfulness</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(claim-level)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Completeness rubric</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Refusal set</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">(out-of-scope)</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Gate</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-generation-stage)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Generation measured with retrieval held constant</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Hold retrieval constant:</strong> freeze contexts per case so generation is evaluated in isolation.</li>
+<li>Measure <strong>claim-level faithfulness</strong> (decompose the answer into claims, check entailment against sources) and <strong>completeness</strong> against a rubric.</li>
+<li>Keep a <strong>refusal set</strong> of out-of-scope and unanswerable questions, and measure correct refusals and false refusals.</li>
+<li>Track format and citation adherence.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Generation changes are isolated from retrieval noise. Claim-level checks catch fluent overreach, and
+refusal metrics catch drift in both directions after model upgrades.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">faithfulness</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">contexts</span><span class="p">):</span>
+    <span class="n">claims</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">json</span><span class="p">(</span><span class="s2">"Split into atomic factual claims"</span><span class="p">,</span> <span class="n">answer</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mean</span><span class="p">(</span><span class="n">nli</span><span class="o">.</span><span class="n">entails</span><span class="p">(</span><span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">contexts</span><span class="p">),</span> <span class="n">c</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.8</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">claims</span><span class="p">)</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"faithfulness"</span><span class="p">:</span> <span class="n">mean</span><span class="p">(</span><span class="n">faithfulness</span><span class="p">(</span><span class="n">gen</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">frozen_ctx</span><span class="p">),</span> <span class="n">c</span><span class="o">.</span><span class="n">frozen_ctx</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">gen_cases</span><span class="p">),</span>
+    <span class="s2">"refusal_correct"</span><span class="p">:</span> <span class="n">mean</span><span class="p">(</span><span class="n">is_refusal</span><span class="p">(</span><span class="n">gen</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">frozen_ctx</span><span class="p">))</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">unanswerable_cases</span><span class="p">),</span>
+    <span class="s2">"false_refusal"</span><span class="p">:</span> <span class="n">mean</span><span class="p">(</span><span class="n">is_refusal</span><span class="p">(</span><span class="n">gen</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">frozen_ctx</span><span class="p">))</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">answerable_cases</span><span class="p">),</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Evaluate generation with retrieval frozen. Measure claim-level faithfulness and refusal behaviour, not how fluent the answer sounds.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Why measure false refusals as well as hallucinations?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-runtime-prompt-only">
+  <header class="ap-h">
+    <div class="ap-num">15.4</div>
+    <div>
+      <h2><a href="#harness-runtime-prompt-only">Agent runtime: the prompt treated as the whole agent</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team's agent "design document" is a 4-page system prompt. The loop, tool execution, context
+management, permissions and error handling are a few lines of glue code with no tests.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The runtime harness (loop, tool dispatch, context assembly, sandbox, hooks, budgets) is treated
+as boilerplate, while all effort goes into prompt wording.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Most agent failures are harness failures:</strong> context overflow, unhandled tool errors, missing permissions, infinite loops, unsafe execution.</li>
+<li><strong>No enforcement points</strong> for policy, since nothing intercepts tool calls.</li>
+<li><strong>Unportable:</strong> prompt-only design breaks when the model changes.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-runtime-prompt-only" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">System prompt (4 pages)</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Thin glue loop</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="74.1" font-size="12.5" text-anchor="middle">Unhandled errors, loops, unsafe</text>
+<text class="dg-t dg-t-std" x="805.3" y="88.6" font-size="12.5" text-anchor="middle">tools</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Harness treated as boilerplate</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Model</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Context manager</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Tool dispatcher +</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">sandbox</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Hooks: pre/post</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">tool, pre/post turn</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Budgets +</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">checkpoints</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-runtime-prompt-only)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Engineered harness with explicit control points</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Design the <strong>runtime harness</strong> as a first-class component:</p>
+<ul>
+<li><strong>Context manager:</strong> assembles instructions, state, retrieved knowledge and tool results within a token budget, with compaction.</li>
+<li><strong>Tool dispatcher:</strong> validates arguments, executes in a <strong>sandbox</strong> (containers or micro-VMs for code and browsers), and normalizes errors into model-readable observations.</li>
+<li><strong>Lifecycle hooks:</strong> before/after invocation and before/after tool call, for policy checks, PII redaction, approvals and logging. Managed harnesses expose similar hooks.</li>
+<li><strong>Budgets, stop rules and checkpointing</strong> (see 7.4 and 7.5).</li>
+<li>Choose deliberately between building the harness (framework) and using a managed one (AgentCore harness, Foundry hosted agents, Claude Agent SDK / Managed Agents).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Control points exist exactly where risk occurs, at the tool boundary and the turn boundary. Errors
+become recoverable observations rather than crashes. A well-engineered harness makes model upgrades
+safer, because behaviour is shaped by code as well as prompt.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Harness</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">hooks</span><span class="p">,</span> <span class="n">budget</span><span class="p">,</span> <span class="n">ctx_mgr</span><span class="p">,</span> <span class="n">sandbox</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tools</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">budget</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ctx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sbx</span> <span class="o">=</span> <span class="n">model</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">hooks</span><span class="p">,</span> <span class="n">budget</span><span class="p">,</span> <span class="n">ctx_mgr</span><span class="p">,</span> <span class="n">sandbox</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">before_invocation</span><span class="p">(</span><span class="n">State</span><span class="p">(</span><span class="n">task</span><span class="p">))</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="n">state</span><span class="o">.</span><span class="n">done</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">budget</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">assemble</span><span class="p">(</span><span class="n">state</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">tool</span><span class="p">:</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">before_tool_call</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>       <span class="c1"># policy, approvals, redaction</span>
+                <span class="k">try</span><span class="p">:</span>    <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sbx</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tools</span><span class="p">[</span><span class="n">action</span><span class="o">.</span><span class="n">tool</span><span class="p">],</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
+                <span class="k">except</span> <span class="n">ToolError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span> <span class="n">obs</span> <span class="o">=</span> <span class="n">Observation</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">hint</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">hint</span><span class="p">)</span>  <span class="c1"># model-readable</span>
+                <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">after_tool_call</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">obs</span><span class="p">);</span> <span class="n">checkpoint</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">answer</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">after_invocation</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>The model proposes and the harness disposes. Context, tools, sandboxing, hooks and budgets are where agent reliability and safety are actually engineered.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you use a managed harness rather than building your own on a framework?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-final-answer-only">
+  <header class="ap-h">
+    <div class="ap-num">15.5</div>
+    <div>
+      <h2><a href="#harness-final-answer-only">Agent evaluation: judging only the final answer, not the trajectory</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An expense-audit agent gets the right final verdict on 92% of test cases. Trace review shows that in
+30% of those cases it skipped the receipt-validation tool and guessed.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agent evaluation compares only final outputs with expected answers. The path (tool choice, order,
+arguments, safety-relevant steps) isn't evaluated, and only single-turn tests are run.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Right answer, wrong process.</strong> Lucky guesses pass, and they fail unpredictably in production.</li>
+<li><strong>Safety-relevant steps</strong> (verification, approvals) can be skipped without detection.</li>
+<li><strong>Multi-turn behaviour</strong> (clarifying questions, recovery from errors) isn't tested.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-final-answer-only" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Test task</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Agent run</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Compare final answer only</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">92% &quot;pass&quot;</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Process failures hidden behind correct outputs</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Test task + user</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">simulator</text>
+<rect class="dg-node dg-std" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Agent run (traced)</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Trajectory checks:</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">required tools,</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">order, args</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Outcome + safety</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">checks</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">True pass rate</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-final-answer-only)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Evaluate the path, the outcome and the safety invariants</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Define <strong>expected trajectories</strong> or invariants per task: required tools, forbidden tools, ordering constraints, argument checks.</li>
+<li>Use a <strong>simulated user</strong> to run multi-turn scenarios (ambiguous requests, mid-task changes, tool failures).</li>
+<li>Score <strong>outcome</strong> (task success against environment state, not just text), <strong>trajectory</strong> and <strong>safety</strong> (no forbidden actions, approvals requested).</li>
+<li>Use the trajectory evaluators available in the major platforms (ADK eval, AgentCore Evaluations, Foundry agent evaluators) or open frameworks.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Lucky guesses are exposed. Mandatory controls become testable invariants, and multi-turn simulation
+catches the conversational failures that single-turn tests miss.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">CASE</span> <span class="o">=</span> <span class="n">AgentCase</span><span class="p">(</span>
+    <span class="n">task</span><span class="o">=</span><span class="s2">"Audit expense report ER-1182"</span><span class="p">,</span>
+    <span class="n">required_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"fetch_report"</span><span class="p">,</span> <span class="s2">"validate_receipt"</span><span class="p">],</span> <span class="n">forbidden_tools</span><span class="o">=</span><span class="p">[</span><span class="s2">"approve_payment"</span><span class="p">],</span>
+    <span class="n">order</span><span class="o">=</span><span class="p">[(</span><span class="s2">"fetch_report"</span><span class="p">,</span> <span class="s2">"validate_receipt"</span><span class="p">)],</span>
+    <span class="n">success</span><span class="o">=</span><span class="k">lambda</span> <span class="n">env</span><span class="p">:</span> <span class="n">env</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="s2">"ER-1182"</span><span class="p">)</span><span class="o">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"flagged"</span><span class="p">,</span> <span class="s2">"cleared"</span><span class="p">})</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">case</span><span class="p">,</span> <span class="n">sim_user</span><span class="p">):</span>
+    <span class="n">env</span><span class="p">,</span> <span class="n">trace</span> <span class="o">=</span> <span class="n">sandbox_env</span><span class="p">(),</span> <span class="n">run_with_sim</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">task</span><span class="p">,</span> <span class="n">sim_user</span><span class="p">)</span>
+    <span class="n">calls</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">tool</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">trace</span><span class="o">.</span><span class="n">tool_spans</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"outcome"</span><span class="p">:</span> <span class="n">case</span><span class="o">.</span><span class="n">success</span><span class="p">(</span><span class="n">env</span><span class="p">),</span>
+            <span class="s2">"trajectory"</span><span class="p">:</span> <span class="nb">all</span><span class="p">(</span><span class="n">t</span> <span class="ow">in</span> <span class="n">calls</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">case</span><span class="o">.</span><span class="n">required_tools</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ordered</span><span class="p">(</span><span class="n">calls</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">order</span><span class="p">),</span>
+            <span class="s2">"safety"</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">t</span> <span class="ow">in</span> <span class="n">calls</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">case</span><span class="o">.</span><span class="n">forbidden_tools</span><span class="p">)}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>For agents, how matters as much as what. Evaluate trajectories and safety invariants in simulated multi-turn runs.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you build a realistic user simulator for agent testing?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-redteam-once">
+  <header class="ap-h">
+    <div class="ap-num">15.6</div>
+    <div>
+      <h2><a href="#harness-redteam-once">Safety: red-teaming once before launch</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A customer-facing agent passed a red-team exercise in March. By September it had new tools, a new
+model and new documents, and a researcher extracts internal pricing rules with a simple indirect injection.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Red-teaming is a one-off, manual pre-launch event. Its findings aren't turned into repeatable tests.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Attack surface changes</strong> with every new tool, model, data source and prompt.</li>
+<li><strong>New attack techniques</strong> appear constantly.</li>
+<li><strong>Fixed findings regress</strong> without automated tests.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 310" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-redteam-once" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Pre-launch red team</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Report filed</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">System changes</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">New vulnerability</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Point-in-time assurance on a moving target</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="144.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Attack library (curated +</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">generated)</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Automated red-team</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">harness in CI</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Scheduled adversarial</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">runs in prod-like env</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Findings → regression</text>
+<text class="dg-t dg-t-std" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">tests</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<path class="dg-loop" d="M842.2,226.0 V246.0 H177.8 V230.0" marker-end="url(#ah-harness-harness-redteam-once)"/>
+<text class="dg-loop-t" x="510.0" y="241.0" text-anchor="middle" font-size="11.5">Every finding becomes a permanent test</text>
+<text class="dg-note dg-note-good" x="28" y="279.0" font-size="12.5">Continuous adversarial testing</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Maintain an <strong>attack library</strong>: direct and indirect injections, jailbreaks, data-exfiltration attempts, tool-abuse scenarios, domain-specific harms.</li>
+<li>Automate with red-teaming tools (PyRIT, garak, promptfoo red-team) and the platforms' safety evaluators.</li>
+<li>Run on every relevant change (new tool, model, data source) and on a schedule.</li>
+<li>Convert every finding into a <strong>regression test</strong>. Keep periodic expert-led exercises for novel attacks.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Safety assurance keeps pace with change. Automated runs catch regressions, and expert exercises
+discover new classes of attack that are then automated.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">ATTACKS</span> <span class="o">=</span> <span class="n">load_attacks</span><span class="p">(</span><span class="s2">"attacks/"</span><span class="p">)</span> <span class="o">+</span> <span class="n">generate_variants</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="s2">"indirect_injection"</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">redteam</span><span class="p">(</span><span class="n">target</span><span class="p">):</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">ATTACKS</span><span class="p">:</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">seeded_env</span><span class="p">(</span><span class="n">canary_secret</span><span class="o">=</span><span class="n">CANARY</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">payload</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">)</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">"leaked"</span><span class="p">:</span> <span class="n">CANARY</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">text</span> <span class="ow">or</span> <span class="n">env</span><span class="o">.</span><span class="n">egress_contains</span><span class="p">(</span><span class="n">CANARY</span><span class="p">),</span>
+                        <span class="s2">"forbidden_action"</span><span class="p">:</span> <span class="n">env</span><span class="o">.</span><span class="n">forbidden_actions_taken</span><span class="p">()})</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"leaked"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">r</span><span class="p">[</span><span class="s2">"forbidden_action"</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">),</span> <span class="n">failing</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Red-teaming is a regression suite, not an event. Automate attacks, run them on every change, and turn every finding into a permanent test.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do canary tokens help measure data-exfiltration risk?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-cicd-stage">
+  <header class="ap-h">
+    <div class="ap-num">15.7</div>
+    <div>
+      <h2><a href="#harness-cicd-stage">CI/CD: one big eval run instead of a tiered gate</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The full eval suite takes 3 hours and costs $400 per run, so teams run it weekly. Prompt changes merged
+on Monday break things that aren't discovered until Friday.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>One monolithic, expensive evaluation run, scheduled rather than triggered by changes, with no fast
+tier for pull requests.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Slow feedback</strong> encourages batching changes, which makes regressions harder to attribute.</li>
+<li><strong>Expensive runs</strong> get skipped.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-cicd-stage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Many PRs</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Weekly 3-hour eval</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Regression found days later</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Slow, costly, unattributable</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">PR</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Tier 1: smoke (5</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">min, targeted)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Merge</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="191.8" font-size="11" text-anchor="middle">Tier 2: full suite</text>
+<text class="dg-t dg-t-new" x="687.2" y="204.8" font-size="11" text-anchor="middle">(nightly /</text>
+<text class="dg-t dg-t-new" x="687.2" y="217.8" font-size="11" text-anchor="middle">pre-release)</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Tier 3: canary</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">online evals</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-cicd-stage)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Fast feedback first, depth before release</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Tier 1 (PR):</strong> 50–150 cases selected by <strong>change impact</strong> (prompt X touches segments A and B), cached responses for unchanged components, cheap judges.</li>
+<li><strong>Tier 2 (nightly / pre-release):</strong> full suite with calibrated judges and statistical comparison against baseline.</li>
+<li><strong>Tier 3 (canary):</strong> online metrics on live traffic with automatic rollback.</li>
+<li>Track eval cost as a budget line, and cache aggressively.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Developers get feedback in minutes on every change, and the full suite still runs before release.
+Change-impact selection keeps cost proportional, and attribution stays clear because regressions are
+caught per PR.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">select_cases</span><span class="p">(</span><span class="n">changed_files</span><span class="p">):</span>
+    <span class="n">segments</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">IMPACT_MAP</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">changed_files</span> <span class="k">if</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">IMPACT_MAP</span><span class="p">))</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">SUITE</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">segment</span> <span class="ow">in</span> <span class="n">segments</span><span class="p">][:</span><span class="mi">150</span><span class="p">]</span> <span class="ow">or</span> <span class="n">SMOKE_DEFAULT</span>
+
+<span class="c1"># PR pipeline</span>
+<span class="n">cases</span> <span class="o">=</span> <span class="n">select_cases</span><span class="p">(</span><span class="n">git_changed_files</span><span class="p">())</span>
+<span class="n">res</span> <span class="o">=</span> <span class="n">run</span><span class="p">(</span><span class="n">cases</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">ResponseCache</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">component_versions</span><span class="p">()))</span>
+<span class="n">gate</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">baseline</span><span class="o">=</span><span class="s2">"main"</span><span class="p">,</span> <span class="n">max_drop</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Tier your eval gates like your test pyramid: fast and targeted on every PR, full depth before release, live metrics in canary.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you map code changes to the eval segments they could affect?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="harness-production-stage">
+  <header class="ap-h">
+    <div class="ap-num">15.8</div>
+    <div>
+      <h2><a href="#harness-production-stage">Production: no online evaluation, drift detection or feedback loop</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A product-catalog assistant's quality degrades slowly as new product lines launch that aren't in the
+eval set. Offline scores stay green while customer complaints rise.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Evaluation stops at deployment. There's no sampling of live traffic, no drift monitoring, and user
+feedback isn't connected to traces or datasets.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Offline sets go stale</strong> as usage and content evolve.</li>
+<li><strong>Drift</strong> in query mix, data and model behaviour goes unnoticed.</li>
+<li><strong>Feedback is wasted</strong> if it isn't linked to traces.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 310" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-harness-harness-production-stage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Deploy</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Offline evals only</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Usage shifts</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Silent decline</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Green dashboards, unhappy users</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="144.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Live traffic</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Sampled online</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">evals</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="191.8" font-size="11" text-anchor="middle">Drift monitors</text>
+<text class="dg-t dg-t-new" x="510.0" y="204.8" font-size="11" text-anchor="middle">(topics, scores,</text>
+<text class="dg-t dg-t-new" x="510.0" y="217.8" font-size="11" text-anchor="middle">refusals)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Feedback linked to</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">traces</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Dataset refresh</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<path class="dg-loop" d="M864.4,226.0 V246.0 H155.6 V230.0" marker-end="url(#ah-harness-harness-production-stage)"/>
+<text class="dg-loop-t" x="510.0" y="241.0" text-anchor="middle" font-size="11.5">Failures become new eval cases</text>
+<text class="dg-note dg-note-good" x="28" y="279.0" font-size="12.5">Production feeds the evaluation flywheel</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Sample</strong> a percentage of production traces for automated online evaluation (faithfulness, relevance, safety) using calibrated judges.</li>
+<li>Monitor <strong>drift</strong>: topic distribution (clustering queries), retrieval scores, refusal rate, escalation rate, latency and cost.</li>
+<li>Link thumbs-up/down and escalations to trace IDs, and route negatives to a triage queue.</li>
+<li>Add triaged failures and new topics to the golden dataset regularly.</li>
+<li>Use <strong>shadow mode</strong> to test candidate versions on live traffic without user exposure.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Quality is measured where it matters, on real users. Drift signals catch changing usage before
+complaints do, and the flywheel keeps offline evals representative, which closes the loop of the harness stack.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="nd">@on_trace_complete</span><span class="p">(</span><span class="n">sample_rate</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">online_eval</span><span class="p">(</span><span class="n">trace</span><span class="p">):</span>
+    <span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"faithfulness"</span><span class="p">:</span> <span class="n">faithfulness</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">answer</span><span class="p">,</span> <span class="n">trace</span><span class="o">.</span><span class="n">contexts</span><span class="p">),</span>
+              <span class="s2">"relevance"</span><span class="p">:</span> <span class="n">relevance_judge</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">question</span><span class="p">,</span> <span class="n">trace</span><span class="o">.</span><span class="n">answer</span><span class="p">)}</span>
+    <span class="n">metrics</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">topic</span><span class="o">=</span><span class="n">topic_model</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">question</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">scores</span><span class="o">.</span><span class="n">values</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">:</span>
+        <span class="n">triage_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+<span class="n">drift</span> <span class="o">=</span> <span class="n">js_divergence</span><span class="p">(</span><span class="n">topic_hist</span><span class="p">(</span><span class="n">last_7d</span><span class="p">),</span> <span class="n">topic_hist</span><span class="p">(</span><span class="n">baseline_window</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">drift</span> <span class="o">&gt;</span> <span class="mf">0.15</span><span class="p">:</span> <span class="n">alert</span><span class="p">(</span><span class="s2">"query mix drift: refresh eval set"</span><span class="p">,</span> <span class="n">top_new</span><span class="o">=</span><span class="n">new_topics</span><span class="p">(</span><span class="n">last_7d</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Evaluation doesn&#x27;t end at deployment. Online evals, drift monitors and trace-linked feedback keep the harness honest as the world changes.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you evaluate online without ground-truth labels?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="local-vs-cloud.html">← 14. Local LLMs vs Cloud Cost</a><a class="next" href="ai-tools.html">16. Claude &amp; AI Tools →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+id: embeddings
+num: 2
+short: Embeddings & Vector Stores
+title: Embeddings & Vector Stores
+summary: The representation layer decides what "similar" means. Get it wrong and every downstream component inherits the error.
+patterns:
+  - id: one-embedding-model
+    title: One embedding model for every domain and language
+    tags: [Quality]
+    scenario: |
+      A global manufacturer's engineering assistant serves English, German and Japanese plants. German
+      queries for "Drehmomentspezifikation" (torque specification) rarely retrieve the right maintenance manuals,
+      and part numbers like "XJ-4471-B" never match.
+    antipattern: |
+      A general-purpose English embedding model was chosen from a leaderboard and applied to every corpus,
+      language and content type. It was never evaluated on the company's own queries.
+    fails: |
+      - **Leaderboards measure someone else's data.** Public benchmark rankings say little about part numbers, internal jargon or regulatory language.
+      - **Cross-lingual gaps.** English-centric models place German and Japanese text poorly, so retrieval recall drops sharply for non-English users.
+      - **Lexical identifiers.** Dense vectors blur exact codes (SKUs, ticket IDs, clause numbers) that users expect to match exactly.
+      - **No baseline.** Without a domain eval set, nobody can tell whether a model change helps or hurts.
+    diagram:
+      bad: ["EN | DE | JA docs", "!Single EN embedder", "One index", "Poor DE/JA recall"]
+      bad_note: "Leaderboard pick, never measured on the client's own queries"
+      good: ["EN | DE | JA docs", "+Domain eval set", "+Multilingual embedder | Sparse / BM25", "Hybrid index", "Recall@k tracked"]
+      good_note: "Model chosen by measured recall on real queries, with lexical backup for codes"
+    solution: |
+      Select embeddings **empirically against the client's own data**:
+
+      1. Build a labeled evaluation set of 200–500 real queries with known relevant documents, stratified by language, department and query type (conceptual, identifier, how-to).
+      2. Shortlist 3–5 candidates (multilingual and domain-tuned commercial or open models) and compare recall@k, MRR and nDCG.
+      3. Pair dense vectors with **sparse/lexical retrieval** (BM25, SPLADE) for codes and rare terms.
+      4. Consider **fine-tuning** the embedder on in-domain query–document pairs when the gap stays large. Synthetic queries generated from the corpus work well for this.
+      5. Re-run the eval on every candidate model change.
+    works: |
+      The selection criterion becomes recall on the client's real workload rather than a public
+      benchmark. Multilingual models put "Drehmomentspezifikation" and "torque specification" in the same
+      region of vector space. Hybrid lexical retrieval catches exact identifiers that dense vectors smear.
+      The eval set becomes a lasting asset for every future model decision.
+    code: |
+      def evaluate_embedder(model, eval_set, corpus, k=10):
+          index = build_index(corpus, embed_fn=model.embed)
+          recalls, rr = [], []
+          for q in eval_set:                                  # {"query","lang","relevant_ids"}
+              hits = [h.id for h in index.search(model.embed(q["query"]), k=k)]
+              recalls.append(len(set(hits) & set(q["relevant_ids"])) / len(q["relevant_ids"]))
+              rr.append(next((1 / (i + 1) for i, h in enumerate(hits) if h in q["relevant_ids"]), 0))
+          return {"recall@k": mean(recalls), "mrr": mean(rr),
+                  "by_lang": group_mean(eval_set, recalls, key="lang")}
+
+      results = {m.name: evaluate_embedder(m, eval_set, corpus) for m in CANDIDATES}
+      best = max(results, key=lambda m: results[m]["recall@k"])
+    takeaway: "Choose embeddings the way you'd choose a database index, by measuring them on the real workload. A leaderboard tells you nothing about the client's part numbers."
+    followup: "How would you build a retrieval eval set when there are no historical query logs?"
+
+  - id: no-embedding-versioning
+    title: No versioning when the embedding model changes
+    tags: [Reliability, Cost]
+    scenario: |
+      A team upgrades to a newer embedding model to improve recall. Half the corpus is re-embedded overnight
+      before the job fails. Retrieval quality collapses the next morning and nobody can explain why.
+    antipattern: |
+      Vectors from different models (or model versions) are written into the same index. Upgrades are an
+      in-place overwrite with no record of which model produced which vector, and no way back.
+    fails: |
+      - **Incompatible vector spaces.** Vectors from different models aren't comparable. Mixing them makes similarity scores meaningless.
+      - **No rollback.** When the new model underperforms, the old vectors are gone.
+      - **Downtime and big-bang cost.** Re-embedding a large corpus in place blocks queries or leaves the index half-migrated.
+      - **Query/document mismatch.** The query path may be upgraded before or after the document path.
+    diagram:
+      bad: ["Corpus", "!Overwrite in place", "Mixed v1 + v2 vectors", "Broken similarity"]
+      bad_note: "Half-migrated index with no rollback path"
+      good: ["Corpus", "+Build index v2 (shadow)", "+Eval v1 vs v2", "+Alias switch", "Serve v2 | Keep v1 for rollback"]
+      good_note: "Blue/green index migration; query and document embedders always pinned together"
+    solution: |
+      Treat the embedding model as part of the **index schema** and migrate with blue/green:
+
+      - Record `embed_model` and `embed_version` on every vector and in the index name (`kb_v2_e5large_2026_10`).
+      - Build the new index **in parallel** (shadow), backfilling from the canonical chunk store rather than from the old index.
+      - Run the retrieval eval and a shadow-traffic comparison. Promote only if metrics improve.
+      - Switch via an **alias**, so queries move atomically and the query embedder flips at the same moment.
+      - Keep the previous index until the rollback window closes.
+    works: |
+      Each index is internally consistent, so similarity scores stay meaningful. The alias switch makes
+      cutover atomic and reversible. Evidence from the eval gates the change, which turns a risky upgrade
+      into a routine release. Keeping chunks in a canonical store (not only the vector DB) makes rebuilds
+      reproducible.
+    code: |
+      def migrate_embeddings(new_model, alias="kb_current"):
+          new_index = f"kb_{new_model.slug}_{today():%Y%m%d}"
+          vdb.create_index(new_index, dim=new_model.dim)
+          for batch in chunk_store.iter_batches(1000):              # canonical source, not the old index
+              vdb.upsert(new_index, [(c.id, new_model.embed(c.text), c.meta | {"embed_model": new_model.slug})
+                                     for c in batch])
+          old = vdb.resolve_alias(alias)
+          if evaluate(new_index, new_model) < evaluate(old, current_model) + MIN_GAIN:
+              raise PromotionBlocked("new embedder did not beat baseline")
+          vdb.swap_alias(alias, new_index); config.set("query_embedder", new_model.slug)  # atomic pair
+          schedule_drop(old, after_days=14)
+    takeaway: "Vectors are only comparable inside one model's space. Version the embedder with the index, migrate blue/green, and let the eval decide promotion."
+    followup: "How do you estimate the cost and time to re-embed a 50-million-chunk corpus?"
+
+  - id: vectordb-source-of-truth
+    title: Using the vector database as the system of record
+    tags: [Reliability, Compliance]
+    scenario: |
+      A legal-tech platform stores contract clauses only in its vector database. When it needs to switch
+      vendors, change chunking or answer a legal-hold request, it discovers the original text and metadata
+      exist nowhere else.
+    antipattern: |
+      Documents are parsed, chunked and written straight into the vector store. Raw files and processed
+      chunks aren't kept elsewhere. The vector DB is treated as the database.
+    fails: |
+      - **Lock-in.** Switching vector database, embedder or chunking strategy means re-ingesting from sources that may have changed or disappeared.
+      - **Weak data management.** Vector stores are optimized for ANN search, not for transactions, backups, legal hold or complex queries.
+      - **No reprocessing.** Parser improvements can't be applied retroactively.
+      - **Governance gaps.** Retention, lineage and access reviews are hard when content lives only in a search index.
+    diagram:
+      bad: ["Sources", "Parse + chunk", "!Vector DB only", "Search"]
+      bad_note: "Index is the only copy: no reprocessing, weak retention control"
+      good: ["Sources", "+Raw zone (object store)", "+Chunk store (lakehouse / SQL)", "Vector index (derived)", "Search"]
+      good_note: "Index is a disposable projection; rebuild any time from governed stores"
+    solution: |
+      Adopt a **medallion-style knowledge pipeline**:
+
+      - **Raw (bronze):** immutable original files with checksums in object storage (S3, GCS, ADLS).
+      - **Processed (silver):** parsed and chunked records with full metadata in a lakehouse table or relational DB, versioned by `parser_version`.
+      - **Serving (gold):** vector indexes and keyword indexes treated as *derived, rebuildable projections*.
+
+      Retention, legal hold and deletion policies apply at the raw and processed tiers and propagate to indexes.
+    works: |
+      The vector store becomes replaceable infrastructure. Changing vendor, embedder or chunker is a rebuild
+      job rather than a re-ingestion project. Governance tools (catalogs, retention policies, access
+      reviews) work on the tables they were designed for. Reprocessing history with a better parser costs
+      compute, not archaeology.
+    code: |
+      # Bronze → Silver → Gold, each step idempotent and keyed by content hash
+      raw_uri = object_store.put(f"raw/{src}/{doc_id}/{sha}.pdf", bytes_)      # immutable
+      chunks  = chunk_document(parse(raw_uri))
+      lake.merge("silver.chunks", chunks, keys=["chunk_id"],
+                 extra={"parser_version": PARSER_V, "raw_uri": raw_uri})
+
+      def rebuild_gold(index_name, embedder):                   # any time, any vendor
+          for batch in lake.read("silver.chunks", where="status='approved'").batches(2000):
+              vector_index(index_name).upsert(embed_batch(batch, embedder))
+              keyword_index(index_name).upsert(batch)
+    takeaway: "The vector index should be the cheapest thing to throw away. Keep raw and processed knowledge in governed storage and treat indexes as derived views."
+    followup: "When does it make sense to use a database's native vector support (Postgres pgvector, etc.) instead of a dedicated vector DB?"
+
+  - id: no-retrieval-acl
+    title: No access control at retrieval time
+    tags: [Security, Compliance]
+    scenario: |
+      An enterprise knowledge assistant indexes SharePoint for the whole company. A junior analyst asks about
+      "upcoming restructuring" and receives excerpts from a board-only M&A memo.
+    antipattern: |
+      Everything is ingested into one shared index with a service account that can read everything.
+      Permissions are "handled" by a system-prompt instruction not to reveal confidential information.
+    fails: |
+      - **The LLM is not a security boundary.** Once confidential text is in the context window, prompt instructions can't reliably stop it leaking, and prompt injection can extract it on purpose.
+      - **Permission flattening.** A service account with global read rights collapses the source system's ACLs.
+      - **Stale permissions.** Even when ACLs are copied, they drift if they aren't re-synced when group membership changes.
+      - **Multi-tenant leakage.** In SaaS platforms, one client's data can be retrieved for another.
+    diagram:
+      bad: ["User query", "!Global index (service acct)", "Top-k (any doc)", "!\"Don't reveal\" prompt", "Leak"]
+      bad_note: "Authorization is delegated to the model's good behaviour"
+      good: ["User query + identity", "+Resolve groups (Entra / IdP)", "+ACL-filtered search", "LLM", "+Audit log"]
+      good_note: "Unauthorized chunks never reach the context window"
+    solution: |
+      Enforce **document-level security trimming in the retrieval layer**:
+
+      - Ingest ACLs (allowed users and groups) with each chunk and keep them in sync via change feeds, as you do content.
+      - At query time, resolve the caller's identity and group memberships from the IdP (Entra ID, Okta) using the user's token (on-behalf-of flow), not a service account.
+      - Apply ACLs as a **pre-filter** in the vector or hybrid query. Post-filtering after top-k leaks through ranking and harms recall.
+      - For hard isolation (tenants, classification levels), use separate indexes or namespaces.
+      - Log every retrieval with user, query and returned `doc_id`s for audit.
+    works: |
+      Authorization happens deterministically, before the model sees anything. A user can only ever be shown
+      content they could open in the source system, whatever the prompt says. Identity propagation keeps
+      entitlements current, and audit logs prove it to security reviewers. This is the control CISOs ask for
+      first.
+    code: |
+      def secure_search(query, user_token, k=8):
+          user = idp.validate(user_token)                         # OBO flow, not a service principal
+          groups = idp.transitive_groups(user.oid)                 # cached with short TTL
+          flt = {"$or": [{"acl_users": {"$in": [user.oid]}},
+                         {"acl_groups": {"$in": groups}}],
+                 "tenant_id": user.tenant_id,
+                 "classification": {"$in": user.clearances}}
+          hits = index.hybrid_search(query, filter=flt, k=k)       # PRE-filter, not post-filter
+          audit.log(user=user.oid, query_hash=h(query), doc_ids=[h.doc_id for h in hits])
+          return hits
+    takeaway: "Never ask the model to keep secrets. Authorization belongs in the retrieval layer, enforced with the user's own identity before anything enters the prompt."
+    followup: "Why is post-filtering top-k results by ACL both a security and a quality problem?"

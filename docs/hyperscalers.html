@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperscaler Platforms: AWS, Google Cloud &amp; Microsoft · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="active" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part E · Platforms &amp; Economics</div>
+  <h1><span class="sn">13</span>Hyperscaler Platforms: AWS, Google Cloud &amp; Microsoft</h1>
+  <p class="lede">All three clouds now offer a full agent platform with models, managed RAG, agent runtimes, guardrails, evaluation and identity. The failure modes are platform-specific, and so are the fixes.</p>
+  <span class="pill">16 anti-patterns</span>
+</div>
+<div class="prose"><h3>Platform landscape (November 2026)</h3>
+<p>All three providers rebranded or restructured their AI platforms during 2025–2026. <strong>Vertex AI</strong> evolved into the
+<strong>Gemini Enterprise Agent Platform</strong> (April 2026). <strong>Azure AI Foundry</strong> is now <strong>Microsoft Foundry</strong>, with the
+<strong>Foundry Agent Service</strong> generally available since March 2026. On AWS, <strong>Amazon Bedrock AgentCore</strong> is the
+strategic agent platform, and the original Bedrock Agents ("Agents Classic") stopped accepting new customers
+in mid-2026.</p>
+<table>
+<thead>
+<tr>
+<th>Capability layer</th>
+<th>AWS: Amazon Bedrock</th>
+<th>Google Cloud: Gemini Enterprise Agent Platform</th>
+<th>Microsoft Foundry</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model catalog</td>
+<td>Bedrock models: Anthropic Claude, Amazon Nova, Meta Llama, Mistral, others</td>
+<td>Model Garden: Gemini plus 200+ first- and third-party models, including Claude</td>
+<td>Foundry Models: OpenAI GPT, Claude, Microsoft MAI, Llama, Mistral and a large open catalog</td>
+</tr>
+<tr>
+<td>Managed RAG / knowledge</td>
+<td>Bedrock Knowledge Bases / Managed Knowledge Base, OpenSearch, S3 Vectors</td>
+<td>Vertex AI Search, RAG Engine, Grounding with Google Search</td>
+<td>Foundry IQ, Azure AI Search, grounding with Bing</td>
+</tr>
+<tr>
+<td>Agent runtime</td>
+<td>Bedrock AgentCore: Runtime, managed harness, Gateway, Memory, Identity, Policy (Cedar), Code Interpreter, Browser</td>
+<td>Agent Development Kit (ADK), Agent Engine runtime, Agent Studio (low-code)</td>
+<td>Foundry Agent Service: prompt, hosted and voice agents; Toolboxes, Memory, Routines</td>
+</tr>
+<tr>
+<td>Agent SDK / framework</td>
+<td>Strands Agents; any framework on AgentCore</td>
+<td>ADK; LangGraph, CrewAI and others supported</td>
+<td>Microsoft Agent Framework (successor to Semantic Kernel and AutoGen); LangGraph supported</td>
+</tr>
+<tr>
+<td>Guardrails &amp; safety</td>
+<td>Bedrock Guardrails (content, PII, denied topics, prompt attacks, contextual grounding)</td>
+<td>Model Armor, Gemini safety filters</td>
+<td>Azure AI Content Safety, Prompt Shields, groundedness detection</td>
+</tr>
+<tr>
+<td>Evaluation &amp; observability</td>
+<td>AgentCore Evaluations, Bedrock model evaluation, CloudWatch GenAI observability</td>
+<td>Gen AI Evaluation Service, Cloud Trace</td>
+<td>Foundry evaluations, OpenTelemetry tracing, Application Insights</td>
+</tr>
+<tr>
+<td>Identity &amp; network</td>
+<td>IAM, AgentCore Identity, PrivateLink, VPC endpoints</td>
+<td>IAM, VPC Service Controls, Private Service Connect</td>
+<td>Entra ID, Entra Agent ID, Private Endpoints, BYO VNet</td>
+</tr>
+<tr>
+<td>Capacity &amp; pricing</td>
+<td>On-demand, Provisioned Throughput, batch inference, cross-region inference profiles</td>
+<td>Pay-as-you-go, Provisioned Throughput, batch, context caching</td>
+<td>Standard, Global and Data Zone deployments, Provisioned Throughput Units (PTU), Batch</td>
+</tr>
+<tr>
+<td>Workplace surface</td>
+<td>Amazon Q / Quick Suite</td>
+<td>Gemini Enterprise app (formerly Agentspace)</td>
+<td>Microsoft 365 Copilot and Teams (direct publishing from Foundry)</td>
+</tr>
+</tbody>
+</table>
+<p>Product names and feature status change quickly. Confirm the exact SKU, region availability and GA status
+before committing to a client architecture.</p></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#aws-kb-defaults"><span>13.1</span>AWS: Bedrock Knowledge Bases with default settings for complex documents</a><a href="#aws-agents-classic"><span>13.2</span>AWS: New agents built on legacy Bedrock Agents with monolithic action groups</a><a href="#aws-guardrails-partial"><span>13.3</span>AWS: Guardrails on the input only, or not attached at all</a><a href="#aws-capacity-misfit"><span>13.4</span>AWS: Provisioned Throughput bought too early, batch never used</a><a href="#aws-cross-region-residency"><span>13.5</span>AWS: Cross-region inference enabled without a data-residency review</a><a href="#gcp-search-grounding-regulated"><span>13.6</span>Google Cloud: Grounding with Google Search for regulated internal answers</a><a href="#gcp-long-context-no-cache"><span>13.7</span>Google Cloud: Long-context prompts re-sent without context caching</a><a href="#gcp-no-vpcsc"><span>13.8</span>Google Cloud: No VPC Service Controls perimeter around AI services</a><a href="#gcp-adk-no-evals"><span>13.9</span>Google Cloud: ADK agents deployed without evaluation in the release path</a><a href="#azure-ptu-throttling"><span>13.10</span>Microsoft: PTU sizing guesses and no 429 handling</a><a href="#azure-on-your-data"><span>13.11</span>Microsoft: Quick-start &quot;chat with your data&quot; treated as the production RAG platform</a><a href="#azure-key-auth"><span>13.12</span>Microsoft: API keys instead of Entra ID and managed identities</a><a href="#azure-content-safety-defaults"><span>13.13</span>Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists</a><a href="#cloud-sdk-lockin"><span>13.14</span>Cross-cloud: Hard lock-in to one platform&#x27;s agent SDK</a><a href="#multicloud-by-default"><span>13.15</span>Cross-cloud: Multi-cloud AI just because</a><a href="#platform-by-benchmark"><span>13.16</span>Cross-cloud: Choosing a platform by model benchmarks alone</a></div>
+
+<article class="ap" id="aws-kb-defaults">
+  <header class="ap-h">
+    <div class="ap-num">13.1</div>
+    <div>
+      <h2><a href="#aws-kb-defaults">AWS: Bedrock Knowledge Bases with default settings for complex documents</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An insurer stands up a Bedrock Knowledge Base over 30,000 policy PDFs in an afternoon, using default
+parsing, default fixed-size chunking and default retrieval. The pilot users report that table-heavy
+endorsements return wrong answers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The managed RAG service's speed to first demo is mistaken for production readiness. Parsing, chunking,
+retrieval type and metadata are never configured, and nothing is evaluated.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Default parsing</strong> handles plain text well but loses structure in complex PDFs and tables.</li>
+<li><strong>Default chunking</strong> splits clauses (see 1.1).</li>
+<li><strong>Semantic-only retrieval</strong> misses policy numbers and codes.</li>
+<li><strong>No metadata filters</strong>, so superseded documents and other lines of business compete.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-aws-kb-defaults" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">S3 PDFs</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">KB defaults (parse +</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">fixed chunk)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Semantic search only</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wrong table answers</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Managed service, unmanaged quality</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">S3 PDFs +</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">metadata.json</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Advanced parsing</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(FM / BDA)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Hierarchical or</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">semantic chunking</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Hybrid search +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">rerank + filters</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Evaluated answers</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-aws-kb-defaults)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Configure the managed service like a pipeline, and evaluate it</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use the knobs the service exposes:</p>
+<ul>
+<li><strong>Parsing:</strong> use foundation-model parsing or Bedrock Data Automation for documents with tables and figures.</li>
+<li><strong>Chunking:</strong> choose hierarchical or semantic chunking, or supply a custom Lambda transformation for domain-specific splitting.</li>
+<li><strong>Metadata:</strong> attach <code>.metadata.json</code> sidecar files (line of business, effective date, ACL groups) and filter at query time.</li>
+<li><strong>Retrieval:</strong> enable hybrid search where the vector store supports it, and add a reranker.</li>
+<li><strong>Evaluate</strong> with Bedrock's RAG evaluation or your own suite before and after every configuration change.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>You keep the operational benefits of a managed service (sync, scaling, security integration) while
+getting the quality of a tuned pipeline. Metadata filtering and hybrid search fix the most common
+enterprise failures, and evaluation makes configuration changes evidence-based.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">bedrock_agent</span><span class="o">.</span><span class="n">create_data_source</span><span class="p">(</span>
+    <span class="n">knowledgeBaseId</span><span class="o">=</span><span class="n">KB_ID</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"policies"</span><span class="p">,</span>
+    <span class="n">dataSourceConfiguration</span><span class="o">=</span><span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"S3"</span><span class="p">,</span> <span class="s2">"s3Configuration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"bucketArn"</span><span class="p">:</span> <span class="n">BUCKET</span><span class="p">}},</span>
+    <span class="n">vectorIngestionConfiguration</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"parsingConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"parsingStrategy"</span><span class="p">:</span> <span class="s2">"BEDROCK_FOUNDATION_MODEL"</span><span class="p">,</span>
+                                 <span class="s2">"bedrockFoundationModelConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"modelArn"</span><span class="p">:</span> <span class="n">PARSER_MODEL</span><span class="p">}},</span>
+        <span class="s2">"chunkingConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"chunkingStrategy"</span><span class="p">:</span> <span class="s2">"HIERARCHICAL"</span><span class="p">,</span>
+            <span class="s2">"hierarchicalChunkingConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"levelConfigurations"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"maxTokens"</span><span class="p">:</span> <span class="mi">1500</span><span class="p">},</span>
+                                                                          <span class="p">{</span><span class="s2">"maxTokens"</span><span class="p">:</span> <span class="mi">300</span><span class="p">}],</span>
+                                                  <span class="s2">"overlapTokens"</span><span class="p">:</span> <span class="mi">60</span><span class="p">}}})</span>
+
+<span class="n">agent_rt</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">knowledgeBaseId</span><span class="o">=</span><span class="n">KB_ID</span><span class="p">,</span> <span class="n">retrievalQuery</span><span class="o">=</span><span class="p">{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">q</span><span class="p">},</span>
+    <span class="n">retrievalConfiguration</span><span class="o">=</span><span class="p">{</span><span class="s2">"vectorSearchConfiguration"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"numberOfResults"</span><span class="p">:</span> <span class="mi">25</span><span class="p">,</span> <span class="s2">"overrideSearchType"</span><span class="p">:</span> <span class="s2">"HYBRID"</span><span class="p">,</span>
+        <span class="s2">"filter"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"andAll"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"equals"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"key"</span><span class="p">:</span> <span class="s2">"lob"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">:</span> <span class="s2">"homeowners"</span><span class="p">}},</span>
+                              <span class="p">{</span><span class="s2">"equals"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"key"</span><span class="p">:</span> <span class="s2">"status"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">:</span> <span class="s2">"in_force"</span><span class="p">}}]},</span>
+        <span class="s2">"rerankingConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"BEDROCK_RERANKING_MODEL"</span><span class="p">,</span> <span class="s2">"bedrockRerankingConfiguration"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"modelConfiguration"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"modelArn"</span><span class="p">:</span> <span class="n">RERANK_MODEL</span><span class="p">},</span> <span class="s2">"numberOfRerankedResults"</span><span class="p">:</span> <span class="mi">6</span><span class="p">}}}})</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A managed RAG service removes the plumbing, not the design decisions. Configure parsing, chunking, metadata and hybrid retrieval, then evaluate.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you outgrow Bedrock Knowledge Bases and build a custom pipeline on OpenSearch?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="aws-agents-classic">
+  <header class="ap-h">
+    <div class="ap-num">13.2</div>
+    <div>
+      <h2><a href="#aws-agents-classic">AWS: New agents built on legacy Bedrock Agents with monolithic action groups</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-sec">Security</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A logistics firm builds a shipment-exceptions agent on the original Bedrock Agents service with one
+large action group wrapping 40 Lambda operations. It's hard to test, permissions are broad, and the service
+has since stopped accepting new customers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Starting new agent programs on the legacy managed-agent service out of familiarity, and packing every
+operation into one action group behind a single over-privileged Lambda role.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Strategic dead end.</strong> New investment is going into AgentCore.</li>
+<li><strong>Monolithic tool surface.</strong> One action group with many operations reduces tool-selection accuracy and testability.</li>
+<li><strong>Broad IAM.</strong> One Lambda role with access to everything violates least privilege.</li>
+<li><strong>Limited framework choice and observability</strong> compared with the newer runtime.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-aws-agents-classic" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Agent (legacy service)</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">One action group / 40 ops</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">One broad Lambda role</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Hard to test &amp; govern</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Legacy runtime, monolithic tools, broad permissions</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="191.8" font-size="11" text-anchor="middle">Agent (Strands /</text>
+<text class="dg-t dg-t-std" x="155.6" y="204.8" font-size="11" text-anchor="middle">LangGraph /</text>
+<text class="dg-t dg-t-std" x="155.6" y="217.8" font-size="11" text-anchor="middle">harness)</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">AgentCore Runtime</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">AgentCore Gateway</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">(MCP tools)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Identity + Cedar</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">Policy</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Evaluations +</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">Observability</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-aws-agents-classic)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Framework-agnostic runtime with governed, least-privilege tools</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build new agents on <strong>Bedrock AgentCore</strong>:</p>
+<ul>
+<li>Write the agent in your framework of choice (Strands, LangGraph, CrewAI) or use the managed harness for config-driven agents.</li>
+<li>Expose tools through <strong>AgentCore Gateway</strong> as MCP tools, grouped by domain, each with a narrowly scoped target.</li>
+<li>Use <strong>AgentCore Identity</strong> for inbound auth and outbound OAuth on behalf of users, and <strong>Policy</strong> (Cedar) to constrain which tools an agent can call, with what parameters.</li>
+<li>Turn on <strong>Evaluations</strong> and GenAI observability from day one.</li>
+<li>Plan migration for existing legacy agents.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The runtime is framework-agnostic and session-isolated. Tools are reusable and governed at the gateway,
+and Cedar policies enforce deterministic limits outside the model. Built-in evals and tracing give the
+evidence a risk committee needs.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># Cedar policy enforced by AgentCore Policy at the Gateway, outside the model</span>
+<span class="c1"># permit(principal is AgentCore::Agent, action == AgentCore::Action::"refund_tool__issue_refund",</span>
+<span class="c1">#        resource) when { context.input.amount &lt;= 500 &amp;&amp; principal.tags.env == "prod" };</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">strands</span><span class="w"> </span><span class="kn">import</span> <span class="n">Agent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bedrock_agentcore.runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">BedrockAgentCoreApp</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">BedrockAgentCoreApp</span><span class="p">()</span>
+<span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">MODEL_ID</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">gateway_mcp_tools</span><span class="p">(</span><span class="n">GATEWAY_URL</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">agentcore_identity</span><span class="p">()),</span>
+              <span class="n">system_prompt</span><span class="o">=</span><span class="n">prompts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"shipment_exceptions"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">entrypoint</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">invoke</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">agent</span><span class="p">(</span><span class="n">payload</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">])</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>On AWS, new agent work belongs on AgentCore: any framework, MCP tools through Gateway, and deterministic Cedar policies outside the model.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you migrate an existing legacy Bedrock agent to AgentCore with no downtime?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="aws-guardrails-partial">
+  <header class="ap-h">
+    <div class="ap-num">13.3</div>
+    <div>
+      <h2><a href="#aws-guardrails-partial">AWS: Guardrails on the input only, or not attached at all</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A healthcare chatbot attaches a Bedrock Guardrail that checks user input. Model responses containing
+patient identifiers pulled from retrieved notes reach users unfiltered. A second app calls the model
+directly and skips the guardrail entirely.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Guardrails are configured for one direction, one app, or one code path. Contextual grounding checks
+and PII handling on outputs are left off.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Output-side leakage:</strong> PII, ungrounded claims and denied topics in responses aren't caught.</li>
+<li><strong>Coverage gaps:</strong> any code path that doesn't pass the guardrail bypasses it.</li>
+<li><strong>No versioning:</strong> guardrail edits change behaviour in production without testing.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-aws-guardrails-partial" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">User</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Guardrail (input only)</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Model + retrieval</text>
+<rect class="dg-node dg-bad" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Unfiltered output</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Half the conversation is unprotected</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">User</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Guardrail: input</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Model + retrieval</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Guardrail: output +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">grounding</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Enforced at gateway</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">/ IAM</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-aws-guardrails-partial)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Both directions, every path, versioned guardrails</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Apply guardrails on <strong>both input and output</strong>, including <strong>contextual grounding</strong> checks for RAG answers and <strong>sensitive-information filters</strong> (mask or block) on output.</li>
+<li>Use the standalone <strong>ApplyGuardrail</strong> API for content that doesn't flow through a model call, such as retrieved chunks or tool output.</li>
+<li><strong>Enforce</strong> guardrail usage centrally, through a gateway or account-level enforcement, rather than relying on each app to opt in.</li>
+<li>Publish <strong>guardrail versions</strong> and reference them explicitly; test changes against the eval suite.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Output filtering and grounding checks close the most dangerous leakage path in RAG. Central enforcement
+removes opt-in gaps, and versioning gives guardrails the same change control as prompts.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">resp</span> <span class="o">=</span> <span class="n">bedrock_rt</span><span class="o">.</span><span class="n">converse</span><span class="p">(</span>
+    <span class="n">modelId</span><span class="o">=</span><span class="n">MODEL_ID</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">msgs</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="p">[{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">SYSTEM</span><span class="p">}],</span>
+    <span class="n">guardrailConfig</span><span class="o">=</span><span class="p">{</span><span class="s2">"guardrailIdentifier"</span><span class="p">:</span> <span class="n">GR_ID</span><span class="p">,</span> <span class="s2">"guardrailVersion"</span><span class="p">:</span> <span class="s2">"7"</span><span class="p">,</span> <span class="s2">"trace"</span><span class="p">:</span> <span class="s2">"enabled"</span><span class="p">})</span>
+
+<span class="c1"># Check content that doesn't pass through a model call (retrieved chunks, tool outputs)</span>
+<span class="n">chk</span> <span class="o">=</span> <span class="n">bedrock_rt</span><span class="o">.</span><span class="n">apply_guardrail</span><span class="p">(</span><span class="n">guardrailIdentifier</span><span class="o">=</span><span class="n">GR_ID</span><span class="p">,</span> <span class="n">guardrailVersion</span><span class="o">=</span><span class="s2">"7"</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">"OUTPUT"</span><span class="p">,</span>
+                                 <span class="n">content</span><span class="o">=</span><span class="p">[{</span><span class="s2">"text"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">tool_output</span><span class="p">}}])</span>
+<span class="k">if</span> <span class="n">chk</span><span class="p">[</span><span class="s2">"action"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"GUARDRAIL_INTERVENED"</span><span class="p">:</span>
+    <span class="n">tool_output</span> <span class="o">=</span> <span class="n">chk</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">"text"</span><span class="p">]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A guardrail that only checks one direction is half a control. Cover input and output, check grounding, version it, and enforce it centrally.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you tune guardrail thresholds without blocking legitimate clinical terms?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="aws-capacity-misfit">
+  <header class="ap-h">
+    <div class="ap-num">13.4</div>
+    <div>
+      <h2><a href="#aws-capacity-misfit">AWS: Provisioned Throughput bought too early, batch never used</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A team buys a month of Provisioned Throughput for a pilot with 200 users, running at 6% utilization.
+Meanwhile, a nightly job summarizing 80,000 documents runs on on-demand real-time pricing.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Capacity mode is picked by intuition. Steady, spiky and offline workloads all use the same mode.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Idle reserved capacity</strong> costs the same as busy capacity.</li>
+<li><strong>Offline jobs pay real-time prices</strong> and compete with interactive traffic for quota.</li>
+<li><strong>Throttling surprises</strong> at launch when on-demand quotas are exceeded.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-aws-capacity-misfit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Pilot (spiky, low)</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Provisioned Throughput</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">6% utilization</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-aws-capacity-misfit)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-aws-capacity-misfit)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Capacity mode chosen by intuition</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="259.4" font-size="12.5" text-anchor="middle">Workload profile</text>
+<rect class="dg-node dg-std" x="379.3" y="178.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Interactive spiky → on-demand /</text>
+<text class="dg-t dg-t-std" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">cross-region</text>
+<rect class="dg-node dg-std" x="379.3" y="232.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="259.4" font-size="12.5" text-anchor="middle">Steady high → provisioned</text>
+<rect class="dg-node dg-std" x="379.3" y="286.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="313.4" font-size="12.5" text-anchor="middle">Offline → batch</text>
+<rect class="dg-node dg-new" x="674.7" y="232.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="805.3" y="259.4" font-size="12.5" text-anchor="middle">Utilization review</text>
+<circle class="dg-badge-new" cx="932.0" cy="236.0" r="8"/><text class="dg-badge-t" x="932.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="348.3" y1="255.0" x2="375.3" y2="255.0" marker-end="url(#ah-hyperscalers-aws-capacity-misfit)"/>
+<line class="dg-edge" x1="643.7" y1="255.0" x2="670.7" y2="255.0" marker-end="url(#ah-hyperscalers-aws-capacity-misfit)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Capacity mode matched to each workload&#x27;s shape</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Profile the workload, then pick the mode:</strong></p>
+<ul>
+<li><strong>On-demand</strong> (with cross-region inference profiles for burst capacity) for pilots and spiky interactive traffic.</li>
+<li><strong>Provisioned Throughput</strong> only for steady, high, predictable load, sized from measured tokens per minute, or where a custom or fine-tuned model requires it.</li>
+<li><strong>Batch inference</strong> for offline jobs (summarization, classification, enrichment), at a significant discount.</li>
+<li>Use prompt caching for long, repeated prefixes. Review utilization monthly.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Each workload pays the cheapest price for its shape. Batch removes offline load from real-time quotas,
+and measured sizing avoids paying for idle capacity.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># Offline: Bedrock batch inference over JSONL in S3</span>
+<span class="n">bedrock</span><span class="o">.</span><span class="n">create_model_invocation_job</span><span class="p">(</span>
+    <span class="n">jobName</span><span class="o">=</span><span class="sa">f</span><span class="s2">"doc-summaries-</span><span class="si">{</span><span class="n">today</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">modelId</span><span class="o">=</span><span class="n">MODEL_ID</span><span class="p">,</span> <span class="n">roleArn</span><span class="o">=</span><span class="n">BATCH_ROLE</span><span class="p">,</span>
+    <span class="n">inputDataConfig</span><span class="o">=</span><span class="p">{</span><span class="s2">"s3InputDataConfig"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"s3Uri"</span><span class="p">:</span> <span class="s2">"s3://ai-batch/in/"</span><span class="p">}},</span>
+    <span class="n">outputDataConfig</span><span class="o">=</span><span class="p">{</span><span class="s2">"s3OutputDataConfig"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"s3Uri"</span><span class="p">:</span> <span class="s2">"s3://ai-batch/out/"</span><span class="p">}})</span>
+
+<span class="c1"># Provisioned only when measured p95 load is high and steady</span>
+<span class="k">if</span> <span class="n">p95_tpm</span><span class="p">(</span><span class="n">last_30_days</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.6</span> <span class="o">*</span> <span class="n">PT_UNIT_TPM</span> <span class="o">*</span> <span class="n">units</span> <span class="ow">and</span> <span class="n">weekday_variance</span> <span class="o">&lt;</span> <span class="mf">0.3</span><span class="p">:</span>
+    <span class="n">recommend</span><span class="p">(</span><span class="s2">"provisioned"</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="n">ceil</span><span class="p">(</span><span class="n">p95_tpm</span> <span class="o">/</span> <span class="n">PT_UNIT_TPM</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Pick capacity modes from measured workload shape: on-demand for spiky, provisioned for steady, batch for anything that can wait.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you forecast token demand for a new use case with no history?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="aws-cross-region-residency">
+  <header class="ap-h">
+    <div class="ap-num">13.5</div>
+    <div>
+      <h2><a href="#aws-cross-region-residency">AWS: Cross-region inference enabled without a data-residency review</a></h2>
+      <div class="tags"><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A German bank enables a global cross-region inference profile to avoid throttling. Its data-protection
+officer later finds that prompts containing customer data may be processed outside the EU.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Cross-region or global inference routing is switched on for capacity reasons, without mapping it
+to the client's residency obligations.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Residency violations</strong> for regulated data (GDPR transfer rules, banking secrecy, public-sector requirements).</li>
+<li><strong>Audit findings</strong>, because processing locations aren't documented.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-aws-cross-region-residency" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">EU customer prompts</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Global inference profile</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Processed outside EU</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-aws-cross-region-residency)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-aws-cross-region-residency)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Capacity decision made without compliance input</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="225.1" font-size="12.5" text-anchor="middle">Prompt + data</text>
+<text class="dg-t dg-t-std" x="177.8" y="239.6" font-size="12.5" text-anchor="middle">classification</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="232.4" font-size="12.5" text-anchor="middle">Policy router</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">EU-only profile</text>
+<text class="dg-t dg-t-std" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">(regulated)</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Global profile</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">(non-sensitive)</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="225.1" font-size="12.5" text-anchor="middle">Documented processing</text>
+<text class="dg-t dg-t-new" x="842.2" y="239.6" font-size="12.5" text-anchor="middle">regions</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-hyperscalers-aws-cross-region-residency)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-hyperscalers-aws-cross-region-residency)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-hyperscalers-aws-cross-region-residency)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Routing follows data classification</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Classify workloads by data sensitivity and residency obligation.</li>
+<li>Use <strong>geography-scoped inference profiles</strong> (for example EU or US prefixes) for regulated data, and global profiles only for non-sensitive workloads.</li>
+<li>Enforce with IAM / service control policies that deny non-approved profiles.</li>
+<li>Document processing regions in the system record.</li>
+</ul>
+<p>The same principle applies on Azure (Data Zone vs Global deployments) and Google Cloud (regional vs global endpoints).</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>You keep the capacity benefits of multi-region routing where it's allowed, while regulated data stays
+within approved geographies. Preventive policy controls make the guarantee auditable.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PROFILE_BY_CLASS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"restricted"</span><span class="p">:</span> <span class="s2">"eu.anthropic.claude-&lt;model&gt;"</span><span class="p">,</span>     <span class="c1"># EU-only routing</span>
+                    <span class="s2">"internal"</span><span class="p">:</span>   <span class="s2">"eu.anthropic.claude-&lt;model&gt;"</span><span class="p">,</span>
+                    <span class="s2">"public"</span><span class="p">:</span>     <span class="s2">"global.anthropic.claude-&lt;model&gt;"</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">model_for</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">PROFILE_BY_CLASS</span><span class="p">[</span><span class="n">classify</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">payload</span><span class="p">)]</span>
+
+<span class="c1"># SCP guardrail: deny invocation of global profiles from regulated accounts</span>
+<span class="c1"># {"Effect": "Deny", "Action": "bedrock:InvokeModel*",</span>
+<span class="c1">#  "Resource": "arn:aws:bedrock:*:*:inference-profile/global.*"}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Inference routing is a data-residency decision. Map profiles to data classification and enforce it with policy, not convention.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you explain cross-region inference trade-offs to a data-protection officer?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="gcp-search-grounding-regulated">
+  <header class="ap-h">
+    <div class="ap-num">13.6</div>
+    <div>
+      <h2><a href="#gcp-search-grounding-regulated">Google Cloud: Grounding with Google Search for regulated internal answers</a></h2>
+      <div class="tags"><span class="tag t-comp">Compliance</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An asset manager's internal research assistant enables Grounding with Google Search to "improve
+freshness". Answers about the firm's own investment policies start blending in public web content.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Public web grounding is switched on for an assistant meant to answer from authoritative internal
+sources, with no separation between internal and external evidence.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Authority confusion.</strong> Public content contradicts or dilutes internal policy.</li>
+<li><strong>Compliance risk.</strong> Answers may rely on unvetted external sources in regulated communications.</li>
+<li><strong>Data-handling questions.</strong> Queries containing internal context go to a web search service, which needs explicit approval.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-gcp-search-grounding-regulated" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Internal policy question</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Grounding: Google Search</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Blended web + internal answer</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-search-grounding-regulated)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-search-grounding-regulated)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Public web treated as authoritative for internal policy</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Question</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">Intent: internal vs.</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">market</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Vertex AI Search</text>
+<text class="dg-t dg-t-std" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">(internal)</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Web grounding (approved</text>
+<text class="dg-t dg-t-std" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">use cases)</text>
+<rect class="dg-node dg-new" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="232.4" font-size="12.5" text-anchor="middle">Labelled sources</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-hyperscalers-gcp-search-grounding-regulated)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-hyperscalers-gcp-search-grounding-regulated)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-hyperscalers-gcp-search-grounding-regulated)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Grounding source chosen by intent and policy, with sources labelled</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Ground internal-policy answers <strong>only</strong> in Vertex AI Search or RAG Engine over approved corpora.</li>
+<li>Allow web grounding for explicitly approved use cases (market news, public research), with sources visually separated and labelled.</li>
+<li>Route by intent. Disable web grounding by policy in regulated workloads.</li>
+<li>Review terms and data handling for web grounding with legal and compliance.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Internal answers stay authoritative and auditable, while external freshness remains available where
+it's appropriate. Labelled sources let users judge evidence quality.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">google</span><span class="w"> </span><span class="kn">import</span> <span class="n">genai</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">google.genai</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">genai</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">vertexai</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="n">PROJECT</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="s2">"europe-west4"</span><span class="p">)</span>
+<span class="n">internal</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">Tool</span><span class="p">(</span><span class="n">retrieval</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">Retrieval</span><span class="p">(</span>
+    <span class="n">vertex_ai_search</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">VertexAISearch</span><span class="p">(</span><span class="n">datastore</span><span class="o">=</span><span class="n">POLICY_DATASTORE</span><span class="p">)))</span>
+<span class="n">web</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">Tool</span><span class="p">(</span><span class="n">google_search</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">GoogleSearch</span><span class="p">())</span>
+
+<span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">internal</span><span class="p">]</span> <span class="k">if</span> <span class="n">intent</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"internal_policy"</span> <span class="k">else</span> <span class="p">[</span><span class="n">internal</span><span class="p">,</span> <span class="n">web</span><span class="p">]</span> <span class="k">if</span> <span class="n">approved</span><span class="p">(</span><span class="n">use_case</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">internal</span><span class="p">]</span>
+<span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">GEMINI_MODEL</span><span class="p">,</span> <span class="n">contents</span><span class="o">=</span><span class="n">q</span><span class="p">,</span>
+                                      <span class="n">config</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">GenerateContentConfig</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Choose grounding sources deliberately. Internal policy answers should only ever be grounded in governed internal data.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you present internal and external sources in one answer without confusing users?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="gcp-long-context-no-cache">
+  <header class="ap-h">
+    <div class="ap-num">13.7</div>
+    <div>
+      <h2><a href="#gcp-long-context-no-cache">Google Cloud: Long-context prompts re-sent without context caching</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A contract-analysis tool sends the same 400-page master agreement with every one of 30 analyst
+questions. Each call bills hundreds of thousands of input tokens again.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Gemini's very large context window is used as a substitute for retrieval <em>and</em> without caching.
+Identical large prefixes are re-billed on every call.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Repeated cost</strong> for identical input tokens.</li>
+<li><strong>Higher latency</strong> from re-processing the full document each time.</li>
+<li><strong>Mid-document recall issues</strong> on very long inputs (see 3.3).</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-gcp-long-context-no-cache" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Q1..Q30</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Full 400-page doc each call</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">30× input cost</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-long-context-no-cache)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-long-context-no-cache)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Same prefix billed over and over</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Upload doc once</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Context cache (TTL)</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Q1..Q30 reference cache</text>
+<rect class="dg-node dg-new" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">Retrieval for pinpoint</text>
+<text class="dg-t dg-t-new" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">questions</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-long-context-no-cache)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-long-context-no-cache)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-long-context-no-cache)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Pay once for the prefix; retrieve for needle questions</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Use <strong>explicit context caching</strong> for large, reused prefixes (documents, long system instructions), with a TTL matched to the session.</li>
+<li>Keep long context for whole-document tasks (summaries, cross-clause consistency). Use retrieval for pinpoint lookups.</li>
+<li>Monitor cached versus uncached token ratios.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Cached tokens are billed at a reduced rate and processed faster. Pairing long context with retrieval
+uses each where it's strongest.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">cache</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">caches</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">GEMINI_MODEL</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">CreateCachedContentConfig</span><span class="p">(</span>
+    <span class="n">contents</span><span class="o">=</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">Content</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">"user"</span><span class="p">,</span> <span class="n">parts</span><span class="o">=</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">Part</span><span class="o">.</span><span class="n">from_uri</span><span class="p">(</span><span class="n">file_uri</span><span class="o">=</span><span class="n">MSA_GCS_URI</span><span class="p">,</span>
+                                                                      <span class="n">mime_type</span><span class="o">=</span><span class="s2">"application/pdf"</span><span class="p">)])],</span>
+    <span class="n">system_instruction</span><span class="o">=</span><span class="s2">"You are a contract analyst. Cite clause numbers."</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="s2">"3600s"</span><span class="p">))</span>
+
+<span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">analyst_questions</span><span class="p">:</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">GEMINI_MODEL</span><span class="p">,</span> <span class="n">contents</span><span class="o">=</span><span class="n">q</span><span class="p">,</span>
+                                   <span class="n">config</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">GenerateContentConfig</span><span class="p">(</span><span class="n">cached_content</span><span class="o">=</span><span class="n">cache</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>A large context window without caching re-bills the same document on every call. Cache stable prefixes and keep retrieval for pinpoint questions.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What&#x27;s the break-even between context caching and building a RAG index for a document?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="gcp-no-vpcsc">
+  <header class="ap-h">
+    <div class="ap-num">13.8</div>
+    <div>
+      <h2><a href="#gcp-no-vpcsc">Google Cloud: No VPC Service Controls perimeter around AI services</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A healthcare client's Agent Platform project can be reached from the public internet with valid
+credentials. A leaked developer key lets an attacker call models over a BigQuery dataset with patient records.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>AI APIs are protected only by IAM. No service perimeter, no private connectivity, no egress restrictions
+from the project hosting sensitive data.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Credential theft equals data access</strong> from anywhere.</li>
+<li><strong>Data exfiltration paths</strong> between projects and services aren't blocked.</li>
+<li><strong>Compliance gaps</strong> for regulated data (HIPAA, financial data).</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-gcp-no-vpcsc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Internet</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">IAM-only protection</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">AI APIs + BigQuery (PHI)</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Leaked credentials grant access from anywhere</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Corporate network</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Private Service</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">Connect</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">VPC-SC perimeter</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">(AI, BQ, GCS)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Access levels +</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">CMEK</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">AI APIs + data</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-no-vpcsc)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Context-aware perimeter blocks off-network access and exfiltration</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Put the AI platform APIs, BigQuery, Cloud Storage and related services inside a <strong>VPC Service Controls perimeter</strong>.</li>
+<li>Use <strong>Private Service Connect</strong> for private access. Define <strong>access levels</strong> (device, IP, identity).</li>
+<li>Enable <strong>CMEK</strong> for data at rest where required, and data-access audit logs.</li>
+<li>Test with dry-run perimeters before enforcing.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Stolen credentials are no longer enough, because requests must also come from inside the perimeter.
+Cross-perimeter copies are blocked, which closes exfiltration paths, and dry-run mode avoids breaking
+pipelines during rollout.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># gcloud access-context-manager perimeters create ai_phi_perimeter \</span>
+<span class="c1">#   --title="AI PHI perimeter" --perimeter-type=regular \</span>
+<span class="c1">#   --resources=projects/123456789 \</span>
+<span class="c1">#   --restricted-services=aiplatform.googleapis.com,bigquery.googleapis.com,storage.googleapis.com \</span>
+<span class="c1">#   --access-levels=corp_devices --policy=$POLICY_ID</span>
+<span class="c1">#</span>
+<span class="c1"># Roll out safely: create with --dry-run first, review violation logs, then enforce.</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>On Google Cloud, IAM decides who can call AI APIs. VPC Service Controls decides from where, and what data can leave. Regulated workloads need both.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you let a managed agent runtime call external APIs from inside a perimeter?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="gcp-adk-no-evals">
+  <header class="ap-h">
+    <div class="ap-num">13.9</div>
+    <div>
+      <h2><a href="#gcp-adk-no-evals">Google Cloud: ADK agents deployed without evaluation in the release path</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A retail team builds an order-support agent with the Agent Development Kit (ADK) and deploys it to a
+managed runtime straight from a notebook. A later prompt edit breaks the return-eligibility logic.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The ease of deployment encourages notebook-to-production releases. ADK's evaluation capabilities and
+the platform's evaluation service are never wired into CI.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>No regression detection</strong> for trajectory (which tools, in which order) or final responses.</li>
+<li><strong>Unreproducible deployments.</strong> Code and config live in notebooks.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-gcp-adk-no-evals" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Notebook</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Deploy agent directly</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Production regression</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No eval, no CI, no versioned config</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Git repo (agent +</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">evalsets)</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="191.8" font-size="11" text-anchor="middle">ADK eval:</text>
+<text class="dg-t dg-t-new" x="332.8" y="204.8" font-size="11" text-anchor="middle">trajectory +</text>
+<text class="dg-t dg-t-new" x="332.8" y="217.8" font-size="11" text-anchor="middle">response</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Gen AI Evaluation</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">Service</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Gate</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Deploy to Agent</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">Engine</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-gcp-adk-no-evals)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Trajectory and response quality gate every deployment</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Keep agent code, prompts and <strong>evalsets</strong> in Git.</li>
+<li>Run ADK evaluations (expected tool trajectory plus response quality) and the Gen AI Evaluation Service in CI.</li>
+<li>Deploy to the managed runtime only through the pipeline (Cloud Build or GitHub Actions), with versioned releases and rollback.</li>
+<li>Enable tracing and sample production sessions back into the evalset.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Trajectory evals catch "right answer, wrong path" failures such as skipping an eligibility check.
+Pipeline-only deployment makes releases reproducible and reversible.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># tests/order_support.evalset.json holds cases with expected tool trajectory + reference response</span>
+<span class="c1"># CI step:</span>
+<span class="c1">#   adk eval agents/order_support tests/order_support.evalset.json --config_file_path tests/eval_config.json</span>
+<span class="c1">#</span>
+<span class="c1"># eval_config.json</span>
+<span class="c1"># {"criteria": {"tool_trajectory_avg_score": 0.95, "response_match_score": 0.8}}</span>
+<span class="c1">#</span>
+<span class="c1"># Deploy only from CI after the gate passes:</span>
+<span class="c1">#   python deploy.py --agent agents/order_support --runtime agent-engine --version $GIT_SHA</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Easy deployment makes evaluation gates more important, not less. Evaluate agent trajectories in CI before anything reaches the runtime.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What&#x27;s the difference between trajectory evaluation and response evaluation, and why do you need both?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="azure-ptu-throttling">
+  <header class="ap-h">
+    <div class="ap-num">13.10</div>
+    <div>
+      <h2><a href="#azure-ptu-throttling">Microsoft: PTU sizing guesses and no 429 handling</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A retailer buys a large PTU reservation for its holiday chatbot based on a guess, then hits 429 errors
+on Black Friday because traffic peaks exceed capacity and there's no spillover to Standard deployments.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Deployment type and PTU count are chosen without benchmarking. Clients retry blindly on 429s and
+there's no spillover or load balancing.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Over-provisioning</strong> wastes reserved spend. <strong>Under-provisioning</strong> causes throttling at peak.</li>
+<li><strong>Naive retries</strong> amplify 429 storms.</li>
+<li><strong>Wrong deployment type</strong> (Global vs Data Zone vs regional) for residency or capacity needs.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-azure-ptu-throttling" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Holiday traffic</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Fixed PTU (guessed)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">429 storm</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Outage</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No benchmark, no spillover</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="232.4" font-size="12.5" text-anchor="middle">Traffic</text>
+<rect class="dg-node dg-new" x="261.2" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="232.4" font-size="12.5" text-anchor="middle">APIM AI gateway</text>
+<circle class="dg-badge-new" cx="400.4" cy="209.0" r="8"/><text class="dg-badge-t" x="400.4" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">PTU (baseline)</text>
+<rect class="dg-node dg-std" x="438.4" y="232.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="252.1" font-size="12.5" text-anchor="middle">Standard / Data</text>
+<text class="dg-t dg-t-std" x="510.0" y="266.6" font-size="12.5" text-anchor="middle">Zone (spillover)</text>
+<rect class="dg-node dg-new" x="615.6" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="225.1" font-size="12.5" text-anchor="middle">Retry-after +</text>
+<text class="dg-t dg-t-new" x="687.2" y="239.6" font-size="12.5" text-anchor="middle">backoff</text>
+<circle class="dg-badge-new" cx="754.8" cy="209.0" r="8"/><text class="dg-badge-t" x="754.8" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="205.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="232.4" font-size="12.5" text-anchor="middle">Token metrics</text>
+<circle class="dg-badge-new" cx="932.0" cy="209.0" r="8"/><text class="dg-badge-t" x="932.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="228.0" x2="257.2" y2="228.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<line class="dg-edge" x1="407.4" y1="228.0" x2="434.4" y2="228.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<line class="dg-edge" x1="584.6" y1="228.0" x2="611.6" y2="228.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<line class="dg-edge" x1="761.8" y1="228.0" x2="788.8" y2="228.0" marker-end="url(#ah-hyperscalers-azure-ptu-throttling)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Benchmarked baseline, elastic spillover, gateway-level control</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Benchmark</strong> with representative prompt and response sizes to size PTUs for the steady baseline, not the peak.</li>
+<li>Front deployments with <strong>Azure API Management's AI gateway</strong> capabilities: token limits, load balancing, circuit breaking, and <strong>spillover</strong> from PTU to pay-as-you-go deployments.</li>
+<li>Choose <strong>Data Zone</strong> deployments for EU/US residency and <strong>Global</strong> for maximum capacity on non-restricted data.</li>
+<li>Honour <code>retry-after</code> headers with exponential backoff and emit token metrics per consumer.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Reserved capacity runs hot (cost-efficient) while peaks spill to elastic capacity instead of failing.
+Gateway policies give fairness between consumers and central observability, and deployment-type choice
+aligns capacity with compliance.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="cm">&lt;!-- APIM policy (excerpt): token limit per consumer + backend pool with PTU priority --&gt;</span>
+<span class="nt">&lt;inbound&gt;</span>
+<span class="w">  </span><span class="nt">&lt;azure-openai-token-limit</span><span class="w"> </span><span class="na">counter-key=</span><span class="s">"@(context.Subscription.Id)"</span>
+<span class="w">                            </span><span class="na">tokens-per-minute=</span><span class="s">"20000"</span><span class="w"> </span><span class="na">estimate-prompt-tokens=</span><span class="s">"true"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;set-backend-service</span><span class="w"> </span><span class="na">backend-id=</span><span class="s">"foundry-pool"</span><span class="w"> </span><span class="nt">/&gt;</span><span class="w">  </span><span class="cm">&lt;!-- pool: PTU priority 1, Data Zone priority 2 --&gt;</span>
+<span class="nt">&lt;/inbound&gt;</span>
+<span class="nt">&lt;backend&gt;</span>
+<span class="w">  </span><span class="nt">&lt;retry</span><span class="w"> </span><span class="na">condition=</span><span class="s">"@(context.Response.StatusCode == 429)"</span><span class="w"> </span><span class="na">count=</span><span class="s">"2"</span><span class="w"> </span><span class="na">interval=</span><span class="s">"1"</span><span class="w"> </span><span class="na">delta=</span><span class="s">"2"</span>
+<span class="w">         </span><span class="na">first-fast-retry=</span><span class="s">"false"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/backend&gt;</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Size PTUs for the baseline, spill peaks to pay-as-you-go through a gateway, and pick deployment types for residency first, capacity second.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you benchmark PTU capacity for a new agent with long tool-calling sessions?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="azure-on-your-data">
+  <header class="ap-h">
+    <div class="ap-num">13.11</div>
+    <div>
+      <h2><a href="#azure-on-your-data">Microsoft: Quick-start &quot;chat with your data&quot; treated as the production RAG platform</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A professional-services firm launches an internal knowledge bot using the one-click "add your data"
+experience. Six months later it serves 20,000 users over 2 million documents, with untuned indexing, no
+semantic ranker configuration and no security trimming.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>A wizard-generated index and default settings become the long-term architecture. Index schema,
+chunking, vectorization and ranking are never designed.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Default index schema</strong> lacks the metadata fields needed for filters and ACLs.</li>
+<li><strong>Untuned retrieval:</strong> no hybrid weighting, semantic ranker or scoring profiles.</li>
+<li><strong>No security trimming</strong>, so everyone can see everything that was indexed.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-azure-on-your-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">SharePoint / Blob</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Wizard index (defaults)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Basic vector query</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Untrimmed results</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Demo configuration promoted to production</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">SharePoint / Blob</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Designed index</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">schema + skillset</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Hybrid + semantic</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">ranker</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">ACL / RBAC trimming</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Foundry IQ / agent</text>
+<text class="dg-t dg-t-std" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">knowledge</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-azure-on-your-data)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Engineered retrieval with security trimming, exposed as governed agent knowledge</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Design the <strong>Azure AI Search index</strong> explicitly: fields for metadata, ACLs, validity dates, plus integrated vectorization and chunking skills tuned per content type.</li>
+<li>Enable <strong>hybrid search</strong> with the <strong>semantic ranker</strong>, and scoring profiles for freshness.</li>
+<li>Implement <strong>document-level security trimming</strong> using ACL/RBAC fields synced from the source, filtered by the user's Entra identity.</li>
+<li>Expose the result to agents as governed knowledge (Foundry IQ knowledge bases or an Azure AI Search tool).</li>
+<li>Evaluate with the Foundry evaluators.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The retrieval layer becomes a designed, scalable service rather than a demo artifact. Security trimming
+meets enterprise access requirements, and hybrid plus semantic ranking improves relevance on large,
+heterogeneous corpora.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">results</span> <span class="o">=</span> <span class="n">search_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+    <span class="n">search_text</span><span class="o">=</span><span class="n">q</span><span class="p">,</span>
+    <span class="n">vector_queries</span><span class="o">=</span><span class="p">[</span><span class="n">VectorizableTextQuery</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">q</span><span class="p">,</span> <span class="n">k_nearest_neighbors</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="s2">"content_vector"</span><span class="p">)],</span>
+    <span class="n">query_type</span><span class="o">=</span><span class="s2">"semantic"</span><span class="p">,</span> <span class="n">semantic_configuration_name</span><span class="o">=</span><span class="s2">"kb-semantic"</span><span class="p">,</span>
+    <span class="nb">filter</span><span class="o">=</span><span class="sa">f</span><span class="s2">"status eq 'approved' and group_ids/any(g: search.in(g, '</span><span class="si">{</span><span class="s1">','</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">user_groups</span><span class="p">)</span><span class="si">}</span><span class="s2">'))"</span><span class="p">,</span>
+    <span class="n">scoring_profile</span><span class="o">=</span><span class="s2">"freshness"</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Wizard-generated RAG gets you a demo. Production needs a designed index, hybrid plus semantic ranking, and security trimming tied to Entra ID.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you sync SharePoint permissions into the search index at scale?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="azure-key-auth">
+  <header class="ap-h">
+    <div class="ap-num">13.12</div>
+    <div>
+      <h2><a href="#azure-key-auth">Microsoft: API keys instead of Entra ID and managed identities</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>API keys for the firm's Foundry resources are found in a public GitHub repository and in shared
+notebooks. Keys were never rotated, and every app uses the same one.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Key-based authentication everywhere, shared across teams and apps, stored in config files, and never
+rotated. Agents call tools and MCP servers with static keys too.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Leakage is easy and attribution impossible.</strong> A key identifies a resource, not a caller.</li>
+<li><strong>No conditional access, no least privilege, no per-app audit.</strong></li>
+<li><strong>Agent tool calls</strong> can't be tied back to an agent identity.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-azure-key-auth" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Apps + notebooks</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Shared static API key</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Foundry resource</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Leak = full access</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Keys identify resources, not callers</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">App / agent</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Managed identity /</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">Entra Agent ID</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">RBAC role (least</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">privilege)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Foundry resource</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Keys disabled</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-azure-key-auth)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Token-based, attributable, revocable access</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Use <strong>Microsoft Entra ID</strong> authentication with <strong>managed identities</strong> for apps, and <strong>Entra Agent ID</strong> for agents, so each agent has its own identity for tools and MCP connections.</li>
+<li>Assign least-privilege RBAC roles per resource.</li>
+<li><strong>Disable local (key) auth</strong> on resources via Azure Policy.</li>
+<li>Use Private Endpoints and Conditional Access where applicable.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>There are no long-lived secrets to leak. Access is attributable to a specific app or agent, revocable
+instantly, and governed by the same identity controls as the rest of the enterprise.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">azure.identity</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultAzureCredential</span><span class="p">,</span> <span class="n">get_bearer_token_provider</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">AzureOpenAI</span>
+
+<span class="n">token_provider</span> <span class="o">=</span> <span class="n">get_bearer_token_provider</span><span class="p">(</span><span class="n">DefaultAzureCredential</span><span class="p">(),</span>
+                                           <span class="s2">"https://cognitiveservices.azure.com/.default"</span><span class="p">)</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">AzureOpenAI</span><span class="p">(</span><span class="n">azure_endpoint</span><span class="o">=</span><span class="n">FOUNDRY_ENDPOINT</span><span class="p">,</span> <span class="n">azure_ad_token_provider</span><span class="o">=</span><span class="n">token_provider</span><span class="p">,</span>
+                     <span class="n">api_version</span><span class="o">=</span><span class="n">API_VERSION</span><span class="p">)</span>          <span class="c1"># no api_key anywhere</span>
+
+<span class="c1"># Azure Policy: deny resources where properties.disableLocalAuth != true</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>On Azure, every AI caller (app or agent) should be an Entra identity with least-privilege RBAC. Disable keys.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How does Entra Agent ID change the audit story for autonomous agents?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="azure-content-safety-defaults">
+  <header class="ap-h">
+    <div class="ap-num">13.13</div>
+    <div>
+      <h2><a href="#azure-content-safety-defaults">Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists</a></h2>
+      <div class="tags"><span class="tag t-sec">Security</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A pharmaceutical company's medical-information bot blocks legitimate questions about drug overdose
+thresholds (false positives), yet lets through indirect prompt injections hidden in uploaded PDFs.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Default content-filter configuration is accepted for every use case. Prompt Shields for documents,
+groundedness detection and custom blocklists aren't configured.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Defaults don't fit domains.</strong> Medical, security and legal use cases need different thresholds.</li>
+<li><strong>Indirect injection</strong> in documents isn't screened without document-level shields.</li>
+<li><strong>Brand and regulatory terms</strong> (competitor names, off-label claims) aren't blocked.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-azure-content-safety-defaults" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">User + uploaded docs</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Default content filter</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Model</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="74.1" font-size="12.5" text-anchor="middle">False blocks + missed</text>
+<text class="dg-t dg-t-std" x="842.2" y="88.6" font-size="12.5" text-anchor="middle">injections</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">One-size-fits-all filtering</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">User + docs</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Prompt Shields</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(user + document)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Custom filter</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">config per use case</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Model</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Groundedness +</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">blocklists</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-hyperscalers-azure-content-safety-defaults)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Filtering tuned to the domain and attack surface</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Create <strong>custom content-filter configurations</strong> per deployment, with thresholds tuned on domain test sets.</li>
+<li>Enable <strong>Prompt Shields</strong> for both user prompts and <strong>documents</strong> (indirect attacks).</li>
+<li>Add <strong>custom blocklists</strong> for regulated terms and <strong>groundedness detection</strong> for RAG outputs.</li>
+<li>Track false-positive and false-negative rates as part of the eval suite.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Legitimate domain questions pass while real attacks are caught. Document shields cover the indirect
+injection path, and measured error rates turn safety tuning into an engineering activity rather than
+guesswork.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">shield</span> <span class="o">=</span> <span class="n">content_safety</span><span class="o">.</span><span class="n">shield_prompt</span><span class="p">(</span><span class="n">user_prompt</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">documents</span><span class="o">=</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">uploads</span><span class="p">])</span>
+<span class="k">if</span> <span class="n">shield</span><span class="o">.</span><span class="n">user_prompt_analysis</span><span class="o">.</span><span class="n">attack_detected</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">attack_detected</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">shield</span><span class="o">.</span><span class="n">documents_analysis</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">refuse</span><span class="p">(</span><span class="s2">"Potential prompt attack detected in the input or attached documents."</span><span class="p">)</span>
+
+<span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">DEPLOYMENT_WITH_CUSTOM_FILTER</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">msgs</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">groundedness</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">answer</span><span class="o">=</span><span class="n">resp</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="n">ctx</span><span class="p">)</span><span class="o">.</span><span class="n">ungrounded_percentage</span> <span class="o">&gt;</span> <span class="mf">0.1</span><span class="p">:</span>
+    <span class="n">resp</span> <span class="o">=</span> <span class="n">regenerate_strict</span><span class="p">(</span><span class="n">msgs</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Default safety settings are a starting point. Tune filters per domain, shield documents as well as prompts, and measure false positives.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you justify safety-filter thresholds to a medical-affairs team?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="cloud-sdk-lockin">
+  <header class="ap-h">
+    <div class="ap-num">13.14</div>
+    <div>
+      <h2><a href="#cloud-sdk-lockin">Cross-cloud: Hard lock-in to one platform&#x27;s agent SDK</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-scale">Scale</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A conglomerate builds 30 agents directly against one cloud's proprietary agent constructs. An acquisition
+brings a second cloud estate and a better-priced model elsewhere, and porting the agents means rewriting them.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Business logic, prompts and tools are tightly coupled to one vendor's proprietary agent definitions,
+with no abstraction over models, tools or state.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Switching costs</strong> prevent using better or cheaper models.</li>
+<li><strong>Negotiating leverage</strong> disappears.</li>
+<li><strong>M&amp;A and multi-cloud reality</strong> forces expensive rewrites.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-cloud-sdk-lockin" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Business logic</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Proprietary agent constructs</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">One cloud only</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-cloud-sdk-lockin)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-cloud-sdk-lockin)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Logic and vendor primitives fused</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Business logic + prompts</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="218.8" font-size="11" text-anchor="middle">Open framework (LangGraph</text>
+<text class="dg-t dg-t-new" x="399.2" y="231.8" font-size="11" text-anchor="middle">/ ADK / Strands / Agent</text>
+<text class="dg-t dg-t-new" x="399.2" y="244.8" font-size="11" text-anchor="middle">Framework)</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">MCP tools</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="259.4" font-size="12.5" text-anchor="middle">OTel traces</text>
+<rect class="dg-node dg-std" x="748.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="232.4" font-size="12.5" text-anchor="middle">Any cloud runtime</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-hyperscalers-cloud-sdk-lockin)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-hyperscalers-cloud-sdk-lockin)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-hyperscalers-cloud-sdk-lockin)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Portable core; cloud runtime as a deployment target</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Design for <strong>portability at the seams</strong>:</p>
+<ul>
+<li>Keep business logic in an open-source framework that runs on several runtimes. All three platforms now host open frameworks.</li>
+<li>Expose tools via <strong>MCP</strong> and observability via <strong>OpenTelemetry</strong>. Both are cross-vendor standards.</li>
+<li>Put model calls behind a thin gateway or interface, with per-model prompt variants under eval.</li>
+<li>Use managed services for the undifferentiated heavy lifting (runtime, identity, scaling) and isolate them behind adapters.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>You get the operational benefits of managed runtimes while keeping the option to move. Porting becomes
+redeployment plus eval re-runs, not a rewrite. The standards-based seams (MCP, OTel, A2A) are where the
+industry is converging.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ModelPort</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span> <span class="o">...</span>
+
+<span class="n">ADAPTERS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"bedrock"</span><span class="p">:</span> <span class="n">BedrockAdapter</span><span class="p">,</span> <span class="s2">"agent_platform"</span><span class="p">:</span> <span class="n">GeminiAdapter</span><span class="p">,</span> <span class="s2">"foundry"</span><span class="p">:</span> <span class="n">FoundryAdapter</span><span class="p">}</span>
+<span class="n">model</span><span class="p">:</span> <span class="n">ModelPort</span> <span class="o">=</span> <span class="n">ADAPTERS</span><span class="p">[</span><span class="n">config</span><span class="o">.</span><span class="n">provider</span><span class="p">](</span><span class="n">config</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">build_graph</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">mcp_tools</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">mcp_gateway</span><span class="p">),</span> <span class="n">tracer</span><span class="o">=</span><span class="n">otel_tracer</span><span class="p">())</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Use managed runtimes, but own the seams. Open frameworks, MCP tools and OpenTelemetry keep agents portable across clouds.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Where is accepting lock-in the right call?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="multicloud-by-default">
+  <header class="ap-h">
+    <div class="ap-num">13.15</div>
+    <div>
+      <h2><a href="#multicloud-by-default">Cross-cloud: Multi-cloud AI just because</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>To "avoid lock-in", a mid-sized insurer runs the same chatbot on all three clouds. It triples the
+governance work (three guardrail configs, three identity models, three logging stacks) for no measurable benefit.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Multi-cloud is adopted as a principle rather than for a specific requirement, duplicating platforms,
+skills and controls.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Governance multiplied:</strong> separate policies, audit evidence and security reviews per cloud.</li>
+<li><strong>Shallow expertise:</strong> teams can't go deep on any platform.</li>
+<li><strong>Higher cost</strong> from lost volume discounts and duplicated tooling.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-multicloud-by-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">One use case</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">AWS + GCP + Azure in parallel</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">3× governance, 3× ops</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-multicloud-by-default)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-multicloud-by-default)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Multi-cloud without a reason</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Requirements</text>
+<rect class="dg-node dg-std" x="305.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="252.1" font-size="12.5" text-anchor="middle">Primary cloud (data</text>
+<text class="dg-t dg-t-std" x="399.2" y="266.6" font-size="12.5" text-anchor="middle">gravity)</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Second provider only for:</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">specific model</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="259.4" font-size="12.5" text-anchor="middle">residency</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="313.4" font-size="12.5" text-anchor="middle">resilience</text>
+<rect class="dg-node dg-new" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Portable seams</text>
+<circle class="dg-badge-new" cx="932.0" cy="236.0" r="8"/><text class="dg-badge-t" x="932.0" y="240.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="255.0" x2="301.5" y2="255.0" marker-end="url(#ah-hyperscalers-multicloud-by-default)"/>
+<line class="dg-edge" x1="496.0" y1="255.0" x2="523.0" y2="255.0" marker-end="url(#ah-hyperscalers-multicloud-by-default)"/>
+<line class="dg-edge" x1="717.5" y1="255.0" x2="744.5" y2="255.0" marker-end="url(#ah-hyperscalers-multicloud-by-default)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Single primary platform; targeted secondary use with justification</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li>Choose a <strong>primary AI platform</strong> aligned with the client's data, identity and operations estate.</li>
+<li>Add a second provider only for a <strong>named reason</strong>: a model unavailable elsewhere, regulatory or sovereignty requirements, or a proven resilience need.</li>
+<li>Keep the portability seams from 13.14 so the choice stays reversible.</li>
+<li>Centralize governance (gateway, policy-as-code, evals) so any secondary provider plugs into the same controls.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Depth on one platform speeds delivery and strengthens security. Targeted multi-provider use captures
+the real benefits without tripling the overhead, and portable seams address lock-in more cheaply than
+running everything everywhere.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PROVIDER_POLICY</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"default"</span><span class="p">:</span> <span class="s2">"primary_cloud"</span><span class="p">,</span>
+    <span class="s2">"exceptions"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"use_case"</span><span class="p">:</span> <span class="s2">"code_review"</span><span class="p">,</span> <span class="s2">"provider"</span><span class="p">:</span> <span class="s2">"secondary"</span><span class="p">,</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="s2">"model availability"</span><span class="p">,</span> <span class="s2">"approved_by"</span><span class="p">:</span> <span class="s2">"ARB-2026-14"</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">"use_case"</span><span class="p">:</span> <span class="s2">"eu_public_sector"</span><span class="p">,</span> <span class="s2">"provider"</span><span class="p">:</span> <span class="s2">"sovereign_region"</span><span class="p">,</span> <span class="s2">"reason"</span><span class="p">:</span> <span class="s2">"sovereignty"</span><span class="p">},</span>
+    <span class="p">]}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Multi-cloud should be a justified exception, not a default. Pick a primary platform by data gravity and add others only for named reasons.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you advise a client whose business units have already chosen different clouds?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="platform-by-benchmark">
+  <header class="ap-h">
+    <div class="ap-num">13.16</div>
+    <div>
+      <h2><a href="#platform-by-benchmark">Cross-cloud: Choosing a platform by model benchmarks alone</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An AI steering committee picks a cloud AI platform because one model topped a public leaderboard that
+month. Their data lives in another cloud, their identity is in Entra ID, and their operations team knows neither.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Platform selection is driven by model rankings, which change monthly, rather than by data location,
+identity, security integration, skills and commercial agreements.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Leaderboards change quickly</strong>, and all three platforms offer many frontier models, often including the same ones.</li>
+<li><strong>Data gravity:</strong> moving or federating data across clouds costs money, latency and compliance effort.</li>
+<li><strong>Integration cost:</strong> identity, networking, logging and procurement dominate the total cost of ownership.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-hyperscalers-platform-by-benchmark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Leaderboard winner</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Platform choice</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Data, identity and skills elsewhere</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-hyperscalers-platform-by-benchmark)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-hyperscalers-platform-by-benchmark)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Optimizing the most volatile variable</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="272.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Data location</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Identity / security</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="313.4" font-size="12.5" text-anchor="middle">Skills &amp; contracts</text>
+<rect class="dg-node dg-std" x="84.0" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="367.4" font-size="12.5" text-anchor="middle">Model access</text>
+<rect class="dg-node dg-new" x="305.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="286.4" font-size="12.5" text-anchor="middle">Weighted decision matrix</text>
+<circle class="dg-badge-new" cx="489.0" cy="263.0" r="8"/><text class="dg-badge-t" x="489.0" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="286.4" font-size="12.5" text-anchor="middle">PoC on client&#x27;s eval set</text>
+<circle class="dg-badge-new" cx="710.5" cy="263.0" r="8"/><text class="dg-badge-t" x="710.5" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="259.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="286.4" font-size="12.5" text-anchor="middle">Platform decision</text>
+<line class="dg-edge" x1="274.5" y1="282.0" x2="301.5" y2="282.0" marker-end="url(#ah-hyperscalers-platform-by-benchmark)"/>
+<line class="dg-edge" x1="496.0" y1="282.0" x2="523.0" y2="282.0" marker-end="url(#ah-hyperscalers-platform-by-benchmark)"/>
+<line class="dg-edge" x1="717.5" y1="282.0" x2="744.5" y2="282.0" marker-end="url(#ah-hyperscalers-platform-by-benchmark)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Decide on durable factors; validate models with the client&#x27;s own evals</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use a <strong>weighted decision framework</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Factor</th>
+<th>Typical weight</th>
+<th>Question</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data gravity</td>
+<td>High</td>
+<td>Where do the source systems and lakehouse live?</td>
+</tr>
+<tr>
+<td>Identity &amp; security</td>
+<td>High</td>
+<td>Entra ID, Google identity, AWS IAM? Existing perimeter controls?</td>
+</tr>
+<tr>
+<td>Model access</td>
+<td>Medium</td>
+<td>Are the required models available, in-region, at the needed capacity?</td>
+</tr>
+<tr>
+<td>Agent &amp; governance tooling</td>
+<td>Medium</td>
+<td>Runtime, guardrails, evals, registry maturity</td>
+</tr>
+<tr>
+<td>Skills &amp; operations</td>
+<td>Medium</td>
+<td>Which platform can the client's team run?</td>
+</tr>
+<tr>
+<td>Commercials</td>
+<td>Medium</td>
+<td>Committed-spend agreements, marketplace credits</td>
+</tr>
+</tbody>
+</table>
+<p>Validate the shortlist with a time-boxed PoC on the client's own eval set.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>The decision rests on durable factors that drive most of the TCO and risk. Model choice stays flexible
+because model catalogs overlap. The client's eval set, not a public leaderboard, confirms quality.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">WEIGHTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"data_gravity"</span><span class="p">:</span> <span class="mf">.25</span><span class="p">,</span> <span class="s2">"identity_security"</span><span class="p">:</span> <span class="mf">.2</span><span class="p">,</span> <span class="s2">"model_access"</span><span class="p">:</span> <span class="mf">.15</span><span class="p">,</span>
+           <span class="s2">"agent_governance"</span><span class="p">:</span> <span class="mf">.15</span><span class="p">,</span> <span class="s2">"skills_ops"</span><span class="p">:</span> <span class="mf">.15</span><span class="p">,</span> <span class="s2">"commercials"</span><span class="p">:</span> <span class="mf">.10</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">score</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">ratings</span><span class="p">):</span>                  <span class="c1"># ratings 1–5 from workshops + PoC evals</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">WEIGHTS</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">ratings</span><span class="p">[</span><span class="n">platform</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">WEIGHTS</span><span class="p">)</span>
+
+<span class="n">ranking</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">PLATFORMS</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">score</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">ratings</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Choose an AI platform for its data, identity and operating fit. Models move every month; your data estate doesn&#x27;t.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Walk me through how you&#x27;d run a two-week platform-selection PoC for a client.</p></div>
+  </section>
+</article>
+<div class="prose"><h3>Platform selection at a glance</h3>
+<table>
+<thead>
+<tr>
+<th>If the client…</th>
+<th>Lean toward</th>
+<th>Watch out for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Runs mostly on AWS, with data in S3 or Redshift and IAM-centric security</td>
+<td>Amazon Bedrock + AgentCore</td>
+<td>Legacy Bedrock Agents for new builds; residency of global inference profiles</td>
+</tr>
+<tr>
+<td>Is a Google Workspace / BigQuery shop, or needs Gemini's long context and multimodality</td>
+<td>Gemini Enterprise Agent Platform</td>
+<td>Web grounding on regulated data; VPC-SC perimeters</td>
+</tr>
+<tr>
+<td>Is standardized on Microsoft 365, Entra ID and Azure data services</td>
+<td>Microsoft Foundry + Agent Service</td>
+<td>PTU sizing; key-based auth; quick-start RAG in production</td>
+</tr>
+<tr>
+<td>Needs a specific model only available elsewhere</td>
+<td>Primary platform + governed secondary route</td>
+<td>Duplicated governance; prompt portability</td>
+</tr>
+</tbody>
+</table></div>
+<div class="pn"><a class="prev" href="security-gov.html">← 12. Security &amp; Governance</a><a class="next" href="local-vs-cloud.html">14. Local LLMs vs Cloud Cost →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

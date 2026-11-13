@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Agent Systems · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="active" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part C · Agentic AI</div>
+  <h1><span class="sn">8</span>Multi-Agent Systems</h1>
+  <p class="lede">Multiple agents can parallelize work and isolate context. They also multiply cost, latency and failure modes. These anti-patterns show the difference.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#org-chart-agents"><span>8.1</span>Multi-agent for its own sake (&quot;the org chart in code&quot;)</a><a href="#chatty-agents"><span>8.2</span>Chatty agents passing full transcripts</a><a href="#no-supervisor"><span>8.3</span>No supervisor, contract or termination condition</a><a href="#shared-mutable-memory"><span>8.4</span>Shared mutable memory without concurrency control</a><a href="#cascading-failures"><span>8.5</span>Cascading failures with no circuit breakers</a></div>
+
+<article class="ap" id="org-chart-agents">
+  <header class="ap-h">
+    <div class="ap-num">8.1</div>
+    <div>
+      <h2><a href="#org-chart-agents">Multi-agent for its own sake (&quot;the org chart in code&quot;)</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A marketing team builds a "CMO agent" that manages a "copywriter agent", an "SEO agent", a "brand agent"
+and a "legal agent" to write a product description. It takes 3 minutes, costs 40× a single call, and the
+output is worse than one good prompt.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents are created to mirror human job titles. Each hand-off is a conversation, and the topology is
+chosen for the demo narrative.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Information loss at every hand-off.</strong> Each agent sees a summary of a summary.</li>
+<li><strong>Cost and latency multiply</strong> with the number of agents and rounds of conversation.</li>
+<li><strong>Coordination failures.</strong> Agents disagree, repeat work, or wait on each other.</li>
+<li><strong>Harder evaluation.</strong> Responsibility for a bad output is spread across agents.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-multi-agent-org-chart-agents" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="272.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="135.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="162.4" font-size="12.5" text-anchor="middle">Brief</text>
+<rect class="dg-node dg-bad" x="261.2" y="135.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="332.8" y="162.4" font-size="12.5" text-anchor="middle">CMO agent</text>
+<circle class="dg-badge-bad" cx="400.4" cy="139.0" r="8"/><text class="dg-badge-t" x="400.4" y="143.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Copy</text>
+<rect class="dg-node dg-std" x="438.4" y="108.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="135.4" font-size="12.5" text-anchor="middle">SEO</text>
+<rect class="dg-node dg-std" x="438.4" y="162.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="189.4" font-size="12.5" text-anchor="middle">Brand</text>
+<rect class="dg-node dg-std" x="438.4" y="216.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="243.4" font-size="12.5" text-anchor="middle">Legal agents</text>
+<rect class="dg-node dg-bad" x="615.6" y="135.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="687.2" y="162.4" font-size="12.5" text-anchor="middle">Rounds of debate</text>
+<circle class="dg-badge-bad" cx="754.8" cy="139.0" r="8"/><text class="dg-badge-t" x="754.8" y="143.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="792.8" y="135.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="162.4" font-size="12.5" text-anchor="middle">3 min, 40× cost</text>
+<line class="dg-edge" x1="230.2" y1="158.0" x2="257.2" y2="158.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="407.4" y1="158.0" x2="434.4" y2="158.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="584.6" y1="158.0" x2="611.6" y2="158.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="761.8" y1="158.0" x2="788.8" y2="158.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<text class="dg-note dg-note-bad" x="28" y="283.0" font-size="12.5">Topology mirrors an org chart, not the problem</text>
+<rect class="dg-band dg-band-good" x="8" y="310.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="330.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="367.4" font-size="12.5" text-anchor="middle">Brief</text>
+<rect class="dg-node dg-std" x="261.2" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="332.8" y="360.1" font-size="12.5" text-anchor="middle">Single agent +</text>
+<text class="dg-t dg-t-std" x="332.8" y="374.6" font-size="12.5" text-anchor="middle">tools</text>
+<rect class="dg-node dg-new" x="438.4" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="353.9" font-size="11" text-anchor="middle">Parallel sub-agents</text>
+<text class="dg-t dg-t-new" x="510.0" y="366.9" font-size="11" text-anchor="middle">(independent work</text>
+<text class="dg-t dg-t-new" x="510.0" y="379.9" font-size="11" text-anchor="middle">only)</text>
+<circle class="dg-badge-new" cx="577.6" cy="344.0" r="8"/><text class="dg-badge-t" x="577.6" y="348.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="360.1" font-size="12.5" text-anchor="middle">Deterministic</text>
+<text class="dg-t dg-t-new" x="687.2" y="374.6" font-size="12.5" text-anchor="middle">checks</text>
+<circle class="dg-badge-new" cx="754.8" cy="344.0" r="8"/><text class="dg-badge-t" x="754.8" y="348.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="340.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="367.4" font-size="12.5" text-anchor="middle">Output</text>
+<line class="dg-edge" x1="230.2" y1="363.0" x2="257.2" y2="363.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="407.4" y1="363.0" x2="434.4" y2="363.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="584.6" y1="363.0" x2="611.6" y2="363.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<line class="dg-edge" x1="761.8" y1="363.0" x2="788.8" y2="363.0" marker-end="url(#ah-multi-agent-org-chart-agents)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Add agents only for parallelism or context isolation, proven by eval</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use multiple agents <strong>only for specific, measurable reasons</strong>:</p>
+<ul>
+<li><strong>Parallelism:</strong> independent subtasks such as researching ten competitors at once.</li>
+<li><strong>Context isolation:</strong> subtasks that would otherwise flood one context window, such as reading many large documents.</li>
+<li><strong>Separation of privilege:</strong> different tools or data permissions per agent.</li>
+</ul>
+<p>Otherwise, use one capable agent with good tools, plus deterministic checks (a legal-term linter, SEO rules)
+instead of LLM "reviewer" agents. Benchmark the multi-agent design against the single-agent baseline on
+quality, cost and latency.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Each additional agent has to justify itself in throughput, context capacity or security. Deterministic
+checks are cheaper and more reliable than agent debates. The simpler architecture is easier to evaluate,
+and multi-agent designs remain available when evidence supports them.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># Orchestrator–worker only where subtasks are independent and context-heavy</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">competitive_research</span><span class="p">(</span><span class="n">companies</span><span class="p">):</span>
+    <span class="n">briefs</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="p">[</span>
+        <span class="n">sub_agent</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Research </span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">: pricing, launches, hiring signals"</span><span class="p">,</span>
+                  <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">web_search</span><span class="p">,</span> <span class="n">fetch</span><span class="p">],</span> <span class="n">budget</span><span class="o">=</span><span class="n">Budget</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">12</span><span class="p">))</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">companies</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">lead_agent</span><span class="o">.</span><span class="n">synthesize</span><span class="p">(</span><span class="n">briefs</span><span class="p">)</span>       <span class="c1"># sub-agents return condensed findings, not transcripts</span>
+
+<span class="c1"># Product copy: single agent + deterministic checks, no agent "committee"</span>
+<span class="n">draft</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">COPY_PROMPT</span><span class="p">,</span> <span class="n">product</span><span class="o">=</span><span class="n">p</span><span class="p">)</span>
+<span class="n">issues</span> <span class="o">=</span> <span class="n">legal_linter</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">+</span> <span class="n">seo_rules</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span> <span class="o">+</span> <span class="n">brand_terms</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>
+<span class="n">final</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">revise</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">issues</span><span class="p">)</span> <span class="k">if</span> <span class="n">issues</span> <span class="k">else</span> <span class="n">draft</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Agents aren&#x27;t headcount. Add one only for parallelism, context isolation or privilege separation, and prove it beats the single-agent baseline.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What metrics would convince you a multi-agent design is worth its cost?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="chatty-agents">
+  <header class="ap-h">
+    <div class="ap-num">8.2</div>
+    <div>
+      <h2><a href="#chatty-agents">Chatty agents passing full transcripts</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>In a supply-chain planning system, each agent forwards its entire conversation history to the next.
+By the fourth agent, the context is 180K tokens and most of it is irrelevant intermediate reasoning.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents communicate through free-form natural-language chat, passing complete transcripts and intermediate
+tool outputs to each other.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Token cost grows with every hop.</strong></li>
+<li><strong>Signal drowns in noise.</strong> Downstream agents struggle to find the facts they need.</li>
+<li><strong>No contract.</strong> Nobody knows what an agent is required to provide or can rely on receiving.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-multi-agent-chatty-agents" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Agent A (full transcript)</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">→ Agent B (+ A&#x27;s</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">transcript)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">→ Agent C (+ A+B)</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">180K-token context</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Context and cost compound per hop</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Agent A</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Typed hand-off</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">artifact</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Agent B</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Typed hand-off</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">artifact</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Agent C</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-multi-agent-chatty-agents)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Agents exchange compact, validated contracts; artifacts stored by reference</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>typed hand-off contracts</strong>:</p>
+<ul>
+<li>Define the output schema for each agent (findings, decisions, open questions, artifact references).</li>
+<li>Pass large artifacts <strong>by reference</strong> (file or blob IDs), not inline.</li>
+<li>Summarize or compress before hand-off. Discard raw tool output and scratch reasoning.</li>
+<li>Validate hand-offs, and reject or repair malformed ones.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Context stays small and relevant, so cost and latency stay roughly flat as the pipeline grows. Contracts
+make each agent independently testable and replaceable, and references keep heavy data out of prompts
+while staying accessible when needed.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">DemandForecastHandoff</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">sku_forecasts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SkuForecast</span><span class="p">]</span>          <span class="c1"># compact, typed</span>
+    <span class="n">assumptions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">risks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">artifact_refs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>             <span class="c1"># {"model_run": "s3://.../run-8812.parquet"}</span>
+
+<span class="n">fc</span> <span class="o">=</span> <span class="n">forecaster</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">output_schema</span><span class="o">=</span><span class="n">DemandForecastHandoff</span><span class="p">)</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="n">supply_planner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">goal</span><span class="o">=</span><span class="s2">"build replenishment plan"</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="n">fc</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>   <span class="c1"># no transcript</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Agents should exchange contracts, not conversations. Use typed hand-offs, pass artifacts by reference, and throw away scratch work.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you version a hand-off schema when two agents are owned by different teams?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-supervisor">
+  <header class="ap-h">
+    <div class="ap-num">8.3</div>
+    <div>
+      <h2><a href="#no-supervisor">No supervisor, contract or termination condition</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A peer-to-peer group of "researcher", "critic" and "writer" agents debates a market-entry memo. The critic
+always finds something to improve, so the conversation never converges and is cut off by a timeout.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents talk freely in a group chat with no orchestrator, no defined completion criteria and no
+authority to decide when the work is done.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>No convergence.</strong> Critique loops can run forever.</li>
+<li><strong>No accountability.</strong> No single component owns the final result or the decision to stop.</li>
+<li><strong>Unpredictable control flow</strong> that can't be tested.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-multi-agent-no-supervisor" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Researcher</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="74.1" font-size="12.5" text-anchor="middle">↔ Critic ↔ Writer (free</text>
+<text class="dg-t dg-t-bad" x="399.2" y="88.6" font-size="12.5" text-anchor="middle">chat)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">No stop rule</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Timeout</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Peer debate without authority or exit criteria</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="225.1" font-size="12.5" text-anchor="middle">Supervisor (plan +</text>
+<text class="dg-t dg-t-std" x="177.8" y="239.6" font-size="12.5" text-anchor="middle">criteria)</text>
+<rect class="dg-node dg-std" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="232.4" font-size="12.5" text-anchor="middle">Workers (bounded tasks)</text>
+<rect class="dg-node dg-new" x="527.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="232.4" font-size="12.5" text-anchor="middle">Rubric check</text>
+<circle class="dg-badge-new" cx="710.5" cy="209.0" r="8"/><text class="dg-badge-t" x="710.5" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Accept</text>
+<rect class="dg-node dg-std" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Max 2 revisions → human</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-multi-agent-no-supervisor)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Explicit ownership, acceptance criteria and revision limits</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use an explicit <strong>orchestration topology</strong>:</p>
+<ul>
+<li><strong>Supervisor/orchestrator</strong> owns the plan, assigns bounded tasks, and decides completion.</li>
+<li><strong>Acceptance criteria</strong> as a rubric (sections present, sources cited, numbers reconciled), checked by code where possible.</li>
+<li><strong>Revision limits</strong>: at most N critique rounds, then escalate to a human with the open issues.</li>
+<li>Express the topology as a graph with explicit edges and conditions, not as free chat.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>There's always one owner of "done". Rubric-based acceptance makes quality objective and testable.
+Revision limits bound cost and guarantee termination, and the graph topology is reviewable and testable
+like any other code.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">supervise</span><span class="p">(</span><span class="n">goal</span><span class="p">):</span>
+    <span class="n">plan</span> <span class="o">=</span> <span class="n">supervisor</span><span class="o">.</span><span class="n">plan</span><span class="p">(</span><span class="n">goal</span><span class="p">)</span>                       <span class="c1"># bounded tasks with owners</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="n">t</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">workers</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">role</span><span class="p">]</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">plan</span><span class="o">.</span><span class="n">tasks</span><span class="p">}</span>
+    <span class="n">draft</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">goal</span><span class="p">,</span> <span class="n">results</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>                           <span class="c1"># revision limit</span>
+        <span class="n">gaps</span> <span class="o">=</span> <span class="n">rubric</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">draft</span><span class="p">)</span>                     <span class="c1"># deterministic + judge criteria</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">gaps</span><span class="p">:</span> <span class="k">return</span> <span class="n">draft</span>
+        <span class="n">draft</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">revise</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">gaps</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">escalate_to_human</span><span class="p">(</span><span class="n">draft</span><span class="p">,</span> <span class="n">open_issues</span><span class="o">=</span><span class="n">rubric</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">draft</span><span class="p">))</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Every multi-agent system needs an owner of &quot;done&quot;: a supervisor, acceptance criteria and a revision limit.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Compare supervisor, hierarchical and swarm topologies. When would you use each?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="shared-mutable-memory">
+  <header class="ap-h">
+    <div class="ap-num">8.4</div>
+    <div>
+      <h2><a href="#shared-mutable-memory">Shared mutable memory without concurrency control</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Parallel agents processing insurance claims all read and write a shared "case notes" scratchpad. Two
+agents overwrite each other's updates, and one claim is approved on the basis of another claim's notes.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents share one global blackboard (a dict, document or memory store) with unrestricted read/write
+access and no keys, versions or locks.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Race conditions and lost updates</strong> when agents run in parallel.</li>
+<li><strong>Cross-contamination</strong> between unrelated tasks or customers.</li>
+<li><strong>Unattributable state.</strong> Nobody knows which agent wrote what, or when.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 492" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-multi-agent-shared-mutable-memory" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Agent 1</text>
+<rect class="dg-node dg-std" x="84.0" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="135.4" font-size="12.5" text-anchor="middle">Agent 2</text>
+<rect class="dg-node dg-std" x="84.0" y="162.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="189.4" font-size="12.5" text-anchor="middle">Agent 3</text>
+<rect class="dg-node dg-bad" x="379.3" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="135.4" font-size="12.5" text-anchor="middle">Shared global scratchpad</text>
+<circle class="dg-badge-bad" cx="636.7" cy="112.0" r="8"/><text class="dg-badge-t" x="636.7" y="116.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="135.4" font-size="12.5" text-anchor="middle">Lost updates / cross-case data</text>
+<line class="dg-edge" x1="348.3" y1="131.0" x2="375.3" y2="131.0" marker-end="url(#ah-multi-agent-shared-mutable-memory)"/>
+<line class="dg-edge" x1="643.7" y1="131.0" x2="670.7" y2="131.0" marker-end="url(#ah-multi-agent-shared-mutable-memory)"/>
+<text class="dg-note dg-note-bad" x="28" y="229.0" font-size="12.5">Concurrent unscoped writes</text>
+<rect class="dg-band dg-band-good" x="8" y="256.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="276.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="313.4" font-size="12.5" text-anchor="middle">Agent 1</text>
+<rect class="dg-node dg-std" x="84.0" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="367.4" font-size="12.5" text-anchor="middle">Agent 2</text>
+<rect class="dg-node dg-std" x="84.0" y="394.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="421.4" font-size="12.5" text-anchor="middle">Agent 3</text>
+<rect class="dg-node dg-new" x="305.5" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="367.4" font-size="12.5" text-anchor="middle">Scoped state (per case)</text>
+<circle class="dg-badge-new" cx="489.0" cy="344.0" r="8"/><text class="dg-badge-t" x="489.0" y="348.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="313.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="340.4" font-size="12.5" text-anchor="middle">Append-only events</text>
+<circle class="dg-badge-new" cx="710.5" cy="317.0" r="8"/><text class="dg-badge-t" x="710.5" y="321.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="367.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="394.4" font-size="12.5" text-anchor="middle">Versioned writes</text>
+<rect class="dg-node dg-new" x="748.5" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="367.4" font-size="12.5" text-anchor="middle">Reducer merges</text>
+<circle class="dg-badge-new" cx="932.0" cy="344.0" r="8"/><text class="dg-badge-t" x="932.0" y="348.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="363.0" x2="301.5" y2="363.0" marker-end="url(#ah-multi-agent-shared-mutable-memory)"/>
+<line class="dg-edge" x1="496.0" y1="363.0" x2="523.0" y2="363.0" marker-end="url(#ah-multi-agent-shared-mutable-memory)"/>
+<line class="dg-edge" x1="717.5" y1="363.0" x2="744.5" y2="363.0" marker-end="url(#ah-multi-agent-shared-mutable-memory)"/>
+<text class="dg-note dg-note-good" x="28" y="461.0" font-size="12.5">Isolated, attributable, conflict-free state</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Treat shared agent state as a <strong>concurrent data structure</strong>:</p>
+<ul>
+<li><strong>Scope</strong> state by task, case or tenant. Agents get only the keys they need.</li>
+<li>Prefer <strong>append-only event logs</strong> with reducers that merge updates deterministically (the pattern LangGraph state reducers use).</li>
+<li>Use <strong>optimistic concurrency</strong> (version numbers, compare-and-swap) for mutable records.</li>
+<li>Record <code>writer_agent</code>, timestamp and step for every write.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Scoping prevents cross-contamination by construction. Append-only logs plus reducers remove lost
+updates and give a full history. Optimistic locking surfaces conflicts instead of hiding them, and
+attribution makes debugging and audit straightforward.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ClaimState</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">claim_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">findings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Finding</span><span class="p">],</span> <span class="n">operator</span><span class="o">.</span><span class="n">add</span><span class="p">]</span>     <span class="c1"># append-only; parallel writes merge</span>
+    <span class="n">decision</span><span class="p">:</span> <span class="n">Decision</span> <span class="o">|</span> <span class="kc">None</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">write_decision</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">claim_id</span><span class="p">,</span> <span class="n">decision</span><span class="p">,</span> <span class="n">expected_version</span><span class="p">,</span> <span class="n">agent</span><span class="p">):</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">compare_and_set</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="sa">f</span><span class="s2">"claim:</span><span class="si">{</span><span class="n">claim_id</span><span class="si">}</span><span class="s2">:decision"</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">decision</span><span class="p">,</span>
+                               <span class="n">version</span><span class="o">=</span><span class="n">expected_version</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">{</span><span class="s2">"writer"</span><span class="p">:</span> <span class="n">agent</span><span class="p">,</span> <span class="s2">"ts"</span><span class="p">:</span> <span class="n">now</span><span class="p">()})</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ok</span><span class="p">:</span> <span class="k">raise</span> <span class="n">ConflictError</span><span class="p">(</span><span class="s2">"decision changed by another agent; re-read and retry"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Shared agent memory is a concurrency problem. Scope it, append rather than overwrite, version mutable records, and attribute every write.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you design state for agents running across multiple regions?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="cascading-failures">
+  <header class="ap-h">
+    <div class="ap-num">8.5</div>
+    <div>
+      <h2><a href="#cascading-failures">Cascading failures with no circuit breakers</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A data-extraction agent starts returning malformed results after an upstream API change. Three downstream
+agents keep consuming its output, compounding errors, and 4,000 incorrect records are written to the ERP before anyone notices.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Agents trust each other's outputs implicitly. There's no validation between stages, no health tracking
+per agent, and no automatic stop when error rates spike.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Errors propagate and amplify</strong> through the chain.</li>
+<li><strong>No blast-radius control.</strong> Bad output reaches systems of record.</li>
+<li><strong>Late detection.</strong> Problems are found by downstream users, not by monitoring.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-multi-agent-cascading-failures" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">Extractor (broken)</text>
+<rect class="dg-node dg-bad" x="261.2" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="332.8" y="81.4" font-size="12.5" text-anchor="middle">→ Enricher</text>
+<circle class="dg-badge-bad" cx="400.4" cy="58.0" r="8"/><text class="dg-badge-t" x="400.4" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">→ Validator agent</text>
+<circle class="dg-badge-bad" cx="577.6" cy="58.0" r="8"/><text class="dg-badge-t" x="577.6" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="615.6" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="687.2" y="81.4" font-size="12.5" text-anchor="middle">→ ERP write</text>
+<circle class="dg-badge-bad" cx="754.8" cy="58.0" r="8"/><text class="dg-badge-t" x="754.8" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="792.8" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="81.4" font-size="12.5" text-anchor="middle">4,000 bad records</text>
+<line class="dg-edge" x1="230.2" y1="77.0" x2="257.2" y2="77.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="407.4" y1="77.0" x2="434.4" y2="77.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="584.6" y1="77.0" x2="611.6" y2="77.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="761.8" y1="77.0" x2="788.8" y2="77.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Implicit trust between stages</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Extractor</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="205.4" font-size="12.5" text-anchor="middle">Contract validation</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Circuit breaker</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">(error rate)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Downstream agents</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="198.1" font-size="12.5" text-anchor="middle">Quarantine before</text>
+<text class="dg-t dg-t-new" x="864.4" y="212.6" font-size="12.5" text-anchor="middle">write</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-multi-agent-cascading-failures)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Failures contained at the stage where they start</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Apply <strong>resilience engineering</strong> between agents:</p>
+<ul>
+<li>Validate every hand-off against its schema and invariants.</li>
+<li>Track per-agent error and validation-failure rates. <strong>Open a circuit breaker</strong> when a threshold is crossed, pausing the stage and alerting.</li>
+<li>Write to systems of record through a <strong>staging/quarantine</strong> area with reconciliation checks before commit.</li>
+<li>Use canary releases and anomaly detection on output distributions (volumes, value ranges).</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Bad output is stopped at the first boundary, not discovered in the ERP. Circuit breakers turn a silent
+cascade into a visible incident with bounded damage, and staging writes give a final gate that is cheap
+to roll back.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">AgentBreaker</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="n">name</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="n">window</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ok</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ok</span><span class="p">)</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">50</span> <span class="ow">and</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">stage</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="n">breaker</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">breaker</span><span class="o">.</span><span class="n">open</span><span class="p">:</span> <span class="k">raise</span> <span class="n">StagePaused</span><span class="p">(</span><span class="n">agent</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">schema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">out</span><span class="p">)</span> <span class="ow">and</span> <span class="n">invariants_hold</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+    <span class="n">breaker</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">ok</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span> <span class="k">if</span> <span class="n">ok</span> <span class="k">else</span> <span class="n">quarantine</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Agent pipelines need the resilience patterns of distributed systems: contract checks, circuit breakers and staged writes.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you detect semantic drift that still passes schema validation?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="agents.html">← 7. Agent Design &amp; Tool Use</a><a class="next" href="memory.html">9. Memory &amp; Context →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

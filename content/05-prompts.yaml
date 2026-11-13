@@ -1,0 +1,190 @@
+id: prompts
+num: 5
+short: Prompt Engineering
+title: Prompt Engineering & Management
+summary: Prompts are production code that changes model behaviour. These anti-patterns treat them like string literals.
+patterns:
+  - id: hardcoded-prompts
+    title: Prompts hardcoded in application code with no versioning
+    tags: [Reliability, Quality]
+    scenario: |
+      A claims-triage service's accuracy drops 9% after a release. The cause turns out to be a one-word
+      prompt edit bundled into an unrelated UI change. Nobody can tell which prompt version produced
+      last week's decisions.
+    antipattern: |
+      Prompts live as f-strings scattered through services. Changes ship with code deploys, aren't evaluated,
+      and aren't recorded with the outputs they produce.
+    fails: |
+      - **Invisible behaviour changes.** Prompt edits change outputs as much as code changes do, but skip review and testing.
+      - **No traceability.** You can't reproduce or audit a past decision without knowing the exact prompt, model and parameters.
+      - **Slow iteration.** Domain experts can't improve prompts without an engineering release.
+      - **Duplication.** The same instruction drifts across copies in different services.
+    diagram:
+      bad: ["f-string in code", "!Ships with any deploy", "No eval", "Untraceable outputs"]
+      bad_note: "Behavioural changes bypass testing and audit"
+      good: ["Prompt registry (versioned)", "+Eval gate in CI", "+Label: staging → prod", "Runtime fetch by label", "+Log prompt_version"]
+      good_note: "Every output traceable to prompt, model and parameters"
+    solution: |
+      Manage prompts as **versioned, tested artifacts**:
+
+      - Store templates in a prompt registry or a dedicated repo folder (Langfuse, MLflow prompt registry, a cloud prompt-management service, or Git with YAML).
+      - Each version is immutable: template, model, parameters, output schema, owner.
+      - Promote via **labels** (dev → staging → prod) only after the eval suite passes.
+      - Log `prompt_id@version`, model and parameters with every request trace.
+      - Allow controlled A/B tests between versions.
+    works: |
+      Prompt changes get the same discipline as code: review, test, staged rollout and instant rollback by
+      moving a label. Logged versions make every decision reproducible for audit. Domain experts can iterate
+      in the registry while the eval gate protects production.
+    code: |
+      # prompts/claims_triage.yaml  (versioned in Git or a registry)
+      # id: claims_triage   version: 14   model: mid-tier   temperature: 0
+      # schema: TriageDecision   template: |  You are a claims triage assistant ...
+
+      p = prompts.get("claims_triage", label="prod")           # resolves to v14
+      out = llm.generate(model=p.model, system=p.render(policy=policy), schema=p.schema,
+                         temperature=p.temperature, user=claim_text)
+      tracer.log(prompt=f"{p.id}@{p.version}", model=p.model, input_hash=h(claim_text), output=out)
+
+      # CI: block promotion if the eval regresses
+      assert run_evals("claims_triage", version=15).score >= baseline("claims_triage") - 0.01
+    takeaway: "If a prompt can change a business decision, it needs version control, an eval gate and a trace ID, just like code."
+    followup: "Who should own prompt changes, engineering or the business domain, and how do you govern that?"
+
+  - id: mega-prompt
+    title: The mega-prompt that does everything
+    tags: [Quality, Cost, Reliability]
+    scenario: |
+      A customer-service bot's system prompt has grown to 9,000 tokens: 40 rules, 12 personas, product FAQs,
+      escalation logic and formatting instructions. Fixing one behaviour breaks another, and costs climb.
+    antipattern: |
+      Every requirement is appended to one monolithic prompt that handles classification, retrieval
+      instructions, policy, tone and formatting in a single call.
+    fails: |
+      - **Instruction interference.** Rules conflict or get diluted; the model follows some and ignores others unpredictably.
+      - **Untestable.** One giant prompt has no unit boundaries, so regressions appear anywhere.
+      - **Paid on every call.** Thousands of static tokens are billed per request even when only a few rules apply.
+      - **Ownership chaos.** Many teams edit the same text.
+    diagram:
+      bad: ["User message", "!9K-token mega-prompt", "One LLM call", "Inconsistent behaviour"]
+      bad_note: "Conflicting rules, untestable, expensive"
+      good: ["User message", "+Intent router", "+Focused prompt per task", "+Schema-validated output", "Response"]
+      good_note: "Small, owned, testable prompts composed by code"
+    solution: |
+      **Decompose by task** and compose with code:
+
+      - A lightweight router classifies intent (billing, technical, cancellation, chit-chat).
+      - Each intent has a focused prompt with only its relevant rules, examples and tools.
+      - Shared policy (safety, tone) lives in a short common preamble, ideally cached.
+      - Load procedural knowledge on demand (retrieved instructions or "skills") instead of keeping everything resident.
+      - Each prompt has its own eval set and owner.
+    works: |
+      Smaller prompts are followed more reliably because there are fewer competing instructions. Each unit
+      can be tested and improved independently. Tokens per call drop sharply, and the router itself gives
+      useful analytics on demand by intent.
+    code: |
+      ROUTER = prompts.get("cs_router", label="prod")
+      HANDLERS = {
+          "billing":      Handler(prompt="cs_billing",  tools=[get_invoice, issue_credit]),
+          "technical":    Handler(prompt="cs_tech",     tools=[search_kb, run_diagnostic]),
+          "cancellation": Handler(prompt="cs_retention", tools=[get_offers], hitl=True),
+      }
+
+      def respond(msg, ctx):
+          intent = small_llm.classify(ROUTER, msg, labels=list(HANDLERS) + ["other"])
+          h = HANDLERS.get(intent, HANDLERS["technical"])
+          return llm.generate(system=[SHARED_POLICY_CACHED, prompts.get(h.prompt).render(ctx)],
+                              tools=h.tools, user=msg)
+    takeaway: "One prompt per job, composed by code. Mega-prompts are the monoliths of LLM applications."
+    followup: "How do you prevent the router itself from becoming a single point of failure?"
+
+  - id: freetext-parsing
+    title: Parsing free-text output with regex
+    tags: [Reliability]
+    scenario: |
+      An invoice-extraction pipeline asks the model to "return the total and due date". Downstream code
+      regex-parses the reply. About 3% of invoices fail silently when the model writes "Total due: USD 1,240.50
+      (incl. VAT)".
+    antipattern: |
+      LLM output is treated as human prose and scraped with regular expressions and string splits.
+      Retries are added when parsing fails.
+    fails: |
+      - **Format drift.** Small prompt or model changes alter wording and break parsers.
+      - **Silent corruption.** Partial regex matches produce wrong but valid-looking values.
+      - **Retry cost.** Re-asking until the output parses wastes tokens and latency.
+    diagram:
+      bad: ["LLM free text", "!Regex parse", "Silent bad values", "Downstream system"]
+      bad_note: "Brittle to wording changes; failures hide in production data"
+      good: ["Typed schema", "+Structured output / tool call", "+Schema validation", "+Business-rule checks", "Downstream system"]
+      good_note: "Contract-first output; invalid values rejected loudly"
+    solution: |
+      Use a **schema-first contract**:
+
+      - Define output types (Pydantic, JSON Schema).
+      - Use the model's **native structured-output or strict tool-calling mode**, which constrains decoding to the schema, rather than prompt-only "respond in JSON".
+      - Validate types, then apply **business rules** (totals equal sum of line items, due date after invoice date).
+      - On failure, run a single repair attempt with the validation error, then route to human review.
+    works: |
+      Constrained decoding removes format drift. Validation turns silent corruption into explicit, countable
+      errors. Business-rule checks catch semantically wrong but well-formed values, which is the class of
+      error that hurts finance teams most.
+    code: |
+      from pydantic import BaseModel, condecimal, model_validator
+      from datetime import date
+
+      class Invoice(BaseModel):
+          vendor: str; invoice_no: str; invoice_date: date; due_date: date
+          currency: str; total: condecimal(max_digits=12, decimal_places=2)
+          line_items: list[LineItem]
+          @model_validator(mode="after")
+          def check(self):
+              assert self.due_date >= self.invoice_date, "due before issue"
+              assert abs(sum(li.amount for li in self.line_items) - self.total) < 0.02, "total mismatch"
+              return self
+
+      inv = llm.generate(schema=Invoice, strict=True, user=document_text)   # constrained decoding
+    takeaway: "Don't parse prose. Ask for typed output with native structured-output modes, then validate the business rules as well as the schema."
+    followup: "What can structured output not guarantee, and how do you cover that gap?"
+
+  - id: prompt-only-safety
+    title: Relying on prompt instructions alone for safety and policy
+    tags: [Security, Compliance]
+    scenario: |
+      A bank's chatbot system prompt says "Never give investment advice and never discuss other customers."
+      A user pastes a cleverly framed request and gets a specific stock recommendation.
+    antipattern: |
+      All safety, compliance and scope rules are written as natural-language instructions in the system
+      prompt. No independent checks exist on inputs, outputs or actions.
+    fails: |
+      - **Instructions aren't enforcement.** Models follow them probabilistically, and adversarial inputs (jailbreaks, injection) are designed to override them.
+      - **No defense in depth.** One bypass means total failure.
+      - **No evidence.** Auditors can't verify a control that exists only as text.
+    diagram:
+      bad: ["User input", "!System prompt: \"never…\"", "LLM", "Unchecked output"]
+      bad_note: "Single probabilistic control, trivially bypassed"
+      good: ["User input", "+Input guard", "LLM + policy prompt", "+Output guard", "+Action policy engine"]
+      good_note: "Layered, deterministic controls around a probabilistic core"
+    solution: |
+      Use **layered controls**, with the prompt as only the first layer:
+
+      1. **Input guards:** jailbreak and injection classifiers, topic restrictions, PII detection.
+      2. **Policy prompt:** clear scope and refusal style. Still useful, just not sufficient.
+      3. **Output guards:** classifiers for regulated advice, toxicity, PII and off-topic content, plus groundedness checks.
+      4. **Action controls:** a deterministic policy engine and human approval for consequential tool calls.
+      5. **Monitoring:** log guard triggers and red-team continuously.
+
+      Managed options include Bedrock Guardrails, Model Armor on Google Cloud and Azure AI Content Safety with Prompt Shields. Open-source options include NeMo Guardrails and Llama Guard.
+    works: |
+      Each layer catches what the others miss, so one bypass no longer means compromise. Deterministic layers
+      give auditors verifiable controls with logs. Guard-trigger metrics show where attacks and gaps
+      concentrate, which drives continuous hardening.
+    code: |
+      def safe_chat(msg, user):
+          if (g := input_guard.check(msg)).blocked:              # injection, jailbreak, PII, topic
+              audit.log("input_block", g.reason); return refusal(g.reason)
+          draft = llm.generate(system=POLICY_PROMPT, user=msg)
+          if (o := output_guard.check(draft, categories=["investment_advice", "pii", "toxicity"])).blocked:
+              audit.log("output_block", o.reason); return compliant_fallback(o.reason)
+          return draft
+    takeaway: "A system prompt is a request, not a control. Safety needs layered, deterministic guards with logs that an auditor can test."
+    followup: "How do you measure guardrail false-positive rates and their effect on user experience?"

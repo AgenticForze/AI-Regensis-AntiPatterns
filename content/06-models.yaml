@@ -1,0 +1,195 @@
+id: models
+num: 6
+short: Model Selection & Routing
+title: Model Selection & Routing
+summary: Models are a portfolio, not a single dependency. These anti-patterns overpay, underperform or fail completely when a provider has a bad day.
+patterns:
+  - id: one-model-for-all
+    title: One frontier model for every task
+    tags: [Cost, Latency]
+    scenario: |
+      A shared-services AI platform routes every request, including classification, extraction, summarization
+      and complex reasoning, to the largest frontier model. The monthly bill reaches seven figures, and 70% of calls
+      are simple classifications.
+    antipattern: |
+      One model is chosen during the PoC (usually the most capable) and hardwired for every workload, regardless
+      of complexity, volume or latency needs.
+    fails: |
+      - **Cost scales with the most expensive tier.** Per-token prices across model tiers commonly differ by 10–30×.
+      - **Latency.** Larger models are slower, which hurts interactive and high-throughput flows.
+      - **No leverage.** The organization can't respond to price changes or newer, cheaper models.
+    diagram:
+      bad: ["All requests", "!Frontier model only", "High cost, high latency"]
+      bad_note: "Paying frontier prices for classification"
+      good: ["Request", "+Complexity router", "Small model (~70%) | Mid-tier (~25%) | Frontier (~5%)", "+Escalate on low confidence"]
+      good_note: "Cost tracks task difficulty; quality protected by escalation"
+    solution: |
+      Build a **model portfolio with routing**:
+
+      - Classify tasks by complexity and risk. Map each to the cheapest model that passes its eval threshold.
+      - Use rules first (task type), then learned routers (difficulty prediction) as volume grows.
+      - Add **cascades**: try the small model, escalate when confidence or validation fails.
+      - Use **batch APIs** for offline workloads, typically at a large discount.
+      - Re-benchmark the portfolio quarterly as new models ship.
+    works: |
+      Most enterprise traffic is simple, so moving it to small models cuts cost dramatically while evals and
+      escalation protect quality on hard cases. Routing also creates leverage: adopting a new model becomes a
+      config change validated by evals rather than a re-architecture.
+    code: |
+      PORTFOLIO = {
+          "classify": ModelTier("small",    max_cost_per_call=0.0005),
+          "extract":  ModelTier("small",    fallback="mid"),
+          "summarize":ModelTier("mid"),
+          "reason":   ModelTier("frontier"),
+      }
+
+      def call(task, payload):
+          tier = PORTFOLIO[task]
+          out = llm(tier.model).generate(payload, schema=SCHEMAS[task])
+          if tier.fallback and (out.confidence < 0.7 or not validate(out)):
+              metrics.inc(f"escalate.{task}")
+              out = llm(PORTFOLIO_MODELS[tier.fallback]).generate(payload, schema=SCHEMAS[task])
+          return out
+    takeaway: "Treat models like a portfolio. Route each task to the cheapest model that passes its eval, and escalate only when needed."
+    followup: "How would you build the business case for a model router to a CFO?"
+
+  - id: single-provider-no-fallback
+    title: No fallback or multi-provider strategy
+    tags: [Reliability]
+    scenario: |
+      During a provider's regional incident, a customer-facing assistant returns errors for three hours.
+      Rate limits during a marketing campaign cause the same outage pattern a month later.
+    antipattern: |
+      The application calls one model endpoint in one region with naive retries. No capacity planning,
+      no failover, no graceful degradation.
+    fails: |
+      - **Single point of failure.** Provider outages, regional incidents and throttling (HTTP 429) all take the product down.
+      - **Retry storms.** Naive retries amplify load during an incident.
+      - **Capacity surprises.** Shared on-demand quotas aren't guaranteed at peak.
+    diagram:
+      bad: ["App", "!Single endpoint / region", "429 / 5xx → outage"]
+      bad_note: "No failover; retries amplify the incident"
+      good: ["App", "+AI gateway", "Primary region | Secondary region | Alternate model", "+Circuit breaker", "+Degraded mode"]
+      good_note: "Failover across regions and models; graceful degradation"
+    solution: |
+      Put an **AI gateway** in front of model calls (LiteLLM, Portkey, a cloud API-management layer such as Azure APIM, or an internal gateway):
+
+      - Exponential backoff with jitter, honouring `retry-after` headers.
+      - **Circuit breakers** per endpoint.
+      - Failover order: same model in another region → equivalent model from another provider or hosting route → smaller model in degraded mode.
+      - **Provisioned or reserved capacity** for critical paths, on-demand for overflow.
+      - Keep evaluated, equivalent prompts for each fallback model, since prompts don't always transfer.
+    works: |
+      Failures become partial degradation instead of outages. Circuit breakers stop retry storms, and
+      pre-evaluated fallback prompts mean failover doesn't quietly change quality. The gateway also centralizes
+      cost tracking, quotas and logging.
+    code: |
+      ROUTES = [
+          Route("claude-mid", provider="bedrock", region="us-east-1"),
+          Route("claude-mid", provider="vertex",  region="us-central1"),
+          Route("alt-mid",    provider="foundry", region="eastus2", prompt_variant="alt"),
+          Route("small",      provider="bedrock", region="us-east-1", degraded=True),
+      ]
+
+      def resilient_call(req):
+          for r in ROUTES:
+              if breaker[r.key].open: continue
+              try:
+                  return with_backoff(lambda: client(r).generate(variant(req, r)), max_tries=2)
+              except (Throttled, ServerError) as e:
+                  breaker[r.key].record_failure(e)
+          return degraded_response(req)            # cached answer, queue, or human hand-off
+    takeaway: "Models are external dependencies with SLAs. Engineer them like payment gateways, with failover, circuit breakers and a degraded mode."
+    followup: "How do you guarantee quality equivalence when failing over to a different model family?"
+
+  - id: premature-finetuning
+    title: Fine-tuning too early
+    tags: [Cost, Quality]
+    scenario: |
+      In week two of a document-classification project, the team starts fine-tuning on 2,000 labeled examples.
+      Three months later the tuned model is beaten by a newer base model with a good prompt, and the tuning
+      pipeline needs re-running for every model update.
+    antipattern: |
+      Fine-tuning is the first resort, before prompt engineering, retrieval, few-shot examples or a
+      proper eval baseline exist.
+    fails: |
+      - **No baseline.** Without an eval of prompted base models, nobody knows whether tuning helped.
+      - **Model churn.** Base models improve every few months. Tuned weights pin you to an aging model and must be redone.
+      - **Data quality.** Small, noisy labelled sets teach the model the noise.
+      - **Hidden operating cost.** Custom-model hosting, provisioned capacity and retraining pipelines add up.
+    diagram:
+      bad: ["Use case", "!Fine-tune first", "No baseline", "Stuck on aging model"]
+      bad_note: "Expensive, unmeasured, quickly obsolete"
+      good: ["Use case", "+Eval set", "Prompt + few-shot", "+RAG / tools", "Fine-tune if gap persists at volume"]
+      good_note: "Each step measured; tuning reserved for proven, durable gaps"
+    solution: |
+      Follow an **optimization ladder** and measure at each rung:
+
+      1. Build the eval set and success threshold.
+      2. Prompting with clear instructions and structured output.
+      3. Few-shot examples, ideally retrieved dynamically from similar labelled cases.
+      4. RAG or tools for knowledge gaps.
+      5. Fine-tune or distill **only** if a persistent behaviour gap remains *and* volume justifies the lifecycle cost. Keep the training pipeline reproducible so it can be re-run on new base models.
+    works: |
+      Most use cases are solved at rungs 2–4, which are cheaper and portable across models. When tuning is
+      justified, it's measured against a strong baseline, so the ROI is real. Reproducible pipelines turn base-model
+      upgrades into routine retraining rather than a rebuild.
+    code: |
+      ladder = [
+          ("zero_shot",   lambda: Pipeline(prompt=P_BASE)),
+          ("few_shot",    lambda: Pipeline(prompt=P_BASE, examples=knn_examples(k=5))),
+          ("rag",         lambda: Pipeline(prompt=P_BASE, examples=knn_examples(5), retriever=kb)),
+      ]
+      for name, build in ladder:
+          score = eval_suite.run(build())
+          report[name] = score
+          if score >= TARGET: break
+      else:
+          if monthly_volume > TUNE_THRESHOLD:
+              tuned = finetune(base=CURRENT_BASE, data=clean(labelled), eval=eval_suite)
+    takeaway: "Fine-tuning is the last rung of the ladder, not the first. Exhaust prompting, examples and retrieval against a baseline before you buy a model lifecycle."
+    followup: "What data volume and quality would you want before fine-tuning?"
+
+  - id: ignoring-latency-budget
+    title: Ignoring latency budgets and serving modes
+    tags: [Latency, Cost]
+    scenario: |
+      A contact-center agent-assist tool takes 11 seconds to suggest a reply. By then the human agent has
+      already answered. Meanwhile, a nightly document-summarization job runs on expensive real-time endpoints.
+    antipattern: |
+      Every workload uses the same synchronous, non-streaming, real-time API pattern, with no latency
+      budget per step and no distinction between interactive and offline jobs.
+    fails: |
+      - **Interactive UX breaks** when time-to-first-token and total latency aren't designed for.
+      - **Sequential chains add up.** Five serial LLM calls of two seconds each is ten seconds.
+      - **Offline jobs overpay** on real-time pricing and compete with interactive traffic for quota.
+    diagram:
+      bad: ["Agent-assist request", "!5 serial LLM calls", "Blocking response", "11 s"]
+      bad_note: "No latency budget; offline jobs share real-time capacity"
+      good: ["Request", "+Parallel calls | Cache hit", "+Small model for fast steps", "+Stream tokens", "TTFT < 1 s"]
+      good_note: "Budget per step; batch API for offline workloads"
+    solution: |
+      Design to an explicit **latency budget**:
+
+      - Set targets per use case (for example TTFT under 800 ms, full response under 4 s for agent-assist).
+      - **Stream** tokens to the UI and start rendering immediately.
+      - **Parallelize** independent calls (retrieval plus classification). Use small models on the critical path.
+      - **Cache**: prompt caching for stable prefixes, and semantic or exact caching for repeated questions.
+      - Move offline work to **batch inference** endpoints, scheduled off-peak.
+      - Track p50/p95/p99 per step in traces.
+    works: |
+      Users perceive streaming responses as fast, and parallelism plus small models cut real latency.
+      Caching removes repeated work. Batch processing cuts offline cost and frees real-time quota for users.
+      Per-step traces show exactly where the budget is spent.
+    code: |
+      async def assist(turn):
+          intent, docs = await asyncio.gather(                    # parallel, not serial
+              small_llm.classify(turn.text),
+              retrieve(turn.text))
+          async for tok in llm.stream(model=pick(intent), context=docs, user=turn.text):
+              await ui.push(tok)                                  # TTFT matters more than total time
+
+      # Offline: batch API, off-peak, much cheaper
+      batch_id = llm.batches.create(requests=[mk_req(d) for d in todays_documents], window="24h")
+    takeaway: "Latency is a design constraint, not a tuning afterthought. Budget it per step, stream, parallelize, cache, and batch whatever isn't interactive."
+    followup: "How would you hit a sub-second target on a pipeline that needs retrieval and generation?"

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluation, Observability &amp; LLMOps · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="active" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part D · Production &amp; Trust</div>
+  <h1><span class="sn">11</span>Evaluation, Observability &amp; LLMOps</h1>
+  <p class="lede">You can&#x27;t manage what you can&#x27;t measure. In AI systems that applies to quality as much as to uptime.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#vibe-checks"><span>11.1</span>Shipping on &quot;vibe checks&quot; with no evaluation suite</a><a href="#e2e-only-evals"><span>11.2</span>Only end-to-end evaluation, nothing per component</a><a href="#no-agent-tracing"><span>11.3</span>No tracing of agent trajectories</a><a href="#uncalibrated-judge"><span>11.4</span>LLM-as-judge without calibration</a><a href="#no-regression-gate"><span>11.5</span>No regression gating in CI/CD</a></div>
+
+<article class="ap" id="vibe-checks">
+  <header class="ap-h">
+    <div class="ap-num">11.1</div>
+    <div>
+      <h2><a href="#vibe-checks">Shipping on &quot;vibe checks&quot; with no evaluation suite</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span><span class="tag t-rel">Reliability</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A procurement assistant is approved after a demo where five stakeholders tried a dozen questions each and
+"it looked good". Two weeks after launch, it's answering 18% of contract-term questions incorrectly.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Quality is judged by manual spot checks. There's no golden dataset, no defined metrics, no thresholds,
+and no record of what was tested.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Small, biased samples.</strong> Demo questions are easy and favourable, not representative.</li>
+<li><strong>No regression detection.</strong> Every prompt, model or data change is a leap of faith.</li>
+<li><strong>No go/no-go criteria.</strong> Launch decisions rest on opinion, not evidence.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 310" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-evals-ops-vibe-checks" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Change</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">A few manual tries</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">&quot;Looks good&quot;</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Production surprises</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No dataset, metrics or thresholds</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="144.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Change</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Golden dataset</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">(versioned)</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Automated metrics</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Threshold gate</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Release</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<path class="dg-loop" d="M864.4,226.0 V246.0 H155.6 V230.0" marker-end="url(#ah-evals-ops-vibe-checks)"/>
+<text class="dg-loop-t" x="510.0" y="241.0" text-anchor="middle" font-size="11.5">Production failures added to the dataset</text>
+<text class="dg-note dg-note-good" x="28" y="279.0" font-size="12.5">Evidence-based release with known quality per segment</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build an <strong>evaluation suite</strong> as a core asset:</p>
+<ul>
+<li><strong>Golden dataset:</strong> 200–1,000 representative cases with expected answers or rubrics, stratified by segment (topic, difficulty, language, risk). Include adversarial and out-of-scope cases.</li>
+<li><strong>Metrics per use case:</strong> correctness, faithfulness, answer relevance, retrieval recall, format adherence, refusal correctness, latency and cost.</li>
+<li><strong>Thresholds</strong> agreed with the business and risk owners, per segment.</li>
+<li><strong>Flywheel:</strong> sample production traffic, label failures, and add them to the dataset.</li>
+<li>Use an eval framework (Ragas, DeepEval, promptfoo, or the evaluation services in Bedrock, Vertex and Foundry) so runs are repeatable.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Quality becomes a number with a trend line, so launch and change decisions are evidence-based.
+Segmenting shows <em>where</em> the system is weak. The production flywheel keeps the dataset representative
+as usage evolves. Over time the eval suite becomes the organization's most valuable AI asset.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">suite</span> <span class="o">=</span> <span class="n">EvalSuite</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"procurement_qa@v7"</span><span class="p">)</span>            <span class="c1"># 640 cases, 9 segments</span>
+<span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span><span class="n">Correctness</span><span class="p">(</span><span class="n">judge</span><span class="o">=</span><span class="n">calibrated_judge</span><span class="p">),</span> <span class="n">Faithfulness</span><span class="p">(),</span> <span class="n">RetrievalRecall</span><span class="p">(</span><span class="n">k</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span>
+           <span class="n">RefusalCorrectness</span><span class="p">(),</span> <span class="n">Latency</span><span class="p">(</span><span class="n">p95_ms</span><span class="o">=</span><span class="mi">4000</span><span class="p">),</span> <span class="n">CostPerAnswer</span><span class="p">(</span><span class="n">max_usd</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)]</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">suite</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">pipeline</span><span class="o">=</span><span class="n">candidate</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="n">metrics</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">seg</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">report</span><span class="o">.</span><span class="n">by_segment</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="k">assert</span> <span class="n">m</span><span class="p">[</span><span class="s2">"correctness"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">THRESHOLDS</span><span class="p">[</span><span class="n">seg</span><span class="p">],</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">seg</span><span class="si">}</span><span class="s2"> below threshold"</span>
+<span class="n">publish</span><span class="p">(</span><span class="n">report</span><span class="p">,</span> <span class="n">compare_to</span><span class="o">=</span><span class="s2">"prod"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>No eval suite, no production. The golden dataset and thresholds are how you turn a demo into a decision.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you build a golden dataset quickly when subject-matter experts have little time?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="e2e-only-evals">
+  <header class="ap-h">
+    <div class="ap-num">11.2</div>
+    <div>
+      <h2><a href="#e2e-only-evals">Only end-to-end evaluation, nothing per component</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>End-to-end accuracy drops from 86% to 79% after a release. The team spends a week arguing whether the
+cause is the new chunker, the reranker, the prompt or the model.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>The only metric is final-answer quality. Retrieval, reranking, tool selection and generation are never
+measured separately.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>No fault isolation.</strong> End-to-end scores show <em>that</em> something broke, not <em>where</em>.</li>
+<li><strong>Misattributed fixes.</strong> Teams tune the prompt when retrieval is the problem.</li>
+<li><strong>Slow iteration.</strong> Every experiment needs the full pipeline.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 438" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-evals-ops-e2e-only-evals" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Pipeline</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Final answer score only</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">&quot;Something got worse&quot;</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-evals-ops-e2e-only-evals)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-evals-ops-e2e-only-evals)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No fault isolation</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="272.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="205.4" font-size="12.5" text-anchor="middle">Retrieval: recall@k</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="259.4" font-size="12.5" text-anchor="middle">Rerank: precision@k</text>
+<rect class="dg-node dg-std" x="84.0" y="286.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="313.4" font-size="12.5" text-anchor="middle">Tools: selection accuracy</text>
+<rect class="dg-node dg-std" x="84.0" y="340.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="367.4" font-size="12.5" text-anchor="middle">Generation: faithfulness</text>
+<rect class="dg-node dg-new" x="379.3" y="259.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="286.4" font-size="12.5" text-anchor="middle">Per-stage dashboard</text>
+<circle class="dg-badge-new" cx="636.7" cy="263.0" r="8"/><text class="dg-badge-t" x="636.7" y="267.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="674.7" y="259.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="286.4" font-size="12.5" text-anchor="middle">Root cause in minutes</text>
+<line class="dg-edge" x1="348.3" y1="282.0" x2="375.3" y2="282.0" marker-end="url(#ah-evals-ops-e2e-only-evals)"/>
+<line class="dg-edge" x1="643.7" y1="282.0" x2="670.7" y2="282.0" marker-end="url(#ah-evals-ops-e2e-only-evals)"/>
+<text class="dg-note dg-note-good" x="28" y="407.0" font-size="12.5">Every stage has its own metric and dataset</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Use <strong>layered evaluation</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Metric</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parsing</td>
+<td>Text and table extraction accuracy</td>
+<td>Golden documents</td>
+</tr>
+<tr>
+<td>Retrieval</td>
+<td>Recall@k, MRR, nDCG</td>
+<td>Query → relevant-chunk labels</td>
+</tr>
+<tr>
+<td>Reranking</td>
+<td>Precision@k</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>Tool use</td>
+<td>Tool-selection and argument accuracy</td>
+<td>Task → expected call</td>
+</tr>
+<tr>
+<td>Generation</td>
+<td>Faithfulness, completeness, format</td>
+<td>Context → answer rubric</td>
+</tr>
+<tr>
+<td>End to end</td>
+<td>Task success, user satisfaction</td>
+<td>Golden cases + production</td>
+</tr>
+</tbody>
+</table>
+<p>Run component evals in CI on every change to that component.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Regressions are localized immediately. Component datasets are cheaper to run than full pipelines, so
+iteration is faster. Teams that own components get their own quality metrics.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">retrieval_eval</span><span class="p">(</span><span class="n">retriever</span><span class="p">,</span> <span class="n">labelled</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">mean</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">retriever</span><span class="p">(</span><span class="n">q</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">q</span><span class="o">.</span><span class="n">relevant</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="o">.</span><span class="n">relevant</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">labelled</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tool_eval</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">cases</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">mean</span><span class="p">(</span><span class="n">agent</span><span class="o">.</span><span class="n">plan</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">task</span><span class="p">)</span><span class="o">.</span><span class="n">first_call</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">c</span><span class="o">.</span><span class="n">expected_tool</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cases</span><span class="p">)</span>
+
+<span class="n">CI_GATES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"retrieval_recall@8"</span><span class="p">:</span> <span class="p">(</span><span class="n">retrieval_eval</span><span class="p">,</span> <span class="mf">0.90</span><span class="p">),</span>
+            <span class="s2">"tool_selection"</span><span class="p">:</span>      <span class="p">(</span><span class="n">tool_eval</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">),</span>
+            <span class="s2">"faithfulness"</span><span class="p">:</span>        <span class="p">(</span><span class="n">faithfulness_eval</span><span class="p">,</span> <span class="mf">0.93</span><span class="p">)}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Evaluate the pipeline the way you&#x27;d test software: unit metrics per stage, integration metrics end to end.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What&#x27;s the minimum labelling effort to get useful retrieval metrics?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-agent-tracing">
+  <header class="ap-h">
+    <div class="ap-num">11.3</div>
+    <div>
+      <h2><a href="#no-agent-tracing">No tracing of agent trajectories</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-comp">Compliance</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A customer complains that the billing agent cancelled their add-on service. The logs show the final
+message, but not which tools were called, with which arguments, on what reasoning.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Only inputs and outputs are logged, if anything. Multi-step agent runs (LLM calls, retrievals, tool
+calls, hand-offs) are invisible.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Undebuggable.</strong> You can't reproduce or understand failures.</li>
+<li><strong>No accountability.</strong> You can't show regulators or customers why an action was taken.</li>
+<li><strong>No optimization data.</strong> Latency and cost per step are unknown.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 384" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-evals-ops-no-agent-tracing" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">User input</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Black-box agent run</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Final output logged</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-evals-ops-no-agent-tracing)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-evals-ops-no-agent-tracing)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No visibility into steps, tools or reasoning</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="259.4" font-size="12.5" text-anchor="middle">Request (trace id)</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="205.4" font-size="12.5" text-anchor="middle">Span: LLM call</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="305.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="259.4" font-size="12.5" text-anchor="middle">Span: retrieval</text>
+<rect class="dg-node dg-std" x="305.5" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="313.4" font-size="12.5" text-anchor="middle">Span: tool call</text>
+<rect class="dg-node dg-new" x="527.0" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="252.1" font-size="12.5" text-anchor="middle">Attributes: tokens, cost,</text>
+<text class="dg-t dg-t-new" x="620.8" y="266.6" font-size="12.5" text-anchor="middle">args</text>
+<circle class="dg-badge-new" cx="710.5" cy="236.0" r="8"/><text class="dg-badge-t" x="710.5" y="240.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Trace store + dashboards</text>
+<line class="dg-edge" x1="274.5" y1="255.0" x2="301.5" y2="255.0" marker-end="url(#ah-evals-ops-no-agent-tracing)"/>
+<line class="dg-edge" x1="496.0" y1="255.0" x2="523.0" y2="255.0" marker-end="url(#ah-evals-ops-no-agent-tracing)"/>
+<line class="dg-edge" x1="717.5" y1="255.0" x2="744.5" y2="255.0" marker-end="url(#ah-evals-ops-no-agent-tracing)"/>
+<text class="dg-note dg-note-good" x="28" y="353.0" font-size="12.5">Every step is a span; every action is attributable and replayable</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Instrument with <strong>distributed tracing for AI</strong>:</p>
+<ul>
+<li>Use <strong>OpenTelemetry</strong> with the GenAI semantic conventions. Each LLM call, retrieval, tool call and agent hand-off is a span within one trace.</li>
+<li>Record model, prompt version, token counts, cost, latency, tool name and arguments (redacted), and outcome.</li>
+<li>Send traces to an LLM-observability backend (Langfuse, Arize Phoenix, LangSmith, Datadog, or the cloud-native tracing in AgentCore, Foundry and Agent Platform).</li>
+<li>Link traces to user feedback and eval scores.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Any decision can be replayed step by step, which turns debugging from guesswork into inspection.
+Auditable action trails satisfy accountability requirements, and per-span cost and latency show
+exactly where to optimize.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace</span>
+<span class="n">tracer</span> <span class="o">=</span> <span class="n">trace</span><span class="o">.</span><span class="n">get_tracer</span><span class="p">(</span><span class="s2">"billing-agent"</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">traced_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">tracer</span><span class="o">.</span><span class="n">start_as_current_span</span><span class="p">(</span><span class="sa">f</span><span class="s2">"tool.</span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"gen_ai.tool.name"</span><span class="p">,</span> <span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"tool.args"</span><span class="p">,</span> <span class="n">redact</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">args</span><span class="p">)))</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tool</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"tool.status"</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">status</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span>
+    <span class="k">return</span> <span class="n">run</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>If you can&#x27;t replay an agent&#x27;s trajectory, you can&#x27;t debug it, defend it or optimize it. Trace every step with OpenTelemetry.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you trace across agents running in different services or clouds?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="uncalibrated-judge">
+  <header class="ap-h">
+    <div class="ap-num">11.4</div>
+    <div>
+      <h2><a href="#uncalibrated-judge">LLM-as-judge without calibration</a></h2>
+      <div class="tags"><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An LLM judge rates 94% of a legal assistant's answers as correct. A lawyer reviews 100 samples and
+agrees with only 71% of them. The judge prefers longer, confident answers.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>An LLM grades outputs on vague 1–10 scales with no rubric, and its scores are reported as ground truth
+without ever being compared to expert judgment.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Known judge biases:</strong> verbosity, position, self-preference (favouring its own model family's style).</li>
+<li><strong>Vague criteria</strong> produce noisy, unrepeatable scores.</li>
+<li><strong>False confidence.</strong> Inflated scores mislead launch decisions.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-evals-ops-uncalibrated-judge" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Answers</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Judge: &quot;rate 1–10&quot;</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">94% &quot;good&quot;</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Wrong launch decision</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Unvalidated judge with biased scoring</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Answers</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Binary rubric</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">criteria</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Judge (different</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">model family)</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Agreement vs.</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">experts ≥ target</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Trusted score</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-evals-ops-uncalibrated-judge)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Judge validated like any other classifier</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p><strong>Validate the judge like a model</strong>:</p>
+<ul>
+<li>Write specific, mostly <strong>binary rubric questions</strong> ("Does the answer state the notice period?", "Is every claim supported by a cited source?").</li>
+<li>Have experts label 100–300 samples. Measure judge–expert agreement (accuracy, Cohen's kappa) and iterate on the rubric until it meets target.</li>
+<li>Use a judge from a different model family where possible. Randomize answer order in pairwise comparisons.</li>
+<li>Re-calibrate periodically and whenever the judge model changes.</li>
+<li>Keep humans reviewing a sample of high-risk segments.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Binary criteria reduce noise and make failures specific. Measured agreement turns "the judge says 94%"
+into "the judge agrees with experts 92% of the time", which is defensible. Ongoing calibration keeps
+automated evaluation trustworthy as models change.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">RUBRIC</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"States the governing clause number"</span><span class="p">,</span> <span class="s2">"Every factual claim has a supporting citation"</span><span class="p">,</span>
+          <span class="s2">"Does not give legal advice beyond the document"</span><span class="p">,</span> <span class="s2">"Mentions applicable exceptions"</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">judge</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">sources</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">judge_llm</span><span class="o">.</span><span class="n">yes_no</span><span class="p">(</span><span class="n">criterion</span><span class="o">=</span><span class="n">c</span><span class="p">,</span> <span class="n">answer</span><span class="o">=</span><span class="n">answer</span><span class="p">,</span> <span class="n">sources</span><span class="o">=</span><span class="n">sources</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">RUBRIC</span><span class="p">}</span>
+
+<span class="n">expert</span> <span class="o">=</span> <span class="n">load_labels</span><span class="p">(</span><span class="s2">"legal_expert_200.jsonl"</span><span class="p">)</span>
+<span class="n">agree</span> <span class="o">=</span> <span class="n">cohen_kappa</span><span class="p">([</span><span class="nb">all</span><span class="p">(</span><span class="n">judge</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">answer</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">sources</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">())</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">expert</span><span class="p">],</span>
+                    <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">expert_pass</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">expert</span><span class="p">])</span>
+<span class="k">assert</span> <span class="n">agree</span> <span class="o">&gt;=</span> <span class="mf">0.75</span><span class="p">,</span> <span class="s2">"judge not calibrated, fix rubric before trusting scores"</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>An LLM judge is a classifier. Give it a binary rubric, measure its agreement with experts, and re-calibrate it before trusting its numbers.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>When would you use pairwise comparison instead of absolute scoring?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-regression-gate">
+  <header class="ap-h">
+    <div class="ap-num">11.5</div>
+    <div>
+      <h2><a href="#no-regression-gate">No regression gating in CI/CD</a></h2>
+      <div class="tags"><span class="tag t-rel">Reliability</span><span class="tag t-quality">Quality</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A provider retires a model version and the team switches to the successor "since it's newer". Extraction
+accuracy on handwritten forms drops 12%, and nobody notices for a month.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Prompt, model, retrieval and dependency changes deploy without automated quality checks. Model
+upgrades are treated as safe by default.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Silent regressions</strong> from any change, including the provider's.</li>
+<li><strong>Fear of change.</strong> Teams avoid improvements because they can't verify them.</li>
+<li><strong>Forced migrations</strong> (deprecations) become emergencies.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-evals-ops-no-regression-gate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">PR: prompt / model change</text>
+<rect class="dg-node dg-std" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Unit tests</text>
+<rect class="dg-node dg-bad" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Deploy</text>
+<circle class="dg-badge-bad" cx="710.5" cy="58.0" r="8"/><text class="dg-badge-t" x="710.5" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Regression found by users</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">No AI quality gate</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="140.8" y="205.4" font-size="12.5" text-anchor="middle">PR</text>
+<rect class="dg-node dg-std" x="231.7" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="288.5" y="205.4" font-size="12.5" text-anchor="middle">Unit tests</text>
+<rect class="dg-node dg-new" x="379.3" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="436.2" y="198.1" font-size="12.5" text-anchor="middle">Eval suite</text>
+<text class="dg-t dg-t-new" x="436.2" y="212.6" font-size="12.5" text-anchor="middle">(smoke + full)</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="583.8" y="198.1" font-size="12.5" text-anchor="middle">Compare vs.</text>
+<text class="dg-t dg-t-new" x="583.8" y="212.6" font-size="12.5" text-anchor="middle">prod baseline</text>
+<circle class="dg-badge-new" cx="636.7" cy="182.0" r="8"/><text class="dg-badge-t" x="636.7" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="674.7" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="731.5" y="198.1" font-size="12.5" text-anchor="middle">Canary + online</text>
+<text class="dg-t dg-t-new" x="731.5" y="212.6" font-size="12.5" text-anchor="middle">evals</text>
+<circle class="dg-badge-new" cx="784.3" cy="182.0" r="8"/><text class="dg-badge-t" x="784.3" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="822.3" y="178.0" width="113.7" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="879.2" y="205.4" font-size="12.5" text-anchor="middle">Promote</text>
+<line class="dg-edge" x1="200.7" y1="201.0" x2="227.7" y2="201.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="348.3" y1="201.0" x2="375.3" y2="201.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="643.7" y1="201.0" x2="670.7" y2="201.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<line class="dg-edge" x1="791.3" y1="201.0" x2="818.3" y2="201.0" marker-end="url(#ah-evals-ops-no-regression-gate)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Quality regressions block the release</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Add <strong>AI quality gates</strong> to the delivery pipeline:</p>
+<ul>
+<li><strong>PR stage:</strong> fast smoke eval (50–100 cases) on any change to prompts, models, retrieval or tool definitions.</li>
+<li><strong>Pre-release:</strong> full eval suite compared against the production baseline, with per-segment thresholds and tolerance for noise.</li>
+<li><strong>Canary:</strong> route 5% of traffic, monitor online metrics (feedback, groundedness, escalations), and roll back automatically.</li>
+<li><strong>Model lifecycle:</strong> track provider deprecation dates, and pre-evaluate successors well before forced migration.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Regressions are caught before users see them. Teams can ship improvements confidently because the
+safety net exists. Deprecations become planned upgrades with evidence instead of emergencies.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># .github/workflows/ai-quality.yml (excerpt) runs on changes to prompts/, retrieval/, models.yaml</span>
+<span class="c1">#   - run: python -m evals.run --suite smoke --candidate $GITHUB_SHA --baseline prod</span>
+<span class="c1">#   - run: python -m evals.gate --max-drop 0.01 --segments all</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gate</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">baseline</span><span class="p">,</span> <span class="n">max_drop</span><span class="o">=</span><span class="mf">0.01</span><span class="p">):</span>
+    <span class="n">failures</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">candidate</span><span class="o">.</span><span class="n">segments</span>
+                <span class="k">if</span> <span class="n">candidate</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">score</span> <span class="o">&lt;</span> <span class="n">baseline</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">score</span> <span class="o">-</span> <span class="n">max_drop</span> <span class="o">-</span> <span class="n">noise_margin</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">failures</span><span class="p">:</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Blocked: regression in </span><span class="si">{</span><span class="n">failures</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Every prompt, model and retrieval change is a release. Gate it with evals in CI, canary it, and plan model deprecations ahead.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you handle eval noise so the gate isn&#x27;t flaky?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="protocols.html">← 10. Protocols (MCP &amp; A2A)</a><a class="next" href="security-gov.html">12. Security &amp; Governance →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Leadership Anti-Patterns · Applied AI Anti-Patterns</title>
+<meta name="description" content="A field guide to the design mistakes that stall enterprise AI programs, why they fail, and the architectures that replace them. Covers retrieval, models, agents, operations, governance, the major cloud platforms, cost, and harness engineering.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/code.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="Menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="index.html"><span class="logo">◆</span>Applied AI Anti-Patterns</a>
+  <div class="search"><input id="q" type="search" placeholder="Search anti-patterns…" autocomplete="off"><div id="qr" class="qr"></div></div>
+  <a class="toplink" href="catalog.html">Catalog</a>
+  <button class="theme" aria-label="Toggle theme" onclick="toggleTheme()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+</header>
+<div class="layout">
+  <aside class="side"><nav class="nav">
+<div class="nav-part">Part A · Retrieval &amp; Knowledge</div>
+<a class="" href="ingestion.html"><span class="nn">1</span>Ingestion &amp; Chunking</a>
+<a class="" href="embeddings.html"><span class="nn">2</span>Embeddings &amp; Vector Stores</a>
+<a class="" href="rag-core.html"><span class="nn">3</span>Retrieval &amp; RAG Core</a>
+<a class="" href="advanced-rag.html"><span class="nn">4</span>Advanced RAG</a>
+<div class="nav-part">Part B · Model &amp; Prompt Layer</div>
+<a class="" href="prompts.html"><span class="nn">5</span>Prompt Engineering</a>
+<a class="" href="models.html"><span class="nn">6</span>Model Selection &amp; Routing</a>
+<div class="nav-part">Part C · Agentic AI</div>
+<a class="" href="agents.html"><span class="nn">7</span>Agent Design &amp; Tool Use</a>
+<a class="" href="multi-agent.html"><span class="nn">8</span>Multi-Agent Systems</a>
+<a class="" href="memory.html"><span class="nn">9</span>Memory &amp; Context</a>
+<a class="" href="protocols.html"><span class="nn">10</span>Protocols (MCP &amp; A2A)</a>
+<div class="nav-part">Part D · Production &amp; Trust</div>
+<a class="" href="evals-ops.html"><span class="nn">11</span>Evaluation &amp; LLMOps</a>
+<a class="" href="security-gov.html"><span class="nn">12</span>Security &amp; Governance</a>
+<div class="nav-part">Part E · Platforms &amp; Economics</div>
+<a class="" href="hyperscalers.html"><span class="nn">13</span>Hyperscaler Platforms</a>
+<a class="" href="local-vs-cloud.html"><span class="nn">14</span>Local LLMs vs Cloud Cost</a>
+<div class="nav-part">Part F · Harness Engineering</div>
+<a class="" href="harness.html"><span class="nn">15</span>Harness Engineering</a>
+<div class="nav-part">Part G · Claude &amp; AI Tools</div>
+<a class="" href="ai-tools.html"><span class="nn">16</span>Claude &amp; AI Tools</a>
+<div class="nav-part">Part H · Leadership &amp; Reference Architecture</div>
+<a class="active" href="leadership.html"><span class="nn">17</span>Leadership Anti-Patterns</a>
+<a class="" href="capstone.html"><span class="nn">18</span>Reference Architecture</a>
+</nav></aside>
+  <main class="main">
+<div class="hero-s">
+  <div class="crumb">Part H · Leadership &amp; Reference Architecture</div>
+  <h1><span class="sn">17</span>AI Leadership Anti-Patterns</h1>
+  <p class="lede">Most enterprise AI value is lost in operating models, not architectures. These are the organizational patterns that keep good technology from reaching production.</p>
+  <span class="pill">5 anti-patterns</span>
+</div>
+
+<div class="toc"><div class="toc-h">In this section</div><a href="#poc-purgatory"><span>17.1</span>Proof-of-concept purgatory</a><a href="#tech-first-use-cases"><span>17.2</span>Technology-first use-case selection</a><a href="#no-platform-team"><span>17.3</span>Every team builds its own AI stack</a><a href="#accuracy-not-kpis"><span>17.4</span>Measuring success by model accuracy instead of business KPIs</a><a href="#ignoring-change-management"><span>17.5</span>Ignoring change management and workforce impact</a></div>
+
+<article class="ap" id="poc-purgatory">
+  <header class="ap-h">
+    <div class="ap-num">17.1</div>
+    <div>
+      <h2><a href="#poc-purgatory">Proof-of-concept purgatory</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A bank has run 60 GenAI proofs of concept in 18 months. Four reached production. Each PoC had its own
+stack, no production owner, and success criteria of "the demo worked".</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>PoCs are funded as innovation theatre: easy to start, no path to production, no exit criteria, and no
+production-grade requirements (security, data, evals) in scope.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Demos skip the hard 80%:</strong> data access, security review, evaluation, integration and change management.</li>
+<li><strong>No owner or budget for production.</strong> PoCs end and nothing happens.</li>
+<li><strong>Fragmented stacks</strong> make each success a one-off.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 330" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-poc-purgatory" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Idea</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Isolated PoC (own stack)</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">&quot;Demo worked&quot;</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">No production path</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Many starts, few finishes</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="164.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="232.4" font-size="12.5" text-anchor="middle">Prioritized use case</text>
+<rect class="dg-node dg-new" x="305.5" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="225.1" font-size="12.5" text-anchor="middle">Production-intent pilot</text>
+<text class="dg-t dg-t-new" x="399.2" y="239.6" font-size="12.5" text-anchor="middle">on the platform</text>
+<circle class="dg-badge-new" cx="489.0" cy="209.0" r="8"/><text class="dg-badge-t" x="489.0" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="205.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="225.1" font-size="12.5" text-anchor="middle">Exit criteria: evals,</text>
+<text class="dg-t dg-t-new" x="620.8" y="239.6" font-size="12.5" text-anchor="middle">KPIs, risk sign-off</text>
+<circle class="dg-badge-new" cx="710.5" cy="209.0" r="8"/><text class="dg-badge-t" x="710.5" y="213.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Scale</text>
+<rect class="dg-node dg-std" x="748.5" y="232.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="259.4" font-size="12.5" text-anchor="middle">Stop</text>
+<line class="dg-edge" x1="274.5" y1="228.0" x2="301.5" y2="228.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<line class="dg-edge" x1="496.0" y1="228.0" x2="523.0" y2="228.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<line class="dg-edge" x1="717.5" y1="228.0" x2="744.5" y2="228.0" marker-end="url(#ah-leadership-poc-purgatory)"/>
+<text class="dg-note dg-note-good" x="28" y="299.0" font-size="12.5">Pilots designed to graduate, or to stop quickly</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Replace PoCs with <strong>production-intent pilots</strong>:</p>
+<ul>
+<li>Entry: business owner, value hypothesis with a KPI baseline, data access confirmed, risk tier assigned.</li>
+<li>Build on the <strong>shared platform</strong> (gateway, guardrails, evals, observability) from day one.</li>
+<li>Exit criteria agreed upfront: eval thresholds, KPI movement in a controlled pilot, security and risk sign-off.</li>
+<li><strong>Stage gates</strong> with a scale/stop decision at 8–12 weeks, and production budget pre-allocated for winners.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Every pilot exercises the real path to production, so successes can scale immediately. Clear exit
+criteria kill weak ideas early and free capacity, and the shared platform makes each new pilot cheaper than the last.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">PILOT_GATES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"entry"</span><span class="p">:</span>   <span class="p">[</span><span class="s2">"business_owner"</span><span class="p">,</span> <span class="s2">"kpi_baseline"</span><span class="p">,</span> <span class="s2">"data_access_approved"</span><span class="p">,</span> <span class="s2">"risk_tier"</span><span class="p">],</span>
+    <span class="s2">"week_6"</span><span class="p">:</span>  <span class="p">[</span><span class="s2">"eval_suite_passing"</span><span class="p">,</span> <span class="s2">"security_review_started"</span><span class="p">,</span> <span class="s2">"pilot_users_onboarded"</span><span class="p">],</span>
+    <span class="s2">"week_12"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"kpi_delta &gt;= target"</span><span class="p">,</span> <span class="s2">"risk_signoff"</span><span class="p">,</span> <span class="s2">"run_cost_per_unit &lt;= budget"</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">decision</span> <span class="o">=</span> <span class="s2">"scale"</span> <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">check</span><span class="p">(</span><span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">PILOT_GATES</span><span class="p">[</span><span class="s2">"week_12"</span><span class="p">])</span> <span class="k">else</span> <span class="s2">"stop_or_pivot"</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Run pilots that are designed to graduate: production platform, agreed exit criteria, and a scale-or-stop decision on a fixed date.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you triage a portfolio of 60 stalled PoCs?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="tech-first-use-cases">
+  <header class="ap-h">
+    <div class="ap-num">17.2</div>
+    <div>
+      <h2><a href="#tech-first-use-cases">Technology-first use-case selection</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span><span class="tag t-cost">Cost</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>An executive asks "Where can we use agents?" Teams respond with agent ideas for low-value, low-volume
+processes, and the portfolio produces impressive demos with negligible financial impact.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Starting from a technology ("we need an agent strategy") and searching for problems, rather than
+starting from value pools and constraints.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Low business impact:</strong> use cases chosen for novelty, not value.</li>
+<li><strong>Feasibility blind spots:</strong> data readiness and risk are discovered late.</li>
+<li><strong>Loss of sponsor confidence</strong> when results don't move P&amp;L metrics.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-tech-first-use-cases" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">&quot;We need agents&quot;</text>
+<rect class="dg-node dg-bad" x="379.3" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="81.4" font-size="12.5" text-anchor="middle">Find problems to fit</text>
+<circle class="dg-badge-bad" cx="636.7" cy="58.0" r="8"/><text class="dg-badge-t" x="636.7" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="81.4" font-size="12.5" text-anchor="middle">Novel demos, low value</text>
+<line class="dg-edge" x1="348.3" y1="77.0" x2="375.3" y2="77.0" marker-end="url(#ah-leadership-tech-first-use-cases)"/>
+<line class="dg-edge" x1="643.7" y1="77.0" x2="670.7" y2="77.0" marker-end="url(#ah-leadership-tech-first-use-cases)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Solution looking for a problem</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="198.1" font-size="12.5" text-anchor="middle">Value pools (cost,</text>
+<text class="dg-t dg-t-std" x="177.8" y="212.6" font-size="12.5" text-anchor="middle">revenue, risk)</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="198.1" font-size="12.5" text-anchor="middle">Score: value ×</text>
+<text class="dg-t dg-t-new" x="399.2" y="212.6" font-size="12.5" text-anchor="middle">feasibility × risk</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="620.8" y="198.1" font-size="12.5" text-anchor="middle">Pick the right AI pattern</text>
+<text class="dg-t dg-t-new" x="620.8" y="212.6" font-size="12.5" text-anchor="middle">per use case</text>
+<circle class="dg-badge-new" cx="710.5" cy="182.0" r="8"/><text class="dg-badge-t" x="710.5" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="205.4" font-size="12.5" text-anchor="middle">Prioritized roadmap</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-leadership-tech-first-use-cases)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-leadership-tech-first-use-cases)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-leadership-tech-first-use-cases)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Problem-first portfolio with the simplest effective technique</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Run a <strong>value-led portfolio process</strong>:</p>
+<ul>
+<li>Map value pools by function (process volumes, cost per transaction, error costs, revenue levers).</li>
+<li>Score candidates on <strong>value</strong>, <strong>feasibility</strong> (data readiness, integration, skills) and <strong>risk</strong> (regulatory tier, reversibility).</li>
+<li>Choose the <strong>simplest effective technique</strong> for each: rules, classical ML, RAG, workflow plus LLM, or agent.</li>
+<li>Balance the portfolio between quick wins and strategic bets, and review quarterly.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Investment flows to measurable value, and feasibility and risk are known before build. Matching
+technique to problem avoids over-engineering, which keeps sponsors confident and funding flowing.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">priority</span><span class="p">(</span><span class="n">uc</span><span class="p">):</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">uc</span><span class="o">.</span><span class="n">annual_volume</span> <span class="o">*</span> <span class="n">uc</span><span class="o">.</span><span class="n">unit_cost_saved</span> <span class="o">+</span> <span class="n">uc</span><span class="o">.</span><span class="n">revenue_uplift</span>
+    <span class="n">feasibility</span> <span class="o">=</span> <span class="n">mean</span><span class="p">([</span><span class="n">uc</span><span class="o">.</span><span class="n">data_readiness</span><span class="p">,</span> <span class="n">uc</span><span class="o">.</span><span class="n">integration_ease</span><span class="p">,</span> <span class="n">uc</span><span class="o">.</span><span class="n">team_skill</span><span class="p">])</span>        <span class="c1"># 0–1</span>
+    <span class="n">risk_penalty</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"low"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"medium"</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span> <span class="s2">"high"</span><span class="p">:</span> <span class="mf">0.6</span><span class="p">}[</span><span class="n">uc</span><span class="o">.</span><span class="n">risk_tier</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">value</span> <span class="o">*</span> <span class="n">feasibility</span> <span class="o">*</span> <span class="n">risk_penalty</span>
+
+<span class="n">roadmap</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">priority</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="mi">12</span><span class="p">]</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Start from value pools, not technology. Score by value, feasibility and risk, then use the simplest technique that works.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>What would a 6-week use-case discovery look like at a new client?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="no-platform-team">
+  <header class="ap-h">
+    <div class="ap-num">17.3</div>
+    <div>
+      <h2><a href="#no-platform-team">Every team builds its own AI stack</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-scale">Scale</span><span class="tag t-sec">Security</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>Twelve product teams each build their own RAG pipeline, prompt management, guardrails and logging.
+Security reviews take months because every stack is different, and a vulnerability fix has to be applied twelve times.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>No shared AI platform. Each team re-solves the same infrastructure problems, with inconsistent
+quality and controls.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Duplicated cost and effort</strong> on undifferentiated plumbing.</li>
+<li><strong>Inconsistent controls</strong> and slow, bespoke security reviews.</li>
+<li><strong>No economies of scale</strong> in evaluation, observability, vendor commitments or skills.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 600" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-no-platform-team" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="218.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="81.4" font-size="12.5" text-anchor="middle">Team 1</text>
+<rect class="dg-node dg-std" x="84.0" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="135.4" font-size="12.5" text-anchor="middle">Team 2</text>
+<rect class="dg-node dg-std" x="84.0" y="162.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="214.7" y="189.4" font-size="12.5" text-anchor="middle">Team 3</text>
+<rect class="dg-node dg-bad" x="379.3" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="135.4" font-size="12.5" text-anchor="middle">Own RAG, guardrails, logging each</text>
+<circle class="dg-badge-bad" cx="636.7" cy="112.0" r="8"/><text class="dg-badge-t" x="636.7" y="116.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="674.7" y="108.0" width="261.3" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="805.3" y="135.4" font-size="12.5" text-anchor="middle">12× effort, uneven controls</text>
+<line class="dg-edge" x1="348.3" y1="131.0" x2="375.3" y2="131.0" marker-end="url(#ah-leadership-no-platform-team)"/>
+<line class="dg-edge" x1="643.7" y1="131.0" x2="670.7" y2="131.0" marker-end="url(#ah-leadership-no-platform-team)"/>
+<text class="dg-note dg-note-bad" x="28" y="229.0" font-size="12.5">Every team rebuilds the platform</text>
+<rect class="dg-band dg-band-good" x="8" y="256.0" width="944" height="326.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="276.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="394.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="421.4" font-size="12.5" text-anchor="middle">Product teams</text>
+<rect class="dg-node dg-new" x="305.5" y="394.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="421.4" font-size="12.5" text-anchor="middle">AI platform (paved road)</text>
+<circle class="dg-badge-new" cx="489.0" cy="398.0" r="8"/><text class="dg-badge-t" x="489.0" y="402.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="286.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="313.4" font-size="12.5" text-anchor="middle">Gateway</text>
+<rect class="dg-node dg-std" x="527.0" y="340.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="367.4" font-size="12.5" text-anchor="middle">Retrieval service</text>
+<rect class="dg-node dg-std" x="527.0" y="394.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="421.4" font-size="12.5" text-anchor="middle">Eval harness</text>
+<rect class="dg-node dg-std" x="527.0" y="448.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="475.4" font-size="12.5" text-anchor="middle">Observability</text>
+<rect class="dg-node dg-std" x="527.0" y="502.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="529.4" font-size="12.5" text-anchor="middle">Guardrails</text>
+<rect class="dg-node dg-new" x="748.5" y="394.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="414.1" font-size="12.5" text-anchor="middle">Center of excellence:</text>
+<text class="dg-t dg-t-new" x="842.2" y="428.6" font-size="12.5" text-anchor="middle">standards + enablement</text>
+<circle class="dg-badge-new" cx="932.0" cy="398.0" r="8"/><text class="dg-badge-t" x="932.0" y="402.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="417.0" x2="301.5" y2="417.0" marker-end="url(#ah-leadership-no-platform-team)"/>
+<line class="dg-edge" x1="496.0" y1="417.0" x2="523.0" y2="417.0" marker-end="url(#ah-leadership-no-platform-team)"/>
+<line class="dg-edge" x1="717.5" y1="417.0" x2="744.5" y2="417.0" marker-end="url(#ah-leadership-no-platform-team)"/>
+<text class="dg-note dg-note-good" x="28" y="569.0" font-size="12.5">Shared paved road; product teams focus on use cases</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Establish an <strong>AI platform team and a "paved road"</strong>:</p>
+<ul>
+<li>Platform capabilities: model gateway (routing, metering, guardrails), retrieval and ingestion services, prompt registry, evaluation harness, tracing, agent runtime, MCP registry, identity integration.</li>
+<li><strong>Pre-approved patterns</strong> with security sign-off already done, so teams using the paved road get fast-track reviews.</li>
+<li>A <strong>center of excellence</strong> for standards, reusable assets, training and architecture review.</li>
+<li>Measure platform success by <strong>time-to-production</strong> and adoption, not by features shipped.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Teams ship faster because the hard, common parts are solved once. Security and risk review the
+platform once and the patterns many times. Costs fall through shared capacity and vendor leverage.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="c1"># Paved road: a new use case is mostly configuration on shared services</span>
+<span class="n">app</span> <span class="o">=</span> <span class="n">PlatformApp</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"claims-summary"</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="s2">"claims-ops"</span><span class="p">,</span> <span class="n">risk_tier</span><span class="o">=</span><span class="s2">"medium"</span><span class="p">,</span>
+    <span class="n">model_policy</span><span class="o">=</span><span class="s2">"mid-tier-default"</span><span class="p">,</span> <span class="n">guardrails</span><span class="o">=</span><span class="s2">"baseline+pii"</span><span class="p">,</span>
+    <span class="n">retrieval</span><span class="o">=</span><span class="n">platform</span><span class="o">.</span><span class="n">retrieval</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="s2">"claims-kb"</span><span class="p">,</span> <span class="n">acl</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="n">evals</span><span class="o">=</span><span class="n">platform</span><span class="o">.</span><span class="n">evals</span><span class="p">(</span><span class="n">suite</span><span class="o">=</span><span class="s2">"claims_summary_v1"</span><span class="p">,</span> <span class="n">gate</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+    <span class="n">tracing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">budget_usd_month</span><span class="o">=</span><span class="mi">4000</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">deploy</span><span class="p">(</span><span class="n">env</span><span class="o">=</span><span class="s2">"pilot"</span><span class="p">)</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Build the paved road once. A shared AI platform turns every new use case into configuration plus domain work, and makes security reviews fast.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How do you staff and fund an AI platform team?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="accuracy-not-kpis">
+  <header class="ap-h">
+    <div class="ap-num">17.4</div>
+    <div>
+      <h2><a href="#accuracy-not-kpis">Measuring success by model accuracy instead of business KPIs</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A document-processing program reports 96% extraction accuracy to the board. Finance asks how much
+processing cost fell, and nobody knows. The manual team is the same size because exceptions still go to humans.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>Success is defined by technical metrics (accuracy, F1, latency) without connecting them to business
+outcomes, baselines or process change.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Technical success, business failure:</strong> accuracy gains don't automatically change cost or revenue.</li>
+<li><strong>No baseline,</strong> so impact can't be shown.</li>
+<li><strong>Process unchanged:</strong> humans still do the same work around the AI.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-accuracy-not-kpis" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Model</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">96% accuracy reported</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Process unchanged</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">No P&amp;L impact</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Technical metrics in isolation</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="205.4" font-size="12.5" text-anchor="middle">Business KPI baseline</text>
+<rect class="dg-node dg-new" x="305.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="399.2" y="191.8" font-size="11" text-anchor="middle">Process redesign</text>
+<text class="dg-t dg-t-new" x="399.2" y="204.8" font-size="11" text-anchor="middle">(straight-through +</text>
+<text class="dg-t dg-t-new" x="399.2" y="217.8" font-size="11" text-anchor="middle">exceptions)</text>
+<circle class="dg-badge-new" cx="489.0" cy="182.0" r="8"/><text class="dg-badge-t" x="489.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="527.0" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="205.4" font-size="12.5" text-anchor="middle">Model + harness metrics</text>
+<rect class="dg-node dg-new" x="748.5" y="178.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="842.2" y="198.1" font-size="12.5" text-anchor="middle">KPI tracking (cost /</text>
+<text class="dg-t dg-t-new" x="842.2" y="212.6" font-size="12.5" text-anchor="middle">case, cycle time, NPS)</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="274.5" y1="201.0" x2="301.5" y2="201.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<line class="dg-edge" x1="496.0" y1="201.0" x2="523.0" y2="201.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<line class="dg-edge" x1="717.5" y1="201.0" x2="744.5" y2="201.0" marker-end="url(#ah-leadership-accuracy-not-kpis)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Value tree links model metrics to P&amp;L</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build a <strong>value tree</strong>:</p>
+<ul>
+<li><strong>Business KPI:</strong> cost per case, cycle time, revenue per rep, loss ratio, CSAT.</li>
+<li><strong>Operational drivers:</strong> straight-through-processing rate, handling time, exception rate.</li>
+<li><strong>AI metrics:</strong> accuracy, confidence calibration, latency, cost per call.</li>
+</ul>
+<p>Baseline the KPIs before launch. Redesign the process so AI changes work allocation (for example,
+auto-approve high-confidence cases and route only exceptions). Report all three levels together.</p></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Leadership sees AI performance in financial terms, and technical teams see which model improvements
+actually move the business. Process redesign is where the value is realized.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">value_tree</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"cost_per_invoice"</span><span class="p">:</span>      <span class="p">{</span><span class="s2">"baseline"</span><span class="p">:</span> <span class="mf">4.10</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">:</span> <span class="mf">1.80</span><span class="p">},</span>
+    <span class="s2">"straight_through_rate"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"baseline"</span><span class="p">:</span> <span class="mf">0.00</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">:</span> <span class="mf">0.70</span><span class="p">},</span>     <span class="c1"># driver</span>
+    <span class="s2">"field_accuracy"</span><span class="p">:</span>        <span class="p">{</span><span class="s2">"baseline"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">:</span> <span class="mf">0.97</span><span class="p">},</span>     <span class="c1"># AI metric</span>
+    <span class="s2">"confidence_calibration_ece"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"target"</span><span class="p">:</span> <span class="s2">"&lt; 0.05"</span><span class="p">},</span>              <span class="c1"># enables auto-approval</span>
+<span class="p">}</span>
+<span class="n">auto_approve</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">doc</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">min_field_confidence</span> <span class="o">&gt;=</span> <span class="mf">0.95</span> <span class="ow">and</span> <span class="n">doc</span><span class="o">.</span><span class="n">vendor</span> <span class="ow">in</span> <span class="n">TRUSTED_VENDORS</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Accuracy is an input, not an outcome. Tie model metrics to business KPIs through a value tree, and redesign the process to capture the value.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you report AI value to a board?</p></div>
+  </section>
+</article>
+
+<article class="ap" id="ignoring-change-management">
+  <header class="ap-h">
+    <div class="ap-num">17.5</div>
+    <div>
+      <h2><a href="#ignoring-change-management">Ignoring change management and workforce impact</a></h2>
+      <div class="tags"><span class="tag t-adopt">Adoption</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>A contact center deploys an excellent agent-assist tool. Agents distrust it, fear it's monitoring them
+for headcount cuts, and ignore suggestions. Usage falls to 20% within two months.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p>AI deployment is treated as a technology project. Users aren't involved in design, roles and
+incentives aren't updated, and concerns aren't addressed.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Distrust and passive resistance</strong> regardless of tool quality.</li>
+<li><strong>Misaligned incentives:</strong> metrics still reward old behaviours.</li>
+<li><strong>Missed design insight</strong> from frontline users.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-leadership-ignoring-change-management" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="177.8" y="81.4" font-size="12.5" text-anchor="middle">Great tool</text>
+<rect class="dg-node dg-bad" x="305.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="399.2" y="81.4" font-size="12.5" text-anchor="middle">Deployed to users</text>
+<circle class="dg-badge-bad" cx="489.0" cy="58.0" r="8"/><text class="dg-badge-t" x="489.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="527.0" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="620.8" y="81.4" font-size="12.5" text-anchor="middle">Distrust, low usage</text>
+<rect class="dg-node dg-std" x="748.5" y="54.0" width="187.5" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="842.2" y="81.4" font-size="12.5" text-anchor="middle">Value not realized</text>
+<line class="dg-edge" x1="274.5" y1="77.0" x2="301.5" y2="77.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<line class="dg-edge" x1="496.0" y1="77.0" x2="523.0" y2="77.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<line class="dg-edge" x1="717.5" y1="77.0" x2="744.5" y2="77.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Technology without people change</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="198.1" font-size="12.5" text-anchor="middle">Co-design with</text>
+<text class="dg-t dg-t-std" x="155.6" y="212.6" font-size="12.5" text-anchor="middle">users</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Clear narrative +</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">role impact</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="198.1" font-size="12.5" text-anchor="middle">Training +</text>
+<text class="dg-t dg-t-new" x="510.0" y="212.6" font-size="12.5" text-anchor="middle">champions</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="205.4" font-size="12.5" text-anchor="middle">Updated incentives</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-std" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">Sustained adoption</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-leadership-ignoring-change-management)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">People, process and technology change together</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><ul>
+<li><strong>Co-design</strong> with frontline users, using their workflows and their language.</li>
+<li>Communicate a clear <strong>narrative</strong>: what changes, what doesn't, how roles evolve, and how data is (and isn't) used.</li>
+<li><strong>Training and champions</strong> in each team, with feedback loops into the product backlog.</li>
+<li>Update <strong>KPIs and incentives</strong> to reward effective AI-assisted work.</li>
+<li>Engage HR, works councils and unions early where relevant.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Users trust tools they helped shape and understand. Aligned incentives make usage rational, and
+feedback loops keep improving the tool, which increases trust further.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="n">adoption_dashboard</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"suggestion_acceptance_rate"</span><span class="p">:</span> <span class="n">by_team</span><span class="p">(</span><span class="n">accepted</span> <span class="o">/</span> <span class="n">shown</span><span class="p">),</span>
+    <span class="s2">"trust_score_survey"</span><span class="p">:</span> <span class="n">quarterly_survey</span><span class="p">(</span><span class="s2">"I trust the assistant's suggestions"</span><span class="p">),</span>
+    <span class="s2">"feedback_items_closed"</span><span class="p">:</span> <span class="n">backlog</span><span class="o">.</span><span class="n">closed</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">"user-feedback"</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="s2">"month"</span><span class="p">),</span>
+    <span class="s2">"handle_time_delta"</span><span class="p">:</span> <span class="n">compare</span><span class="p">(</span><span class="n">handle_time</span><span class="p">,</span> <span class="n">cohort</span><span class="o">=</span><span class="s2">"assisted"</span><span class="p">,</span> <span class="n">control</span><span class="o">=</span><span class="s2">"unassisted"</span><span class="p">),</span>
+<span class="p">}</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>AI adoption is a people change. Co-design, communicate, train, and realign incentives, or the best tool goes unused.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>How would you address workforce concerns in a unionized environment?</p></div>
+  </section>
+</article>
+
+<div class="pn"><a class="prev" href="ai-tools.html">← 16. Claude &amp; AI Tools</a><a class="next" href="capstone.html">18. Reference Architecture →</a></div>
+  <footer class="foot">Applied AI Anti-Patterns · Platform names and capabilities reflect public documentation as of November 2026. Cost figures are illustrative.</footer>
+  </main>
+</div>
+<script src="assets/search-index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

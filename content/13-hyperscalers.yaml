@@ -1,0 +1,700 @@
+id: hyperscalers
+num: 13
+short: Hyperscaler Platforms
+title: "Hyperscaler Platforms: AWS, Google Cloud & Microsoft"
+summary: All three clouds now offer a full agent platform with models, managed RAG, agent runtimes, guardrails, evaluation and identity. The failure modes are platform-specific, and so are the fixes.
+intro:
+  - md: |
+      ### Platform landscape (November 2026)
+
+      All three providers rebranded or restructured their AI platforms during 2025–2026. **Vertex AI** evolved into the
+      **Gemini Enterprise Agent Platform** (April 2026). **Azure AI Foundry** is now **Microsoft Foundry**, with the
+      **Foundry Agent Service** generally available since March 2026. On AWS, **Amazon Bedrock AgentCore** is the
+      strategic agent platform, and the original Bedrock Agents ("Agents Classic") stopped accepting new customers
+      in mid-2026.
+
+      | Capability layer | AWS: Amazon Bedrock | Google Cloud: Gemini Enterprise Agent Platform | Microsoft Foundry |
+      |---|---|---|---|
+      | Model catalog | Bedrock models: Anthropic Claude, Amazon Nova, Meta Llama, Mistral, others | Model Garden: Gemini plus 200+ first- and third-party models, including Claude | Foundry Models: OpenAI GPT, Claude, Microsoft MAI, Llama, Mistral and a large open catalog |
+      | Managed RAG / knowledge | Bedrock Knowledge Bases / Managed Knowledge Base, OpenSearch, S3 Vectors | Vertex AI Search, RAG Engine, Grounding with Google Search | Foundry IQ, Azure AI Search, grounding with Bing |
+      | Agent runtime | Bedrock AgentCore: Runtime, managed harness, Gateway, Memory, Identity, Policy (Cedar), Code Interpreter, Browser | Agent Development Kit (ADK), Agent Engine runtime, Agent Studio (low-code) | Foundry Agent Service: prompt, hosted and voice agents; Toolboxes, Memory, Routines |
+      | Agent SDK / framework | Strands Agents; any framework on AgentCore | ADK; LangGraph, CrewAI and others supported | Microsoft Agent Framework (successor to Semantic Kernel and AutoGen); LangGraph supported |
+      | Guardrails & safety | Bedrock Guardrails (content, PII, denied topics, prompt attacks, contextual grounding) | Model Armor, Gemini safety filters | Azure AI Content Safety, Prompt Shields, groundedness detection |
+      | Evaluation & observability | AgentCore Evaluations, Bedrock model evaluation, CloudWatch GenAI observability | Gen AI Evaluation Service, Cloud Trace | Foundry evaluations, OpenTelemetry tracing, Application Insights |
+      | Identity & network | IAM, AgentCore Identity, PrivateLink, VPC endpoints | IAM, VPC Service Controls, Private Service Connect | Entra ID, Entra Agent ID, Private Endpoints, BYO VNet |
+      | Capacity & pricing | On-demand, Provisioned Throughput, batch inference, cross-region inference profiles | Pay-as-you-go, Provisioned Throughput, batch, context caching | Standard, Global and Data Zone deployments, Provisioned Throughput Units (PTU), Batch |
+      | Workplace surface | Amazon Q / Quick Suite | Gemini Enterprise app (formerly Agentspace) | Microsoft 365 Copilot and Teams (direct publishing from Foundry) |
+
+      Product names and feature status change quickly. Confirm the exact SKU, region availability and GA status
+      before committing to a client architecture.
+patterns:
+  - id: aws-kb-defaults
+    title: "AWS: Bedrock Knowledge Bases with default settings for complex documents"
+    tags: [Quality]
+    scenario: |
+      An insurer stands up a Bedrock Knowledge Base over 30,000 policy PDFs in an afternoon, using default
+      parsing, default fixed-size chunking and default retrieval. The pilot users report that table-heavy
+      endorsements return wrong answers.
+    antipattern: |
+      The managed RAG service's speed to first demo is mistaken for production readiness. Parsing, chunking,
+      retrieval type and metadata are never configured, and nothing is evaluated.
+    fails: |
+      - **Default parsing** handles plain text well but loses structure in complex PDFs and tables.
+      - **Default chunking** splits clauses (see 1.1).
+      - **Semantic-only retrieval** misses policy numbers and codes.
+      - **No metadata filters**, so superseded documents and other lines of business compete.
+    diagram:
+      bad: ["S3 PDFs", "!KB defaults (parse + fixed chunk)", "Semantic search only", "Wrong table answers"]
+      bad_note: "Managed service, unmanaged quality"
+      good: ["S3 PDFs + metadata.json", "+Advanced parsing (FM / BDA)", "+Hierarchical or semantic chunking", "+Hybrid search + rerank + filters", "Evaluated answers"]
+      good_note: "Configure the managed service like a pipeline, and evaluate it"
+    solution: |
+      Use the knobs the service exposes:
+
+      - **Parsing:** use foundation-model parsing or Bedrock Data Automation for documents with tables and figures.
+      - **Chunking:** choose hierarchical or semantic chunking, or supply a custom Lambda transformation for domain-specific splitting.
+      - **Metadata:** attach `.metadata.json` sidecar files (line of business, effective date, ACL groups) and filter at query time.
+      - **Retrieval:** enable hybrid search where the vector store supports it, and add a reranker.
+      - **Evaluate** with Bedrock's RAG evaluation or your own suite before and after every configuration change.
+    works: |
+      You keep the operational benefits of a managed service (sync, scaling, security integration) while
+      getting the quality of a tuned pipeline. Metadata filtering and hybrid search fix the most common
+      enterprise failures, and evaluation makes configuration changes evidence-based.
+    code: |
+      bedrock_agent.create_data_source(
+          knowledgeBaseId=KB_ID, name="policies",
+          dataSourceConfiguration={"type": "S3", "s3Configuration": {"bucketArn": BUCKET}},
+          vectorIngestionConfiguration={
+              "parsingConfiguration": {"parsingStrategy": "BEDROCK_FOUNDATION_MODEL",
+                                       "bedrockFoundationModelConfiguration": {"modelArn": PARSER_MODEL}},
+              "chunkingConfiguration": {"chunkingStrategy": "HIERARCHICAL",
+                  "hierarchicalChunkingConfiguration": {"levelConfigurations": [{"maxTokens": 1500},
+                                                                                {"maxTokens": 300}],
+                                                        "overlapTokens": 60}}})
+
+      agent_rt.retrieve(knowledgeBaseId=KB_ID, retrievalQuery={"text": q},
+          retrievalConfiguration={"vectorSearchConfiguration": {
+              "numberOfResults": 25, "overrideSearchType": "HYBRID",
+              "filter": {"andAll": [{"equals": {"key": "lob", "value": "homeowners"}},
+                                    {"equals": {"key": "status", "value": "in_force"}}]},
+              "rerankingConfiguration": {"type": "BEDROCK_RERANKING_MODEL", "bedrockRerankingConfiguration": {
+                  "modelConfiguration": {"modelArn": RERANK_MODEL}, "numberOfRerankedResults": 6}}}})
+    takeaway: "A managed RAG service removes the plumbing, not the design decisions. Configure parsing, chunking, metadata and hybrid retrieval, then evaluate."
+    followup: "When would you outgrow Bedrock Knowledge Bases and build a custom pipeline on OpenSearch?"
+
+  - id: aws-agents-classic
+    title: "AWS: New agents built on legacy Bedrock Agents with monolithic action groups"
+    tags: [Reliability, Security, Scale]
+    scenario: |
+      A logistics firm builds a shipment-exceptions agent on the original Bedrock Agents service with one
+      large action group wrapping 40 Lambda operations. It's hard to test, permissions are broad, and the service
+      has since stopped accepting new customers.
+    antipattern: |
+      Starting new agent programs on the legacy managed-agent service out of familiarity, and packing every
+      operation into one action group behind a single over-privileged Lambda role.
+    fails: |
+      - **Strategic dead end.** New investment is going into AgentCore.
+      - **Monolithic tool surface.** One action group with many operations reduces tool-selection accuracy and testability.
+      - **Broad IAM.** One Lambda role with access to everything violates least privilege.
+      - **Limited framework choice and observability** compared with the newer runtime.
+    diagram:
+      bad: ["Agent (legacy service)", "!One action group / 40 ops", "!One broad Lambda role", "Hard to test & govern"]
+      bad_note: "Legacy runtime, monolithic tools, broad permissions"
+      good: ["Agent (Strands / LangGraph / harness)", "+AgentCore Runtime", "+AgentCore Gateway (MCP tools)", "+Identity + Cedar Policy", "+Evaluations + Observability"]
+      good_note: "Framework-agnostic runtime with governed, least-privilege tools"
+    solution: |
+      Build new agents on **Bedrock AgentCore**:
+
+      - Write the agent in your framework of choice (Strands, LangGraph, CrewAI) or use the managed harness for config-driven agents.
+      - Expose tools through **AgentCore Gateway** as MCP tools, grouped by domain, each with a narrowly scoped target.
+      - Use **AgentCore Identity** for inbound auth and outbound OAuth on behalf of users, and **Policy** (Cedar) to constrain which tools an agent can call, with what parameters.
+      - Turn on **Evaluations** and GenAI observability from day one.
+      - Plan migration for existing legacy agents.
+    works: |
+      The runtime is framework-agnostic and session-isolated. Tools are reusable and governed at the gateway,
+      and Cedar policies enforce deterministic limits outside the model. Built-in evals and tracing give the
+      evidence a risk committee needs.
+    code: |
+      # Cedar policy enforced by AgentCore Policy at the Gateway, outside the model
+      # permit(principal is AgentCore::Agent, action == AgentCore::Action::"refund_tool__issue_refund",
+      #        resource) when { context.input.amount <= 500 && principal.tags.env == "prod" };
+
+      from strands import Agent
+      from bedrock_agentcore.runtime import BedrockAgentCoreApp
+
+      app = BedrockAgentCoreApp()
+      agent = Agent(model=MODEL_ID, tools=gateway_mcp_tools(GATEWAY_URL, auth=agentcore_identity()),
+                    system_prompt=prompts.get("shipment_exceptions", label="prod").text)
+
+      @app.entrypoint
+      def invoke(payload):
+          return agent(payload["prompt"])
+    takeaway: "On AWS, new agent work belongs on AgentCore: any framework, MCP tools through Gateway, and deterministic Cedar policies outside the model."
+    followup: "How would you migrate an existing legacy Bedrock agent to AgentCore with no downtime?"
+
+  - id: aws-guardrails-partial
+    title: "AWS: Guardrails on the input only, or not attached at all"
+    tags: [Security, Compliance]
+    scenario: |
+      A healthcare chatbot attaches a Bedrock Guardrail that checks user input. Model responses containing
+      patient identifiers pulled from retrieved notes reach users unfiltered. A second app calls the model
+      directly and skips the guardrail entirely.
+    antipattern: |
+      Guardrails are configured for one direction, one app, or one code path. Contextual grounding checks
+      and PII handling on outputs are left off.
+    fails: |
+      - **Output-side leakage:** PII, ungrounded claims and denied topics in responses aren't caught.
+      - **Coverage gaps:** any code path that doesn't pass the guardrail bypasses it.
+      - **No versioning:** guardrail edits change behaviour in production without testing.
+    diagram:
+      bad: ["User", "Guardrail (input only)", "Model + retrieval", "!Unfiltered output"]
+      bad_note: "Half the conversation is unprotected"
+      good: ["User", "+Guardrail: input", "Model + retrieval", "+Guardrail: output + grounding", "+Enforced at gateway / IAM"]
+      good_note: "Both directions, every path, versioned guardrails"
+    solution: |
+      - Apply guardrails on **both input and output**, including **contextual grounding** checks for RAG answers and **sensitive-information filters** (mask or block) on output.
+      - Use the standalone **ApplyGuardrail** API for content that doesn't flow through a model call, such as retrieved chunks or tool output.
+      - **Enforce** guardrail usage centrally, through a gateway or account-level enforcement, rather than relying on each app to opt in.
+      - Publish **guardrail versions** and reference them explicitly; test changes against the eval suite.
+    works: |
+      Output filtering and grounding checks close the most dangerous leakage path in RAG. Central enforcement
+      removes opt-in gaps, and versioning gives guardrails the same change control as prompts.
+    code: |
+      resp = bedrock_rt.converse(
+          modelId=MODEL_ID, messages=msgs, system=[{"text": SYSTEM}],
+          guardrailConfig={"guardrailIdentifier": GR_ID, "guardrailVersion": "7", "trace": "enabled"})
+
+      # Check content that doesn't pass through a model call (retrieved chunks, tool outputs)
+      chk = bedrock_rt.apply_guardrail(guardrailIdentifier=GR_ID, guardrailVersion="7", source="OUTPUT",
+                                       content=[{"text": {"text": tool_output}}])
+      if chk["action"] == "GUARDRAIL_INTERVENED":
+          tool_output = chk["outputs"][0]["text"]
+    takeaway: "A guardrail that only checks one direction is half a control. Cover input and output, check grounding, version it, and enforce it centrally."
+    followup: "How do you tune guardrail thresholds without blocking legitimate clinical terms?"
+
+  - id: aws-capacity-misfit
+    title: "AWS: Provisioned Throughput bought too early, batch never used"
+    tags: [Cost]
+    scenario: |
+      A team buys a month of Provisioned Throughput for a pilot with 200 users, running at 6% utilization.
+      Meanwhile, a nightly job summarizing 80,000 documents runs on on-demand real-time pricing.
+    antipattern: |
+      Capacity mode is picked by intuition. Steady, spiky and offline workloads all use the same mode.
+    fails: |
+      - **Idle reserved capacity** costs the same as busy capacity.
+      - **Offline jobs pay real-time prices** and compete with interactive traffic for quota.
+      - **Throttling surprises** at launch when on-demand quotas are exceeded.
+    diagram:
+      bad: ["Pilot (spiky, low)", "!Provisioned Throughput", "6% utilization"]
+      bad_note: "Capacity mode chosen by intuition"
+      good: ["Workload profile", "Interactive spiky → on-demand / cross-region | Steady high → provisioned | Offline → batch", "+Utilization review"]
+      good_note: "Capacity mode matched to each workload's shape"
+    solution: |
+      **Profile the workload, then pick the mode:**
+
+      - **On-demand** (with cross-region inference profiles for burst capacity) for pilots and spiky interactive traffic.
+      - **Provisioned Throughput** only for steady, high, predictable load, sized from measured tokens per minute, or where a custom or fine-tuned model requires it.
+      - **Batch inference** for offline jobs (summarization, classification, enrichment), at a significant discount.
+      - Use prompt caching for long, repeated prefixes. Review utilization monthly.
+    works: |
+      Each workload pays the cheapest price for its shape. Batch removes offline load from real-time quotas,
+      and measured sizing avoids paying for idle capacity.
+    code: |
+      # Offline: Bedrock batch inference over JSONL in S3
+      bedrock.create_model_invocation_job(
+          jobName=f"doc-summaries-{today()}", modelId=MODEL_ID, roleArn=BATCH_ROLE,
+          inputDataConfig={"s3InputDataConfig": {"s3Uri": "s3://ai-batch/in/"}},
+          outputDataConfig={"s3OutputDataConfig": {"s3Uri": "s3://ai-batch/out/"}})
+
+      # Provisioned only when measured p95 load is high and steady
+      if p95_tpm(last_30_days) > 0.6 * PT_UNIT_TPM * units and weekday_variance < 0.3:
+          recommend("provisioned", units=ceil(p95_tpm / PT_UNIT_TPM))
+    takeaway: "Pick capacity modes from measured workload shape: on-demand for spiky, provisioned for steady, batch for anything that can wait."
+    followup: "How would you forecast token demand for a new use case with no history?"
+
+  - id: aws-cross-region-residency
+    title: "AWS: Cross-region inference enabled without a data-residency review"
+    tags: [Compliance]
+    scenario: |
+      A German bank enables a global cross-region inference profile to avoid throttling. Its data-protection
+      officer later finds that prompts containing customer data may be processed outside the EU.
+    antipattern: |
+      Cross-region or global inference routing is switched on for capacity reasons, without mapping it
+      to the client's residency obligations.
+    fails: |
+      - **Residency violations** for regulated data (GDPR transfer rules, banking secrecy, public-sector requirements).
+      - **Audit findings**, because processing locations aren't documented.
+    diagram:
+      bad: ["EU customer prompts", "!Global inference profile", "Processed outside EU"]
+      bad_note: "Capacity decision made without compliance input"
+      good: ["Prompt + data classification", "+Policy router", "EU-only profile (regulated) | Global profile (non-sensitive)", "+Documented processing regions"]
+      good_note: "Routing follows data classification"
+    solution: |
+      - Classify workloads by data sensitivity and residency obligation.
+      - Use **geography-scoped inference profiles** (for example EU or US prefixes) for regulated data, and global profiles only for non-sensitive workloads.
+      - Enforce with IAM / service control policies that deny non-approved profiles.
+      - Document processing regions in the system record.
+
+      The same principle applies on Azure (Data Zone vs Global deployments) and Google Cloud (regional vs global endpoints).
+    works: |
+      You keep the capacity benefits of multi-region routing where it's allowed, while regulated data stays
+      within approved geographies. Preventive policy controls make the guarantee auditable.
+    code: |
+      PROFILE_BY_CLASS = {"restricted": "eu.anthropic.claude-<model>",     # EU-only routing
+                          "internal":   "eu.anthropic.claude-<model>",
+                          "public":     "global.anthropic.claude-<model>"}
+
+      def model_for(request):
+          return PROFILE_BY_CLASS[classify(request.payload)]
+
+      # SCP guardrail: deny invocation of global profiles from regulated accounts
+      # {"Effect": "Deny", "Action": "bedrock:InvokeModel*",
+      #  "Resource": "arn:aws:bedrock:*:*:inference-profile/global.*"}
+    takeaway: "Inference routing is a data-residency decision. Map profiles to data classification and enforce it with policy, not convention."
+    followup: "How do you explain cross-region inference trade-offs to a data-protection officer?"
+
+  - id: gcp-search-grounding-regulated
+    title: "Google Cloud: Grounding with Google Search for regulated internal answers"
+    tags: [Compliance, Quality]
+    scenario: |
+      An asset manager's internal research assistant enables Grounding with Google Search to "improve
+      freshness". Answers about the firm's own investment policies start blending in public web content.
+    antipattern: |
+      Public web grounding is switched on for an assistant meant to answer from authoritative internal
+      sources, with no separation between internal and external evidence.
+    fails: |
+      - **Authority confusion.** Public content contradicts or dilutes internal policy.
+      - **Compliance risk.** Answers may rely on unvetted external sources in regulated communications.
+      - **Data-handling questions.** Queries containing internal context go to a web search service, which needs explicit approval.
+    diagram:
+      bad: ["Internal policy question", "!Grounding: Google Search", "Blended web + internal answer"]
+      bad_note: "Public web treated as authoritative for internal policy"
+      good: ["Question", "+Intent: internal vs. market", "Vertex AI Search (internal) | Web grounding (approved use cases)", "+Labelled sources"]
+      good_note: "Grounding source chosen by intent and policy, with sources labelled"
+    solution: |
+      - Ground internal-policy answers **only** in Vertex AI Search or RAG Engine over approved corpora.
+      - Allow web grounding for explicitly approved use cases (market news, public research), with sources visually separated and labelled.
+      - Route by intent. Disable web grounding by policy in regulated workloads.
+      - Review terms and data handling for web grounding with legal and compliance.
+    works: |
+      Internal answers stay authoritative and auditable, while external freshness remains available where
+      it's appropriate. Labelled sources let users judge evidence quality.
+    code: |
+      from google import genai
+      from google.genai import types
+
+      client = genai.Client(vertexai=True, project=PROJECT, location="europe-west4")
+      internal = types.Tool(retrieval=types.Retrieval(
+          vertex_ai_search=types.VertexAISearch(datastore=POLICY_DATASTORE)))
+      web = types.Tool(google_search=types.GoogleSearch())
+
+      tools = [internal] if intent(q) == "internal_policy" else [internal, web] if approved(use_case) else [internal]
+      resp = client.models.generate_content(model=GEMINI_MODEL, contents=q,
+                                            config=types.GenerateContentConfig(tools=tools))
+    takeaway: "Choose grounding sources deliberately. Internal policy answers should only ever be grounded in governed internal data."
+    followup: "How would you present internal and external sources in one answer without confusing users?"
+
+  - id: gcp-long-context-no-cache
+    title: "Google Cloud: Long-context prompts re-sent without context caching"
+    tags: [Cost, Latency]
+    scenario: |
+      A contract-analysis tool sends the same 400-page master agreement with every one of 30 analyst
+      questions. Each call bills hundreds of thousands of input tokens again.
+    antipattern: |
+      Gemini's very large context window is used as a substitute for retrieval *and* without caching.
+      Identical large prefixes are re-billed on every call.
+    fails: |
+      - **Repeated cost** for identical input tokens.
+      - **Higher latency** from re-processing the full document each time.
+      - **Mid-document recall issues** on very long inputs (see 3.3).
+    diagram:
+      bad: ["Q1..Q30", "!Full 400-page doc each call", "30× input cost"]
+      bad_note: "Same prefix billed over and over"
+      good: ["Upload doc once", "+Context cache (TTL)", "Q1..Q30 reference cache", "+Retrieval for pinpoint questions"]
+      good_note: "Pay once for the prefix; retrieve for needle questions"
+    solution: |
+      - Use **explicit context caching** for large, reused prefixes (documents, long system instructions), with a TTL matched to the session.
+      - Keep long context for whole-document tasks (summaries, cross-clause consistency). Use retrieval for pinpoint lookups.
+      - Monitor cached versus uncached token ratios.
+    works: |
+      Cached tokens are billed at a reduced rate and processed faster. Pairing long context with retrieval
+      uses each where it's strongest.
+    code: |
+      cache = client.caches.create(model=GEMINI_MODEL, config=types.CreateCachedContentConfig(
+          contents=[types.Content(role="user", parts=[types.Part.from_uri(file_uri=MSA_GCS_URI,
+                                                                            mime_type="application/pdf")])],
+          system_instruction="You are a contract analyst. Cite clause numbers.", ttl="3600s"))
+
+      for q in analyst_questions:
+          client.models.generate_content(model=GEMINI_MODEL, contents=q,
+                                         config=types.GenerateContentConfig(cached_content=cache.name))
+    takeaway: "A large context window without caching re-bills the same document on every call. Cache stable prefixes and keep retrieval for pinpoint questions."
+    followup: "What's the break-even between context caching and building a RAG index for a document?"
+
+  - id: gcp-no-vpcsc
+    title: "Google Cloud: No VPC Service Controls perimeter around AI services"
+    tags: [Security, Compliance]
+    scenario: |
+      A healthcare client's Agent Platform project can be reached from the public internet with valid
+      credentials. A leaked developer key lets an attacker call models over a BigQuery dataset with patient records.
+    antipattern: |
+      AI APIs are protected only by IAM. No service perimeter, no private connectivity, no egress restrictions
+      from the project hosting sensitive data.
+    fails: |
+      - **Credential theft equals data access** from anywhere.
+      - **Data exfiltration paths** between projects and services aren't blocked.
+      - **Compliance gaps** for regulated data (HIPAA, financial data).
+    diagram:
+      bad: ["Internet", "!IAM-only protection", "AI APIs + BigQuery (PHI)"]
+      bad_note: "Leaked credentials grant access from anywhere"
+      good: ["Corporate network", "+Private Service Connect", "+VPC-SC perimeter (AI, BQ, GCS)", "+Access levels + CMEK", "AI APIs + data"]
+      good_note: "Context-aware perimeter blocks off-network access and exfiltration"
+    solution: |
+      - Put the AI platform APIs, BigQuery, Cloud Storage and related services inside a **VPC Service Controls perimeter**.
+      - Use **Private Service Connect** for private access. Define **access levels** (device, IP, identity).
+      - Enable **CMEK** for data at rest where required, and data-access audit logs.
+      - Test with dry-run perimeters before enforcing.
+    works: |
+      Stolen credentials are no longer enough, because requests must also come from inside the perimeter.
+      Cross-perimeter copies are blocked, which closes exfiltration paths, and dry-run mode avoids breaking
+      pipelines during rollout.
+    code: |
+      # gcloud access-context-manager perimeters create ai_phi_perimeter \
+      #   --title="AI PHI perimeter" --perimeter-type=regular \
+      #   --resources=projects/123456789 \
+      #   --restricted-services=aiplatform.googleapis.com,bigquery.googleapis.com,storage.googleapis.com \
+      #   --access-levels=corp_devices --policy=$POLICY_ID
+      #
+      # Roll out safely: create with --dry-run first, review violation logs, then enforce.
+    takeaway: "On Google Cloud, IAM decides who can call AI APIs. VPC Service Controls decides from where, and what data can leave. Regulated workloads need both."
+    followup: "How do you let a managed agent runtime call external APIs from inside a perimeter?"
+
+  - id: gcp-adk-no-evals
+    title: "Google Cloud: ADK agents deployed without evaluation in the release path"
+    tags: [Quality, Reliability]
+    scenario: |
+      A retail team builds an order-support agent with the Agent Development Kit (ADK) and deploys it to a
+      managed runtime straight from a notebook. A later prompt edit breaks the return-eligibility logic.
+    antipattern: |
+      The ease of deployment encourages notebook-to-production releases. ADK's evaluation capabilities and
+      the platform's evaluation service are never wired into CI.
+    fails: |
+      - **No regression detection** for trajectory (which tools, in which order) or final responses.
+      - **Unreproducible deployments.** Code and config live in notebooks.
+    diagram:
+      bad: ["Notebook", "!Deploy agent directly", "Production regression"]
+      bad_note: "No eval, no CI, no versioned config"
+      good: ["Git repo (agent + evalsets)", "+ADK eval: trajectory + response", "+Gen AI Evaluation Service", "+Gate", "Deploy to Agent Engine"]
+      good_note: "Trajectory and response quality gate every deployment"
+    solution: |
+      - Keep agent code, prompts and **evalsets** in Git.
+      - Run ADK evaluations (expected tool trajectory plus response quality) and the Gen AI Evaluation Service in CI.
+      - Deploy to the managed runtime only through the pipeline (Cloud Build or GitHub Actions), with versioned releases and rollback.
+      - Enable tracing and sample production sessions back into the evalset.
+    works: |
+      Trajectory evals catch "right answer, wrong path" failures such as skipping an eligibility check.
+      Pipeline-only deployment makes releases reproducible and reversible.
+    code: |
+      # tests/order_support.evalset.json holds cases with expected tool trajectory + reference response
+      # CI step:
+      #   adk eval agents/order_support tests/order_support.evalset.json --config_file_path tests/eval_config.json
+      #
+      # eval_config.json
+      # {"criteria": {"tool_trajectory_avg_score": 0.95, "response_match_score": 0.8}}
+      #
+      # Deploy only from CI after the gate passes:
+      #   python deploy.py --agent agents/order_support --runtime agent-engine --version $GIT_SHA
+    takeaway: "Easy deployment makes evaluation gates more important, not less. Evaluate agent trajectories in CI before anything reaches the runtime."
+    followup: "What's the difference between trajectory evaluation and response evaluation, and why do you need both?"
+
+  - id: azure-ptu-throttling
+    title: "Microsoft: PTU sizing guesses and no 429 handling"
+    tags: [Cost, Reliability]
+    scenario: |
+      A retailer buys a large PTU reservation for its holiday chatbot based on a guess, then hits 429 errors
+      on Black Friday because traffic peaks exceed capacity and there's no spillover to Standard deployments.
+    antipattern: |
+      Deployment type and PTU count are chosen without benchmarking. Clients retry blindly on 429s and
+      there's no spillover or load balancing.
+    fails: |
+      - **Over-provisioning** wastes reserved spend. **Under-provisioning** causes throttling at peak.
+      - **Naive retries** amplify 429 storms.
+      - **Wrong deployment type** (Global vs Data Zone vs regional) for residency or capacity needs.
+    diagram:
+      bad: ["Holiday traffic", "!Fixed PTU (guessed)", "429 storm", "Outage"]
+      bad_note: "No benchmark, no spillover"
+      good: ["Traffic", "+APIM AI gateway", "PTU (baseline) | Standard / Data Zone (spillover)", "+Retry-after + backoff", "+Token metrics"]
+      good_note: "Benchmarked baseline, elastic spillover, gateway-level control"
+    solution: |
+      - **Benchmark** with representative prompt and response sizes to size PTUs for the steady baseline, not the peak.
+      - Front deployments with **Azure API Management's AI gateway** capabilities: token limits, load balancing, circuit breaking, and **spillover** from PTU to pay-as-you-go deployments.
+      - Choose **Data Zone** deployments for EU/US residency and **Global** for maximum capacity on non-restricted data.
+      - Honour `retry-after` headers with exponential backoff and emit token metrics per consumer.
+    works: |
+      Reserved capacity runs hot (cost-efficient) while peaks spill to elastic capacity instead of failing.
+      Gateway policies give fairness between consumers and central observability, and deployment-type choice
+      aligns capacity with compliance.
+    code: |
+      <!-- APIM policy (excerpt): token limit per consumer + backend pool with PTU priority -->
+      <inbound>
+        <azure-openai-token-limit counter-key="@(context.Subscription.Id)"
+                                  tokens-per-minute="20000" estimate-prompt-tokens="true" />
+        <set-backend-service backend-id="foundry-pool" />  <!-- pool: PTU priority 1, Data Zone priority 2 -->
+      </inbound>
+      <backend>
+        <retry condition="@(context.Response.StatusCode == 429)" count="2" interval="1" delta="2"
+               first-fast-retry="false" />
+      </backend>
+    lang: xml
+    takeaway: "Size PTUs for the baseline, spill peaks to pay-as-you-go through a gateway, and pick deployment types for residency first, capacity second."
+    followup: "How would you benchmark PTU capacity for a new agent with long tool-calling sessions?"
+
+  - id: azure-on-your-data
+    title: "Microsoft: Quick-start \"chat with your data\" treated as the production RAG platform"
+    tags: [Quality, Scale]
+    scenario: |
+      A professional-services firm launches an internal knowledge bot using the one-click "add your data"
+      experience. Six months later it serves 20,000 users over 2 million documents, with untuned indexing, no
+      semantic ranker configuration and no security trimming.
+    antipattern: |
+      A wizard-generated index and default settings become the long-term architecture. Index schema,
+      chunking, vectorization and ranking are never designed.
+    fails: |
+      - **Default index schema** lacks the metadata fields needed for filters and ACLs.
+      - **Untuned retrieval:** no hybrid weighting, semantic ranker or scoring profiles.
+      - **No security trimming**, so everyone can see everything that was indexed.
+    diagram:
+      bad: ["SharePoint / Blob", "!Wizard index (defaults)", "Basic vector query", "Untrimmed results"]
+      bad_note: "Demo configuration promoted to production"
+      good: ["SharePoint / Blob", "+Designed index schema + skillset", "+Hybrid + semantic ranker", "+ACL / RBAC trimming", "Foundry IQ / agent knowledge"]
+      good_note: "Engineered retrieval with security trimming, exposed as governed agent knowledge"
+    solution: |
+      - Design the **Azure AI Search index** explicitly: fields for metadata, ACLs, validity dates, plus integrated vectorization and chunking skills tuned per content type.
+      - Enable **hybrid search** with the **semantic ranker**, and scoring profiles for freshness.
+      - Implement **document-level security trimming** using ACL/RBAC fields synced from the source, filtered by the user's Entra identity.
+      - Expose the result to agents as governed knowledge (Foundry IQ knowledge bases or an Azure AI Search tool).
+      - Evaluate with the Foundry evaluators.
+    works: |
+      The retrieval layer becomes a designed, scalable service rather than a demo artifact. Security trimming
+      meets enterprise access requirements, and hybrid plus semantic ranking improves relevance on large,
+      heterogeneous corpora.
+    code: |
+      results = search_client.search(
+          search_text=q,
+          vector_queries=[VectorizableTextQuery(text=q, k_nearest_neighbors=50, fields="content_vector")],
+          query_type="semantic", semantic_configuration_name="kb-semantic",
+          filter=f"status eq 'approved' and group_ids/any(g: search.in(g, '{','.join(user_groups)}'))",
+          scoring_profile="freshness", top=8)
+    lang: python
+    takeaway: "Wizard-generated RAG gets you a demo. Production needs a designed index, hybrid plus semantic ranking, and security trimming tied to Entra ID."
+    followup: "How would you sync SharePoint permissions into the search index at scale?"
+
+  - id: azure-key-auth
+    title: "Microsoft: API keys instead of Entra ID and managed identities"
+    tags: [Security]
+    scenario: |
+      API keys for the firm's Foundry resources are found in a public GitHub repository and in shared
+      notebooks. Keys were never rotated, and every app uses the same one.
+    antipattern: |
+      Key-based authentication everywhere, shared across teams and apps, stored in config files, and never
+      rotated. Agents call tools and MCP servers with static keys too.
+    fails: |
+      - **Leakage is easy and attribution impossible.** A key identifies a resource, not a caller.
+      - **No conditional access, no least privilege, no per-app audit.**
+      - **Agent tool calls** can't be tied back to an agent identity.
+    diagram:
+      bad: ["Apps + notebooks", "!Shared static API key", "Foundry resource", "Leak = full access"]
+      bad_note: "Keys identify resources, not callers"
+      good: ["App / agent", "+Managed identity / Entra Agent ID", "+RBAC role (least privilege)", "Foundry resource", "+Keys disabled"]
+      good_note: "Token-based, attributable, revocable access"
+    solution: |
+      - Use **Microsoft Entra ID** authentication with **managed identities** for apps, and **Entra Agent ID** for agents, so each agent has its own identity for tools and MCP connections.
+      - Assign least-privilege RBAC roles per resource.
+      - **Disable local (key) auth** on resources via Azure Policy.
+      - Use Private Endpoints and Conditional Access where applicable.
+    works: |
+      There are no long-lived secrets to leak. Access is attributable to a specific app or agent, revocable
+      instantly, and governed by the same identity controls as the rest of the enterprise.
+    code: |
+      from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+      from openai import AzureOpenAI
+
+      token_provider = get_bearer_token_provider(DefaultAzureCredential(),
+                                                 "https://cognitiveservices.azure.com/.default")
+      client = AzureOpenAI(azure_endpoint=FOUNDRY_ENDPOINT, azure_ad_token_provider=token_provider,
+                           api_version=API_VERSION)          # no api_key anywhere
+
+      # Azure Policy: deny resources where properties.disableLocalAuth != true
+    takeaway: "On Azure, every AI caller (app or agent) should be an Entra identity with least-privilege RBAC. Disable keys."
+    followup: "How does Entra Agent ID change the audit story for autonomous agents?"
+
+  - id: azure-content-safety-defaults
+    title: "Microsoft: Content filters left at defaults, with no Prompt Shields or custom blocklists"
+    tags: [Security, Compliance]
+    scenario: |
+      A pharmaceutical company's medical-information bot blocks legitimate questions about drug overdose
+      thresholds (false positives), yet lets through indirect prompt injections hidden in uploaded PDFs.
+    antipattern: |
+      Default content-filter configuration is accepted for every use case. Prompt Shields for documents,
+      groundedness detection and custom blocklists aren't configured.
+    fails: |
+      - **Defaults don't fit domains.** Medical, security and legal use cases need different thresholds.
+      - **Indirect injection** in documents isn't screened without document-level shields.
+      - **Brand and regulatory terms** (competitor names, off-label claims) aren't blocked.
+    diagram:
+      bad: ["User + uploaded docs", "!Default content filter", "Model", "False blocks + missed injections"]
+      bad_note: "One-size-fits-all filtering"
+      good: ["User + docs", "+Prompt Shields (user + document)", "+Custom filter config per use case", "Model", "+Groundedness + blocklists"]
+      good_note: "Filtering tuned to the domain and attack surface"
+    solution: |
+      - Create **custom content-filter configurations** per deployment, with thresholds tuned on domain test sets.
+      - Enable **Prompt Shields** for both user prompts and **documents** (indirect attacks).
+      - Add **custom blocklists** for regulated terms and **groundedness detection** for RAG outputs.
+      - Track false-positive and false-negative rates as part of the eval suite.
+    works: |
+      Legitimate domain questions pass while real attacks are caught. Document shields cover the indirect
+      injection path, and measured error rates turn safety tuning into an engineering activity rather than
+      guesswork.
+    code: |
+      shield = content_safety.shield_prompt(user_prompt=msg, documents=[d.text for d in uploads])
+      if shield.user_prompt_analysis.attack_detected or any(d.attack_detected for d in shield.documents_analysis):
+          return refuse("Potential prompt attack detected in the input or attached documents.")
+
+      resp = client.chat.completions.create(model=DEPLOYMENT_WITH_CUSTOM_FILTER, messages=msgs)
+      if groundedness.check(answer=resp.choices[0].message.content, sources=ctx).ungrounded_percentage > 0.1:
+          resp = regenerate_strict(msgs, ctx)
+    takeaway: "Default safety settings are a starting point. Tune filters per domain, shield documents as well as prompts, and measure false positives."
+    followup: "How do you justify safety-filter thresholds to a medical-affairs team?"
+
+  - id: cloud-sdk-lockin
+    title: "Cross-cloud: Hard lock-in to one platform's agent SDK"
+    tags: [Cost, Scale]
+    scenario: |
+      A conglomerate builds 30 agents directly against one cloud's proprietary agent constructs. An acquisition
+      brings a second cloud estate and a better-priced model elsewhere, and porting the agents means rewriting them.
+    antipattern: |
+      Business logic, prompts and tools are tightly coupled to one vendor's proprietary agent definitions,
+      with no abstraction over models, tools or state.
+    fails: |
+      - **Switching costs** prevent using better or cheaper models.
+      - **Negotiating leverage** disappears.
+      - **M&A and multi-cloud reality** forces expensive rewrites.
+    diagram:
+      bad: ["Business logic", "!Proprietary agent constructs", "One cloud only"]
+      bad_note: "Logic and vendor primitives fused"
+      good: ["Business logic + prompts", "+Open framework (LangGraph / ADK / Strands / Agent Framework)", "+MCP tools | OTel traces", "Any cloud runtime"]
+      good_note: "Portable core; cloud runtime as a deployment target"
+    solution: |
+      Design for **portability at the seams**:
+
+      - Keep business logic in an open-source framework that runs on several runtimes. All three platforms now host open frameworks.
+      - Expose tools via **MCP** and observability via **OpenTelemetry**. Both are cross-vendor standards.
+      - Put model calls behind a thin gateway or interface, with per-model prompt variants under eval.
+      - Use managed services for the undifferentiated heavy lifting (runtime, identity, scaling) and isolate them behind adapters.
+    works: |
+      You get the operational benefits of managed runtimes while keeping the option to move. Porting becomes
+      redeployment plus eval re-runs, not a rewrite. The standards-based seams (MCP, OTel, A2A) are where the
+      industry is converging.
+    code: |
+      class ModelPort(Protocol):
+          def generate(self, messages, tools=None, schema=None) -> Response: ...
+
+      ADAPTERS = {"bedrock": BedrockAdapter, "agent_platform": GeminiAdapter, "foundry": FoundryAdapter}
+      model: ModelPort = ADAPTERS[config.provider](config.model)
+
+      agent = build_graph(model=model, tools=mcp_tools(config.mcp_gateway), tracer=otel_tracer())
+    takeaway: "Use managed runtimes, but own the seams. Open frameworks, MCP tools and OpenTelemetry keep agents portable across clouds."
+    followup: "Where is accepting lock-in the right call?"
+
+  - id: multicloud-by-default
+    title: "Cross-cloud: Multi-cloud AI just because"
+    tags: [Cost, Compliance]
+    scenario: |
+      To "avoid lock-in", a mid-sized insurer runs the same chatbot on all three clouds. It triples the
+      governance work (three guardrail configs, three identity models, three logging stacks) for no measurable benefit.
+    antipattern: |
+      Multi-cloud is adopted as a principle rather than for a specific requirement, duplicating platforms,
+      skills and controls.
+    fails: |
+      - **Governance multiplied:** separate policies, audit evidence and security reviews per cloud.
+      - **Shallow expertise:** teams can't go deep on any platform.
+      - **Higher cost** from lost volume discounts and duplicated tooling.
+    diagram:
+      bad: ["One use case", "!AWS + GCP + Azure in parallel", "3× governance, 3× ops"]
+      bad_note: "Multi-cloud without a reason"
+      good: ["Requirements", "Primary cloud (data gravity)", "+Second provider only for: specific model | residency | resilience", "+Portable seams"]
+      good_note: "Single primary platform; targeted secondary use with justification"
+    solution: |
+      - Choose a **primary AI platform** aligned with the client's data, identity and operations estate.
+      - Add a second provider only for a **named reason**: a model unavailable elsewhere, regulatory or sovereignty requirements, or a proven resilience need.
+      - Keep the portability seams from 13.14 so the choice stays reversible.
+      - Centralize governance (gateway, policy-as-code, evals) so any secondary provider plugs into the same controls.
+    works: |
+      Depth on one platform speeds delivery and strengthens security. Targeted multi-provider use captures
+      the real benefits without tripling the overhead, and portable seams address lock-in more cheaply than
+      running everything everywhere.
+    code: |
+      PROVIDER_POLICY = {
+          "default": "primary_cloud",
+          "exceptions": [
+              {"use_case": "code_review", "provider": "secondary", "reason": "model availability", "approved_by": "ARB-2026-14"},
+              {"use_case": "eu_public_sector", "provider": "sovereign_region", "reason": "sovereignty"},
+          ]}
+    lang: python
+    takeaway: "Multi-cloud should be a justified exception, not a default. Pick a primary platform by data gravity and add others only for named reasons."
+    followup: "How would you advise a client whose business units have already chosen different clouds?"
+
+  - id: platform-by-benchmark
+    title: "Cross-cloud: Choosing a platform by model benchmarks alone"
+    tags: [Cost, Adoption]
+    scenario: |
+      An AI steering committee picks a cloud AI platform because one model topped a public leaderboard that
+      month. Their data lives in another cloud, their identity is in Entra ID, and their operations team knows neither.
+    antipattern: |
+      Platform selection is driven by model rankings, which change monthly, rather than by data location,
+      identity, security integration, skills and commercial agreements.
+    fails: |
+      - **Leaderboards change quickly**, and all three platforms offer many frontier models, often including the same ones.
+      - **Data gravity:** moving or federating data across clouds costs money, latency and compliance effort.
+      - **Integration cost:** identity, networking, logging and procurement dominate the total cost of ownership.
+    diagram:
+      bad: ["Leaderboard winner", "!Platform choice", "Data, identity and skills elsewhere"]
+      bad_note: "Optimizing the most volatile variable"
+      good: ["Data location | Identity / security | Skills & contracts | Model access", "+Weighted decision matrix", "+PoC on client's eval set", "Platform decision"]
+      good_note: "Decide on durable factors; validate models with the client's own evals"
+    solution: |
+      Use a **weighted decision framework**:
+
+      | Factor | Typical weight | Question |
+      |---|---|---|
+      | Data gravity | High | Where do the source systems and lakehouse live? |
+      | Identity & security | High | Entra ID, Google identity, AWS IAM? Existing perimeter controls? |
+      | Model access | Medium | Are the required models available, in-region, at the needed capacity? |
+      | Agent & governance tooling | Medium | Runtime, guardrails, evals, registry maturity |
+      | Skills & operations | Medium | Which platform can the client's team run? |
+      | Commercials | Medium | Committed-spend agreements, marketplace credits |
+
+      Validate the shortlist with a time-boxed PoC on the client's own eval set.
+    works: |
+      The decision rests on durable factors that drive most of the TCO and risk. Model choice stays flexible
+      because model catalogs overlap. The client's eval set, not a public leaderboard, confirms quality.
+    code: |
+      WEIGHTS = {"data_gravity": .25, "identity_security": .2, "model_access": .15,
+                 "agent_governance": .15, "skills_ops": .15, "commercials": .10}
+
+      def score(platform, ratings):                  # ratings 1–5 from workshops + PoC evals
+          return sum(WEIGHTS[k] * ratings[platform][k] for k in WEIGHTS)
+
+      ranking = sorted(PLATFORMS, key=lambda p: score(p, ratings), reverse=True)
+    takeaway: "Choose an AI platform for its data, identity and operating fit. Models move every month; your data estate doesn't."
+    followup: "Walk me through how you'd run a two-week platform-selection PoC for a client."
+outro:
+  - md: |
+      ### Platform selection at a glance
+
+      | If the client… | Lean toward | Watch out for |
+      |---|---|---|
+      | Runs mostly on AWS, with data in S3 or Redshift and IAM-centric security | Amazon Bedrock + AgentCore | Legacy Bedrock Agents for new builds; residency of global inference profiles |
+      | Is a Google Workspace / BigQuery shop, or needs Gemini's long context and multimodality | Gemini Enterprise Agent Platform | Web grounding on regulated data; VPC-SC perimeters |
+      | Is standardized on Microsoft 365, Entra ID and Azure data services | Microsoft Foundry + Agent Service | PTU sizing; key-based auth; quick-start RAG in production |
+      | Needs a specific model only available elsewhere | Primary platform + governed secondary route | Duplicated governance; prompt portability |

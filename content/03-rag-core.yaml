@@ -1,0 +1,234 @@
+id: rag-core
+num: 3
+short: Retrieval & RAG Core
+title: Retrieval & RAG Core
+summary: The retrieve-then-generate loop is simple to demo and hard to get right. These are the failures behind "the bot gave a wrong answer even though the document was there".
+patterns:
+  - id: naive-topk
+    title: Naive top-k vector search with no hybrid retrieval
+    tags: [Quality]
+    scenario: |
+      A telecom support assistant gets the query "error E-4021 on router model AX3000". Vector search returns
+      generic router-troubleshooting articles, not the one KB article that mentions E-4021.
+    antipattern: |
+      The retrieval stack is one dense vector query with a fixed `k=5`. No keyword search, no metadata
+      filters, no fallback.
+    fails: |
+      - **Dense vectors are bad at exact matching.** Error codes, product SKUs, names and acronyms are spread out across embedding space.
+      - **Recall ceiling.** If the right document isn't in the top 5, no prompt engineering can recover it.
+      - **No structure.** Questions with obvious filters ("for AX3000 only", "policies in effect in 2026") ignore that structure entirely.
+    diagram:
+      bad: ["Query", "Embed", "!Dense top-5 only", "LLM"]
+      bad_note: "Exact codes and rare terms are missed; the recall ceiling is set by k=5"
+      good: ["Query", "+Extract filters", "+BM25 | Dense vectors", "+Reciprocal rank fusion", "Top-50 → rerank → 5"]
+      good_note: "Lexical and semantic signals combined, then narrowed by a reranker"
+    solution: |
+      Use **hybrid retrieval with fusion**:
+
+      - Run **BM25/keyword** and **dense** retrieval in parallel over the same chunks. Most enterprise search engines (OpenSearch, Elasticsearch, Azure AI Search, Vertex AI Search, pgvector with full-text) support this natively.
+      - Merge with **Reciprocal Rank Fusion (RRF)**, which needs no score calibration between the two systems.
+      - Extract structured filters from the query (product model, date range, region) with a small LLM call or rules, and apply them as metadata filters.
+      - Retrieve wide (k=30–50), then narrow with a reranker (next pattern).
+    works: |
+      Lexical retrieval catches exact identifiers and rare terms, and dense retrieval catches paraphrases and
+      concepts. RRF combines them robustly. Retrieving wide raises the recall ceiling, and filters remove
+      noise before ranking. In published benchmarks and in practice, hybrid retrieval consistently beats
+      either method alone on enterprise corpora.
+    code: |
+      def rrf(rank_lists, k=60):
+          scores = defaultdict(float)
+          for ranks in rank_lists:
+              for r, doc_id in enumerate(ranks):
+                  scores[doc_id] += 1 / (k + r + 1)
+          return sorted(scores, key=scores.get, reverse=True)
+
+      def hybrid_retrieve(query, user):
+          filters = extract_filters(query)                    # {"product": "AX3000"} via small LLM / regex
+          flt = acl_filter(user) | filters
+          lexical = bm25.search(query, filter=flt, k=50)
+          dense   = vectors.search(embed(query), filter=flt, k=50)
+          fused   = rrf([[h.id for h in lexical], [h.id for h in dense]])[:50]
+          return rerank(query, fetch(fused))[:6]
+    takeaway: "Hybrid retrieval is the production baseline. Dense-only search fails on precisely the identifiers enterprise users care about most."
+    followup: "When would you use a learned sparse model like SPLADE instead of BM25?"
+
+  - id: no-reranking
+    title: No reranking stage
+    tags: [Quality, Cost]
+    scenario: |
+      A legal research assistant retrieves 20 chunks and passes them all to the LLM. Answers are verbose,
+      sometimes cite marginally related cases, and token costs are three times the forecast.
+    antipattern: |
+      First-stage retrieval scores (cosine similarity) are taken as final relevance. Either everything
+      retrieved is sent to the model, or a small k is used and good results are cut off.
+    fails: |
+      - **Bi-encoder similarity is coarse.** It compares query and document vectors computed independently, and misses fine-grained relevance.
+      - **Precision/recall trade-off with no escape.** Small k loses recall; large k floods context with noise, raising cost and hallucination risk.
+      - **Noisy context degrades answers.** Irrelevant passages distract the model and dilute citations.
+    diagram:
+      bad: ["Query", "Retrieve k=20", "!All 20 → prompt", "Verbose, costly answer"]
+      bad_note: "Noise in context: higher cost, lower faithfulness"
+      good: ["Query", "Retrieve k=50", "+Cross-encoder rerank", "+Score threshold", "Top 5 → prompt"]
+      good_note: "Wide recall, narrow precision; context is small and relevant"
+    solution: |
+      Add a **two-stage retrieve-then-rerank pipeline**:
+
+      - Stage 1 (cheap, wide): hybrid retrieval returns 30–100 candidates.
+      - Stage 2 (precise, narrow): a **cross-encoder reranker** (Cohere Rerank, Voyage, BGE-reranker, or the managed rankers in Bedrock, Vertex or Azure AI Search) scores each query–passage pair jointly.
+      - Keep the top 3–8, and **drop anything under a calibrated relevance threshold** even if that leaves fewer.
+      - Measure precision@k and answer faithfulness before and after.
+    works: |
+      Cross-encoders read query and passage together, so they capture relevance that vector similarity
+      misses. The pipeline gets recall from the wide stage and precision from the narrow one. Smaller,
+      cleaner context reduces token cost and gives the generator fewer distractors. That shows up as better
+      faithfulness and shorter, better-cited answers.
+    code: |
+      def rerank(query, candidates, top_n=6, min_score=0.35):
+          scored = reranker.score(query=query, documents=[c.text for c in candidates])  # cross-encoder
+          ranked = sorted(zip(candidates, scored), key=lambda x: x[1], reverse=True)
+          return [c for c, s in ranked[:top_n] if s >= min_score]
+
+      ctx = rerank(q, hybrid_retrieve(q, user, k=60))
+      if not ctx:
+          return abstain(q)              # see "answering when retrieval is empty"
+    takeaway: "Retrieve wide and cheap, rerank narrow and precise. A reranker is usually the highest-ROI single upgrade to a RAG system."
+    followup: "How do you calibrate the reranker threshold, and how does it interact with abstention?"
+
+  - id: context-stuffing
+    title: Stuffing the context window ("lost in the middle")
+    tags: [Quality, Cost, Latency]
+    scenario: |
+      With million-token context windows available, a team skips retrieval and loads an entire 600-page
+      procurement manual into every request. Answers miss details from the middle of the document, latency is
+      high and the monthly bill is a surprise.
+    antipattern: |
+      "Long context replaces RAG." Whole documents, or dozens of chunks, are concatenated into the prompt in
+      arbitrary order, on every turn.
+    fails: |
+      - **Position bias.** Models attend unevenly across very long inputs and often under-use information buried mid-context.
+      - **Cost scales with every call.** Paying for hundreds of thousands of input tokens per question is rarely justified.
+      - **Latency.** Time-to-first-token grows with input length.
+      - **Diluted grounding.** Citations become vague when everything is in context.
+    diagram:
+      bad: ["Question", "!Entire manual (600 pages)", "LLM", "Slow, costly, misses mid-doc facts"]
+      bad_note: "Paying for everything, every time, and still missing facts"
+      good: ["Question", "Hybrid retrieve + rerank", "+Order & compress", "+Cached stable prefix", "LLM"]
+      good_note: "Small, ordered, relevant context; stable parts cached"
+    solution: |
+      Engineer the context deliberately:
+
+      - Retrieve and rerank to a **small token budget** (often 2–8K tokens of evidence).
+      - **Order evidence**: place the most relevant passages at the start and end, and group passages from the same document.
+      - **Compress**: extract only the relevant sentences from long passages, or summarize low-ranked passages.
+      - Use long context where it genuinely fits, such as whole-document analysis or contract comparison, and pair it with **prompt caching** so the stable document prefix isn't re-billed in full on every turn.
+      - Track tokens per answer as a cost KPI.
+    works: |
+      Focused context gives the model fewer distractors, so answers are more faithful and citations precise.
+      Token cost and latency fall roughly with input size. Caching makes legitimate long-context use
+      affordable. The design uses long context as a tool for specific jobs rather than a substitute for retrieval.
+    code: |
+      def build_context(query, passages, budget_tokens=6000):
+          passages = rerank(query, passages, top_n=12)
+          passages = [compress(query, p) if tokens(p) > 800 else p for p in passages]   # sentence extraction
+          ordered  = passages[0::2] + passages[1::2][::-1]          # strongest at both edges
+          ctx, used = [], 0
+          for p in ordered:
+              if used + tokens(p) > budget_tokens: break
+              ctx.append(f"<source id='{p.doc_id}#{p.chunk}'>{p.text}</source>"); used += tokens(p)
+          return "\n".join(ctx)
+
+      # Long-document analysis path: cache the document prefix, vary only the question
+      llm.generate(system=[{"text": manual_text, "cache": True}], user=question)
+    takeaway: "Context is a budget, not a bucket. Long windows are great for whole-document tasks, but retrieval plus ordering plus caching beats stuffing on cost, latency and accuracy."
+    followup: "When would you choose long-context over RAG, and how would you prove it with evaluation?"
+
+  - id: no-query-rewriting
+    title: No query rewriting or decomposition for multi-hop questions
+    tags: [Quality]
+    scenario: |
+      A wealth-management assistant is asked "How did our ESG fund's fees compare to the market average the
+      year after the new SEC rule?" The answer is vague, because no single chunk contains all of that.
+    antipattern: |
+      The user's raw question, conversational context and all, is embedded and searched once. Follow-ups such
+      as "and what about the bond fund?" are searched without the earlier context.
+    fails: |
+      - **Multi-hop questions need several facts** from different documents (which rule, which year, fund fees, market average). One query embedding can't point at all of them.
+      - **Conversational references** ("it", "that fund", "the year after") carry no meaning without the history.
+      - **Vocabulary mismatch.** Users say "fees", documents say "total expense ratio".
+    diagram:
+      bad: ["\"…and the bond fund?\"", "!Embed raw text", "One search", "Irrelevant hits"]
+      bad_note: "Pronouns and multi-hop intent are lost"
+      good: ["Question + history", "+Rewrite (standalone)", "+Decompose → sub-queries", "Parallel retrieval", "+Synthesize"]
+      good_note: "Each sub-question retrieves its own evidence; the answer composes them"
+    solution: |
+      Insert a **query-understanding step** before retrieval:
+
+      - **Condense:** rewrite the latest turn plus history into a standalone question.
+      - **Decompose:** for complex questions, have a small model produce sub-queries with dependencies (find the rule date → find fee data for the next year → find the market benchmark).
+      - **Expand:** add domain synonyms or a hypothetical answer passage (HyDE) to bridge vocabulary gaps.
+      - Retrieve per sub-query (in parallel where independent), then synthesize with citations per fact.
+      - Route simple questions straight through, so you only pay for decomposition when it's needed.
+    works: |
+      Each sub-query is focused, so it lands on the right evidence. Standalone rewriting fixes conversational
+      reference failures, which are among the most common in chat logs. Routing keeps latency and cost low
+      for the majority of simple questions. Per-fact citations make the composed answer auditable.
+    code: |
+      PLAN = """Rewrite the question as standalone using the history, then split it into the
+      minimal ordered sub-questions needed. Return JSON: {"standalone": str, "steps": [{"q": str, "depends_on": [int]}]}"""
+
+      def answer(question, history):
+          plan = small_llm.json(PLAN, history=history[-6:], question=question)
+          if len(plan["steps"]) <= 1:
+              return rag(plan["standalone"])
+          facts = {}
+          for i, step in enumerate(plan["steps"]):                # resolve dependencies in order
+              q = fill(step["q"], {d: facts[d] for d in step["depends_on"]})
+              facts[i] = rag(q, return_evidence=True)
+          return synthesize(plan["standalone"], facts)            # cites per-fact sources
+    takeaway: "Users don't write search queries, they ask compound questions in conversation. Rewrite, decompose and route before you retrieve."
+    followup: "How do you stop decomposition from adding latency to simple questions?"
+
+  - id: answering-without-evidence
+    title: Answering when retrieval returns nothing relevant
+    tags: [Quality, Compliance]
+    scenario: |
+      A benefits assistant is asked about a dental plan the company doesn't offer. Nothing relevant is
+      retrieved, yet the assistant confidently describes coverage limits, which it invented from general knowledge.
+    antipattern: |
+      Whatever is retrieved, even low-relevance or empty results, goes into the prompt, and the model is
+      always expected to answer. There's no notion of "insufficient evidence".
+    fails: |
+      - **Hallucination fills the gap.** Models are trained to be helpful, and with weak context they fall back on general knowledge that may not apply to this company.
+      - **Confident tone.** Users can't tell grounded answers from invented ones.
+      - **Liability.** In HR, legal, medical or financial contexts, a fabricated answer can create real obligations or harm.
+    diagram:
+      bad: ["Query", "Retrieve", "!Weak / empty context", "LLM must answer", "Fabricated answer"]
+      bad_note: "No evidence threshold, so the model improvises"
+      good: ["Query", "Retrieve + rerank", "+Evidence gate", "Answer with citations | Abstain + route to human"]
+      good_note: "Abstention is a designed, measured outcome"
+    solution: |
+      Make **abstention a first-class path**:
+
+      - Gate on evidence: if no passage passes the reranker threshold, don't generate a substantive answer.
+      - Instruct and test the generator to answer **only from provided sources**, and to say what's missing when evidence is partial.
+      - Return a helpful fallback, such as clarifying questions, related topics that *are* covered, or a hand-off to a human or ticket.
+      - Run a post-generation **groundedness check** for high-risk domains.
+      - Track abstention rate and "false abstention" as quality KPIs. Spikes reveal content gaps worth filling.
+    works: |
+      The system no longer has to choose between silence and invention. Users learn that answers come with
+      evidence, which builds trust. Abstention logs become a prioritized content backlog. Risk teams get a
+      measurable control rather than a promise that the model will behave.
+    code: |
+      def grounded_answer(q, user):
+          ev = rerank(q, hybrid_retrieve(q, user), min_score=0.4)
+          if not ev:
+              metrics.inc("abstain.no_evidence"); gaps.log(q)
+              return Answer(text="I couldn't find this in the approved policy documents.",
+                            suggestions=related_topics(q), handoff=ticket_link(q))
+          draft = llm.generate(SYSTEM_GROUNDED, sources=ev, question=q)
+          check = groundedness_judge(draft, ev)                 # claims supported by sources?
+          if check.unsupported_claims:
+              draft = llm.revise(draft, remove=check.unsupported_claims)
+          return Answer(text=draft, citations=cite(ev))
+    takeaway: "\"I don't know, here's who does\" is a feature. Design and measure abstention instead of letting the model improvise."
+    followup: "How do you balance abstention rate against user frustration?"
