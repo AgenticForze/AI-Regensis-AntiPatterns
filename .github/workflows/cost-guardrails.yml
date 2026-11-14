@@ -1,0 +1,29 @@
+name: Cost guardrails
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths: ["examples/cost-guardrails/**"]
+
+jobs:
+  test-and-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/cost-guardrails
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: Replay the retry incident against the gateway
+        run: pytest -q -s
+      - name: Cost gate (sample candidate that should pass)
+        run: python cost_gate.py sample/baseline.jsonl sample/candidate_ok.jsonl
+      - name: Cost gate catches the retry bug (expected to fail)
+        run: |
+          if python cost_gate.py sample/baseline.jsonl sample/candidate_retry_bug.jsonl; then
+            echo "gate should have failed"; exit 1
+          fi

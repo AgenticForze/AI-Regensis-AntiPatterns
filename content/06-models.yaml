@@ -193,3 +193,92 @@ patterns:
       batch_id = llm.batches.create(requests=[mk_req(d) for d in todays_documents], window="24h")
     takeaway: "Latency is a design constraint, not a tuning afterthought. Budget it per step, stream, parallelize, cache, and batch whatever isn't interactive."
     followup: "How would you hit a sub-second target on a pipeline that needs retrieval and generation?"
+
+  - id: retry-cost-explosion
+    title: Retrying failed LLM calls with full context and no budget
+    tags: [Cost, Reliability, Critical]
+    scenario: |
+      The monthly LLM bill jumps from $4K to $40K. A developer added a feature that retries failed requests up to
+      10 times, resending the full conversation context each time. During a provider incident almost every call
+      failed after the input had been processed, so each user action was billed up to 11 times. Nobody noticed until
+      the invoice arrived.
+    antipattern: |
+      **Retry logic written inside a feature, with no cap on attempts or spend, and no cost visibility per feature.**
+      Each retry is identical to the original: same model, same 30K-token context. SDK retries, app retries and
+      queue redeliveries can all stack on top of each other.
+    fails: |
+      - **Retries multiply cost exactly when the provider is failing.** A timeout after the input is processed is still billed, so 10 retries during an incident means paying 11 times for nothing.
+      - **No retry classification.** Errors such as "context too long" or a safety block fail again on every attempt, so retrying them is pure waste.
+      - **No budgets.** Nothing caps spend per request, per user action, per conversation, per tenant or per feature, so one bug spends the whole month's budget.
+      - **No attribution.** Spend is one line on the invoice, so the cost can't be traced to a feature, a team or the change that caused it.
+      - **No release check.** Cost per task changed tenfold and nothing in CI measured it.
+    diagram:
+      bad: ["User action", "!Retries ×10", "!Full 30K context each", "Billed during outage", "!$40K invoice"]
+      bad_note: "Retries amplify cost exactly when the provider is failing"
+      good: ["Tagged call", "+Gateway: retries, breaker", "+Budgets at 5 levels", "+Metering + spike alerts", "+CI cost gate"]
+      good_note: "Bounded, attributed and checked before release"
+    solution: |
+      Build cost guardrails at four layers. A runnable implementation with tests that replay this incident is in the
+      repository: [examples/cost-guardrails](https://github.com/AgenticForze/AI-Regensis-AntiPatterns/tree/main/examples/cost-guardrails).
+
+      **1. Prevent it in the request path.** Every call goes through one AI gateway. Block direct egress to provider
+      APIs so nothing bypasses it.
+
+      - Retries live **only in the gateway**. SDK retries are switched off (`max_retries=0`).
+      - Retry only errors that can succeed next time (timeouts, 429, 5xx), with at most 3 attempts and exponential backoff with jitter.
+      - Cap retry traffic at about 10% of requests (a **retry budget**), and use a **circuit breaker** to fail fast when the provider is unhealthy.
+      - Make each retry cheaper: cached prompt prefix, trimmed history, then a smaller model.
+
+      **2. Cap it with budgets.** Reserve the estimated cost before each call, then settle it with the actual cost.
+
+      - Per request, per user action (including a maximum number of model calls per user action), and per conversation.
+      - Monthly per tenant and per feature, with alerts at 50%, 80% and 100%. At 100%, non-critical features hard-stop or degrade to a cheaper path; critical features page their owner.
+
+      **3. See it in real time.**
+
+      - Every call is metered (including failed but billed calls) with feature, team, tenant, conversation, user action and prompt version.
+      - Alert on spikes in tokens per call, calls per user action, retry rate and spend per hour per feature.
+
+      **4. Catch it before release.**
+
+      - A required CI check compares cost per successful task and model calls per case against the main branch. A rise above 15% needs approval from the budget owner.
+      - New features ship with a cost forecast, behind a flag, with canary rollout and automatic rollback if hourly spend exceeds the forecast.
+    works: |
+      Retries can no longer turn an outage into a bill. During the incident the circuit breaker stops calls, and the
+      retry budget limits extra traffic to a small fraction. Even if a new bug slips through, per-action and
+      per-feature budgets cap the damage within hours, and spike alerts reach the feature owner the same day rather
+      than at month end.
+
+      In the repository's replay (500 requests with 30K-token context, provider timing out but billing input), the
+      naive feature costs **$497** against **$47** on a healthy day. Behind the gateway, the same incident costs
+      **$1.56**. The CI gate fails the pull request that introduced the bug (+770% cost per successful task, 11 calls
+      per case).
+
+      **Trade-off to manage:** stricter budgets can block legitimate heavy users. Size limits from the observed
+      distribution (for example p99 × 3), exempt critical features from hard stops, and review limits monthly.
+    code: |
+      class Gateway:
+          def call(self, ctx: CallContext, req: Request) -> Response:
+              ctx.validate()                                   # feature/team/tenant/conversation/action/prompt tags
+              self.retry_budget.on_request()
+              for attempt in range(self.max_attempts):         # 3, not 10
+                  if not self.breaker.allow():
+                      raise CircuitOpen("provider unhealthy; fail fast")
+                  r = self.degrade(attempt, req)               # trimmed history, then small model
+                  est = cost_usd(r.model, Usage(estimate_tokens(r.messages), r.max_output_tokens))
+                  reserved = self.budgets.reserve(ctx, est)    # request/action/conversation/tenant/feature caps
+                  try:
+                      resp = self.provider.complete(r)
+                  except ProviderError as e:
+                      self.breaker.record(ok=False)
+                      self.budgets.settle(ctx, reserved, self.meter(ctx, r, attempt, e.usage))  # failed calls are billed too
+                      if not e.retryable or not self.retry_budget.try_acquire() or attempt + 1 == self.max_attempts:
+                          raise
+                      self.sleep(min(8.0, 0.5 * 2 ** attempt))
+                      continue
+                  self.breaker.record(ok=True)
+                  self.budgets.settle(ctx, reserved, self.meter(ctx, r, attempt, resp.usage))
+                  return resp
+    takeaway: "Retries must be cheaper, rarer and bounded, and every model call must have an owner and a budget. Put retries in one gateway with a circuit breaker, cap spend at every level, and check cost per successful task in CI."
+    followup: "Your LLM bill jumps from $4K to $40K because someone added a feature that retries failed requests 10 times with full context. How would you build cost guardrails into an LLM-powered product?"
+    related: [cost-15, cost-07, no-finops, obs-05, cicd-19, mas-09, single-provider-no-fallback]

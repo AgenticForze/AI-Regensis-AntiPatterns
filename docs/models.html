@@ -54,10 +54,10 @@
   <div class="crumb">Part B · Model &amp; Prompt Layer</div>
   <h1><span class="sn">6</span>Model Selection, Cost, Latency &amp; Routing</h1>
   <p class="lede">Models are a portfolio, not a single dependency. These anti-patterns overpay, underperform or fail completely when a provider has a bad day.</p>
-  <span class="pill">24 anti-patterns</span>
+  <span class="pill">25 anti-patterns</span>
 </div>
 
-<div class="toc"><div class="toc-h">In this section</div><a href="#one-model-for-all"><span>6.1</span>One frontier model for every task</a><a href="#single-provider-no-fallback"><span>6.2</span>No fallback or multi-provider strategy</a><a href="#premature-finetuning"><span>6.3</span>Fine-tuning too early</a><a href="#ignoring-latency-budget"><span>6.4</span>Ignoring latency budgets and serving modes</a><a href="#cost-01"><span>6.5</span>No one knows what a resolved card dispute costs</a><a href="#cost-02"><span>6.6</span>Router sends hard complaints to the small model</a><a href="#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a><a href="#cost-04"><span>6.8</span>Fifteen-thousand-token system prompt for a balance question</a><a href="#cost-05"><span>6.9</span>Prompt caching enabled, but the cache expires between turns</a><a href="#cost-06"><span>6.10</span>Semantic cache confuses cancel my card with cancel my card payment</a><a href="#cost-07"><span>6.11</span>One conversation costs $40</a><a href="#cost-08"><span>6.12</span>Replies three times longer than customers need</a><a href="#cost-09"><span>6.13</span>Nightly ticket summaries run on the real-time API</a><a href="#cost-10"><span>6.14</span>Extended reasoning turned on for every request</a><a href="#cost-11"><span>6.15</span>Customers stare at a spinner for 8 seconds</a><a href="#cost-12"><span>6.16</span>Independent lookups run one after another</a><a href="#cost-13"><span>6.17</span>Speculative prefetching that&#x27;s mostly wasted</a><a href="#cost-14"><span>6.18</span>Large model classifying 100 million transactions a month</a><a href="#cost-15"><span>6.19</span>Retry storm doubles cost during a provider incident</a><a href="#cost-16"><span>6.20</span>Embeddings recomputed for unchanged documents every night</a><a href="#cost-17"><span>6.21</span>AI costs land in one central budget</a><a href="#cost-18"><span>6.22</span>Self-hosted GPUs sit idle 80% of the day</a><a href="#cost-19"><span>6.23</span>Latency SLO with no plan for when it&#x27;s missed</a><a href="#cost-20"><span>6.24</span>Prompt compression saves tokens and drops the disclosures</a></div>
+<div class="toc"><div class="toc-h">In this section</div><a href="#one-model-for-all"><span>6.1</span>One frontier model for every task</a><a href="#single-provider-no-fallback"><span>6.2</span>No fallback or multi-provider strategy</a><a href="#premature-finetuning"><span>6.3</span>Fine-tuning too early</a><a href="#ignoring-latency-budget"><span>6.4</span>Ignoring latency budgets and serving modes</a><a href="#retry-cost-explosion"><span>6.5</span>Retrying failed LLM calls with full context and no budget</a><a href="#cost-01"><span>6.6</span>No one knows what a resolved card dispute costs</a><a href="#cost-02"><span>6.7</span>Router sends hard complaints to the small model</a><a href="#cost-03"><span>6.8</span>Voice agent pauses for 3 seconds before every reply</a><a href="#cost-04"><span>6.9</span>Fifteen-thousand-token system prompt for a balance question</a><a href="#cost-05"><span>6.10</span>Prompt caching enabled, but the cache expires between turns</a><a href="#cost-06"><span>6.11</span>Semantic cache confuses cancel my card with cancel my card payment</a><a href="#cost-07"><span>6.12</span>One conversation costs $40</a><a href="#cost-08"><span>6.13</span>Replies three times longer than customers need</a><a href="#cost-09"><span>6.14</span>Nightly ticket summaries run on the real-time API</a><a href="#cost-10"><span>6.15</span>Extended reasoning turned on for every request</a><a href="#cost-11"><span>6.16</span>Customers stare at a spinner for 8 seconds</a><a href="#cost-12"><span>6.17</span>Independent lookups run one after another</a><a href="#cost-13"><span>6.18</span>Speculative prefetching that&#x27;s mostly wasted</a><a href="#cost-14"><span>6.19</span>Large model classifying 100 million transactions a month</a><a href="#cost-15"><span>6.20</span>Retry storm doubles cost during a provider incident</a><a href="#cost-16"><span>6.21</span>Embeddings recomputed for unchanged documents every night</a><a href="#cost-17"><span>6.22</span>AI costs land in one central budget</a><a href="#cost-18"><span>6.23</span>Self-hosted GPUs sit idle 80% of the day</a><a href="#cost-19"><span>6.24</span>Latency SLO with no plan for when it&#x27;s missed</a><a href="#cost-20"><span>6.25</span>Prompt compression saves tokens and drops the disclosures</a></div>
 
 <article class="ap" id="one-model-for-all">
   <header class="ap-h">
@@ -423,9 +423,147 @@ Per-step traces show exactly where the budget is spent.</p></section>
   
 </article>
 
-<article class="ap" id="cost-01">
+<article class="ap" id="retry-cost-explosion">
   <header class="ap-h">
     <div class="ap-num">6.5</div>
+    <div>
+      <h2><a href="#retry-cost-explosion">Retrying failed LLM calls with full context and no budget</a></h2>
+      <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-rel">Reliability</span><span class="tag t-crit">Critical</span></div>
+    </div>
+  </header>
+  <div class="grid2">
+    <section class="card c-problem"><h3>Problem statement</h3><p>The monthly LLM bill jumps from $4K to $40K. A developer added a feature that retries failed requests up to
+10 times, resending the full conversation context each time. During a provider incident almost every call
+failed after the input had been processed, so each user action was billed up to 11 times. Nobody noticed until
+the invoice arrived.</p></section>
+    <section class="card c-anti"><h3>The anti-pattern</h3><p><strong>Retry logic written inside a feature, with no cap on attempts or spend, and no cost visibility per feature.</strong>
+Each retry is identical to the original: same model, same 30K-token context. SDK retries, app retries and
+queue redeliveries can all stack on top of each other.</p></section>
+  </div>
+  <section class="card c-fail"><h3>Why the current design fails</h3><ul>
+<li><strong>Retries multiply cost exactly when the provider is failing.</strong> A timeout after the input is processed is still billed, so 10 retries during an incident means paying 11 times for nothing.</li>
+<li><strong>No retry classification.</strong> Errors such as "context too long" or a safety block fail again on every attempt, so retrying them is pure waste.</li>
+<li><strong>No budgets.</strong> Nothing caps spend per request, per user action, per conversation, per tenant or per feature, so one bug spends the whole month's budget.</li>
+<li><strong>No attribution.</strong> Spend is one line on the invoice, so the cost can't be traced to a feature, a team or the change that caused it.</li>
+<li><strong>No release check.</strong> Cost per task changed tenfold and nothing in CI measured it.</li>
+</ul></section>
+  <figure class="fig"><svg class="dg" viewBox="0 0 960 276" role="img" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah-models-retry-cost-explosion" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-band dg-band-bad" x="8" y="24.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-bad" x="28" y="44.0" font-size="11.5" letter-spacing="1.4">ANTI-PATTERN</text>
+<rect class="dg-node dg-std" x="84.0" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="81.4" font-size="12.5" text-anchor="middle">User action</text>
+<rect class="dg-node dg-bad" x="261.2" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="332.8" y="81.4" font-size="12.5" text-anchor="middle">Retries ×10</text>
+<circle class="dg-badge-bad" cx="400.4" cy="58.0" r="8"/><text class="dg-badge-t" x="400.4" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-bad" x="438.4" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="510.0" y="74.1" font-size="12.5" text-anchor="middle">Full 30K context</text>
+<text class="dg-t dg-t-bad" x="510.0" y="88.6" font-size="12.5" text-anchor="middle">each</text>
+<circle class="dg-badge-bad" cx="577.6" cy="58.0" r="8"/><text class="dg-badge-t" x="577.6" y="62.0" text-anchor="middle" font-size="11">!</text>
+<rect class="dg-node dg-std" x="615.6" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="687.2" y="74.1" font-size="12.5" text-anchor="middle">Billed during</text>
+<text class="dg-t dg-t-std" x="687.2" y="88.6" font-size="12.5" text-anchor="middle">outage</text>
+<rect class="dg-node dg-bad" x="792.8" y="54.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-bad" x="864.4" y="81.4" font-size="12.5" text-anchor="middle">$40K invoice</text>
+<circle class="dg-badge-bad" cx="932.0" cy="58.0" r="8"/><text class="dg-badge-t" x="932.0" y="62.0" text-anchor="middle" font-size="11">!</text>
+<line class="dg-edge" x1="230.2" y1="77.0" x2="257.2" y2="77.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="407.4" y1="77.0" x2="434.4" y2="77.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="584.6" y1="77.0" x2="611.6" y2="77.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="761.8" y1="77.0" x2="788.8" y2="77.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<text class="dg-note dg-note-bad" x="28" y="121.0" font-size="12.5">Retries amplify cost exactly when the provider is failing</text>
+<rect class="dg-band dg-band-good" x="8" y="148.0" width="944" height="110.0" rx="12"/>
+<text class="dg-lbl dg-lbl-good" x="28" y="168.0" font-size="11.5" letter-spacing="1.4">RECOMMENDED</text>
+<rect class="dg-node dg-std" x="84.0" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-std" x="155.6" y="205.4" font-size="12.5" text-anchor="middle">Tagged call</text>
+<rect class="dg-node dg-new" x="261.2" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="332.8" y="198.1" font-size="12.5" text-anchor="middle">Gateway: retries,</text>
+<text class="dg-t dg-t-new" x="332.8" y="212.6" font-size="12.5" text-anchor="middle">breaker</text>
+<circle class="dg-badge-new" cx="400.4" cy="182.0" r="8"/><text class="dg-badge-t" x="400.4" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="438.4" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="510.0" y="205.4" font-size="12.5" text-anchor="middle">Budgets at 5 levels</text>
+<circle class="dg-badge-new" cx="577.6" cy="182.0" r="8"/><text class="dg-badge-t" x="577.6" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="615.6" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="687.2" y="198.1" font-size="12.5" text-anchor="middle">Metering + spike</text>
+<text class="dg-t dg-t-new" x="687.2" y="212.6" font-size="12.5" text-anchor="middle">alerts</text>
+<circle class="dg-badge-new" cx="754.8" cy="182.0" r="8"/><text class="dg-badge-t" x="754.8" y="186.0" text-anchor="middle" font-size="12">+</text>
+<rect class="dg-node dg-new" x="792.8" y="178.0" width="143.2" height="46" rx="8"/>
+<text class="dg-t dg-t-new" x="864.4" y="205.4" font-size="12.5" text-anchor="middle">CI cost gate</text>
+<circle class="dg-badge-new" cx="932.0" cy="182.0" r="8"/><text class="dg-badge-t" x="932.0" y="186.0" text-anchor="middle" font-size="12">+</text>
+<line class="dg-edge" x1="230.2" y1="201.0" x2="257.2" y2="201.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="407.4" y1="201.0" x2="434.4" y2="201.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="584.6" y1="201.0" x2="611.6" y2="201.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<line class="dg-edge" x1="761.8" y1="201.0" x2="788.8" y2="201.0" marker-end="url(#ah-models-retry-cost-explosion)"/>
+<text class="dg-note dg-note-good" x="28" y="245.0" font-size="12.5">Bounded, attributed and checked before release</text>
+</svg></figure>
+  <section class="card c-sol"><h3>Recommended solution</h3><p>Build cost guardrails at four layers. A runnable implementation with tests that replay this incident is in the
+repository: <a href="https://github.com/AgenticForze/AI-Regensis-AntiPatterns/tree/main/examples/cost-guardrails">examples/cost-guardrails</a>.</p>
+<p><strong>1. Prevent it in the request path.</strong> Every call goes through one AI gateway. Block direct egress to provider
+APIs so nothing bypasses it.</p>
+<ul>
+<li>Retries live <strong>only in the gateway</strong>. SDK retries are switched off (<code>max_retries=0</code>).</li>
+<li>Retry only errors that can succeed next time (timeouts, 429, 5xx), with at most 3 attempts and exponential backoff with jitter.</li>
+<li>Cap retry traffic at about 10% of requests (a <strong>retry budget</strong>), and use a <strong>circuit breaker</strong> to fail fast when the provider is unhealthy.</li>
+<li>Make each retry cheaper: cached prompt prefix, trimmed history, then a smaller model.</li>
+</ul>
+<p><strong>2. Cap it with budgets.</strong> Reserve the estimated cost before each call, then settle it with the actual cost.</p>
+<ul>
+<li>Per request, per user action (including a maximum number of model calls per user action), and per conversation.</li>
+<li>Monthly per tenant and per feature, with alerts at 50%, 80% and 100%. At 100%, non-critical features hard-stop or degrade to a cheaper path; critical features page their owner.</li>
+</ul>
+<p><strong>3. See it in real time.</strong></p>
+<ul>
+<li>Every call is metered (including failed but billed calls) with feature, team, tenant, conversation, user action and prompt version.</li>
+<li>Alert on spikes in tokens per call, calls per user action, retry rate and spend per hour per feature.</li>
+</ul>
+<p><strong>4. Catch it before release.</strong></p>
+<ul>
+<li>A required CI check compares cost per successful task and model calls per case against the main branch. A rise above 15% needs approval from the budget owner.</li>
+<li>New features ship with a cost forecast, behind a flag, with canary rollout and automatic rollback if hourly spend exceeds the forecast.</li>
+</ul></section>
+  <section class="card c-why"><h3>Why it succeeds</h3><p>Retries can no longer turn an outage into a bill. During the incident the circuit breaker stops calls, and the
+retry budget limits extra traffic to a small fraction. Even if a new bug slips through, per-action and
+per-feature budgets cap the damage within hours, and spike alerts reach the feature owner the same day rather
+than at month end.</p>
+<p>In the repository's replay (500 requests with 30K-token context, provider timing out but billing input), the
+naive feature costs <strong>$497</strong> against <strong>$47</strong> on a healthy day. Behind the gateway, the same incident costs
+<strong>$1.56</strong>. The CI gate fails the pull request that introduced the bug (+770% cost per successful task, 11 calls
+per case).</p>
+<p><strong>Trade-off to manage:</strong> stricter budgets can block legitimate heavy users. Size limits from the observed
+distribution (for example p99 × 3), exempt critical features from hard stops, and review limits monthly.</p></section>
+  <section class="code"><h3>Reference implementation</h3><div class="hl"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Gateway</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">CallContext</span><span class="p">,</span> <span class="n">req</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">validate</span><span class="p">()</span>                                   <span class="c1"># feature/team/tenant/conversation/action/prompt tags</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">retry_budget</span><span class="o">.</span><span class="n">on_request</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_attempts</span><span class="p">):</span>         <span class="c1"># 3, not 10</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">breaker</span><span class="o">.</span><span class="n">allow</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="n">CircuitOpen</span><span class="p">(</span><span class="s2">"provider unhealthy; fail fast"</span><span class="p">)</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">degrade</span><span class="p">(</span><span class="n">attempt</span><span class="p">,</span> <span class="n">req</span><span class="p">)</span>               <span class="c1"># trimmed history, then small model</span>
+            <span class="n">est</span> <span class="o">=</span> <span class="n">cost_usd</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">Usage</span><span class="p">(</span><span class="n">estimate_tokens</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">messages</span><span class="p">),</span> <span class="n">r</span><span class="o">.</span><span class="n">max_output_tokens</span><span class="p">))</span>
+            <span class="n">reserved</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">budgets</span><span class="o">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">est</span><span class="p">)</span>    <span class="c1"># request/action/conversation/tenant/feature caps</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">ProviderError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">breaker</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">ok</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">budgets</span><span class="o">.</span><span class="n">settle</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">reserved</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meter</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">attempt</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">usage</span><span class="p">))</span>  <span class="c1"># failed calls are billed too</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">e</span><span class="o">.</span><span class="n">retryable</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_budget</span><span class="o">.</span><span class="n">try_acquire</span><span class="p">()</span> <span class="ow">or</span> <span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_attempts</span><span class="p">:</span>
+                    <span class="k">raise</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="mf">8.0</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">attempt</span><span class="p">))</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">breaker</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">budgets</span><span class="o">.</span><span class="n">settle</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">reserved</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">meter</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">attempt</span><span class="p">,</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">resp</span>
+</code></pre></div></section>
+  <section class="takeaway">
+    <div><span class="k">Key takeaway</span><p>Retries must be cheaper, rarer and bounded, and every model call must have an owner and a budget. Put retries in one gateway with a circuit breaker, cap spend at every level, and check cost per successful task in CI.</p></div>
+    <div><span class="k">Follow-up to expect</span><p>Your LLM bill jumps from $4K to $40K because someone added a feature that retries failed requests 10 times with full context. How would you build cost guardrails into an LLM-powered product?</p></div>
+    
+  </section>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-15"><span>6.20</span>Retry storm doubles cost during a provider incident</a><a href="models.html#cost-07"><span>6.12</span>One conversation costs $40</a><a href="security-gov.html#no-finops"><span>12.5</span>No cost governance (AI FinOps)</a><a href="observability.html#obs-05"><span>13.5</span>One MVNO tenant burns the monthly LLM budget in a week</a><a href="llmops-cicd.html#cicd-19"><span>14.39</span>Cost regression merged without anyone noticing</a><a href="multi-agent.html#mas-09"><span>8.15</span>Each agent has a budget, the system has none</a><a href="models.html#single-provider-no-fallback"><span>6.2</span>No fallback or multi-provider strategy</a></div>
+</article>
+
+<article class="ap" id="cost-01">
+  <header class="ap-h">
+    <div class="ap-num">6.6</div>
     <div>
       <h2><a href="#cost-01">No one knows what a resolved card dispute costs</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -509,7 +647,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-02">
   <header class="ap-h">
-    <div class="ap-num">6.6</div>
+    <div class="ap-num">6.7</div>
     <div>
       <h2><a href="#cost-02">Router sends hard complaints to the small model</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -596,7 +734,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-03">
   <header class="ap-h">
-    <div class="ap-num">6.7</div>
+    <div class="ap-num">6.8</div>
     <div>
       <h2><a href="#cost-03">Voice agent pauses for 3 seconds before every reply</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
@@ -681,7 +819,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-04">
   <header class="ap-h">
-    <div class="ap-num">6.8</div>
+    <div class="ap-num">6.9</div>
     <div>
       <h2><a href="#cost-04">Fifteen-thousand-token system prompt for a balance question</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
@@ -764,7 +902,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-05">
   <header class="ap-h">
-    <div class="ap-num">6.9</div>
+    <div class="ap-num">6.10</div>
     <div>
       <h2><a href="#cost-05">Prompt caching enabled, but the cache expires between turns</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
@@ -848,7 +986,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-06">
   <header class="ap-h">
-    <div class="ap-num">6.10</div>
+    <div class="ap-num">6.11</div>
     <div>
       <h2><a href="#cost-06">Semantic cache confuses cancel my card with cancel my card payment</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -934,7 +1072,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-07">
   <header class="ap-h">
-    <div class="ap-num">6.11</div>
+    <div class="ap-num">6.12</div>
     <div>
       <h2><a href="#cost-07">One conversation costs $40</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
@@ -1019,7 +1157,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-08">
   <header class="ap-h">
-    <div class="ap-num">6.12</div>
+    <div class="ap-num">6.13</div>
     <div>
       <h2><a href="#cost-08">Replies three times longer than customers need</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -1096,12 +1234,12 @@ Per-step traces show exactly where the budget is spent.</p></section>
     
     
   </section>
-  <div class="related"><span class="k">Related</span><a href="models.html#cost-04"><span>6.8</span>Fifteen-thousand-token system prompt for a balance question</a></div>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-04"><span>6.9</span>Fifteen-thousand-token system prompt for a balance question</a></div>
 </article>
 
 <article class="ap" id="cost-09">
   <header class="ap-h">
-    <div class="ap-num">6.13</div>
+    <div class="ap-num">6.14</div>
     <div>
       <h2><a href="#cost-09">Nightly ticket summaries run on the real-time API</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
@@ -1186,7 +1324,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-10">
   <header class="ap-h">
-    <div class="ap-num">6.14</div>
+    <div class="ap-num">6.15</div>
     <div>
       <h2><a href="#cost-10">Extended reasoning turned on for every request</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
@@ -1264,12 +1402,12 @@ Per-step traces show exactly where the budget is spent.</p></section>
     
     
   </section>
-  <div class="related"><span class="k">Related</span><a href="agents.html#agf-20"><span>7.25</span>Frontier model used for every care-flow step</a><a href="models.html#cost-02"><span>6.6</span>Router sends hard complaints to the small model</a></div>
+  <div class="related"><span class="k">Related</span><a href="agents.html#agf-20"><span>7.25</span>Frontier model used for every care-flow step</a><a href="models.html#cost-02"><span>6.7</span>Router sends hard complaints to the small model</a></div>
 </article>
 
 <article class="ap" id="cost-11">
   <header class="ap-h">
-    <div class="ap-num">6.15</div>
+    <div class="ap-num">6.16</div>
     <div>
       <h2><a href="#cost-11">Customers stare at a spinner for 8 seconds</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
@@ -1349,12 +1487,12 @@ Per-step traces show exactly where the budget is spent.</p></section>
     
     
   </section>
-  <div class="related"><span class="k">Related</span><a href="observability.html#tel-08"><span>13.28</span>Voice bot feels slow, but total latency looks fine</a><a href="models.html#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a></div>
+  <div class="related"><span class="k">Related</span><a href="observability.html#tel-08"><span>13.28</span>Voice bot feels slow, but total latency looks fine</a><a href="models.html#cost-03"><span>6.8</span>Voice agent pauses for 3 seconds before every reply</a></div>
 </article>
 
 <article class="ap" id="cost-12">
   <header class="ap-h">
-    <div class="ap-num">6.16</div>
+    <div class="ap-num">6.17</div>
     <div>
       <h2><a href="#cost-12">Independent lookups run one after another</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-fin">FinTech</span></div>
@@ -1438,7 +1576,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-13">
   <header class="ap-h">
-    <div class="ap-num">6.17</div>
+    <div class="ap-num">6.18</div>
     <div>
       <h2><a href="#cost-13">Speculative prefetching that&#x27;s mostly wasted</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
@@ -1519,12 +1657,12 @@ Per-step traces show exactly where the budget is spent.</p></section>
     
     
   </section>
-  <div class="related"><span class="k">Related</span><a href="models.html#cost-03"><span>6.7</span>Voice agent pauses for 3 seconds before every reply</a></div>
+  <div class="related"><span class="k">Related</span><a href="models.html#cost-03"><span>6.8</span>Voice agent pauses for 3 seconds before every reply</a></div>
 </article>
 
 <article class="ap" id="cost-14">
   <header class="ap-h">
-    <div class="ap-num">6.18</div>
+    <div class="ap-num">6.19</div>
     <div>
       <h2><a href="#cost-14">Large model classifying 100 million transactions a month</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -1608,7 +1746,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-15">
   <header class="ap-h">
-    <div class="ap-num">6.19</div>
+    <div class="ap-num">6.20</div>
     <div>
       <h2><a href="#cost-15">Retry storm doubles cost during a provider incident</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
@@ -1690,7 +1828,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-16">
   <header class="ap-h">
-    <div class="ap-num">6.20</div>
+    <div class="ap-num">6.21</div>
     <div>
       <h2><a href="#cost-16">Embeddings recomputed for unchanged documents every night</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -1775,7 +1913,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-17">
   <header class="ap-h">
-    <div class="ap-num">6.21</div>
+    <div class="ap-num">6.22</div>
     <div>
       <h2><a href="#cost-17">AI costs land in one central budget</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-telco">Telco</span></div>
@@ -1859,7 +1997,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-18">
   <header class="ap-h">
-    <div class="ap-num">6.22</div>
+    <div class="ap-num">6.23</div>
     <div>
       <h2><a href="#cost-18">Self-hosted GPUs sit idle 80% of the day</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-fin">FinTech</span></div>
@@ -1942,7 +2080,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-19">
   <header class="ap-h">
-    <div class="ap-num">6.23</div>
+    <div class="ap-num">6.24</div>
     <div>
       <h2><a href="#cost-19">Latency SLO with no plan for when it&#x27;s missed</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-lat">Latency</span><span class="tag t-telco">Telco</span></div>
@@ -2024,7 +2162,7 @@ Per-step traces show exactly where the budget is spent.</p></section>
 
 <article class="ap" id="cost-20">
   <header class="ap-h">
-    <div class="ap-num">6.24</div>
+    <div class="ap-num">6.25</div>
     <div>
       <h2><a href="#cost-20">Prompt compression saves tokens and drops the disclosures</a></h2>
       <div class="tags"><span class="tag t-cost">Cost</span><span class="tag t-comp">Compliance</span><span class="tag t-fin">FinTech</span></div>
